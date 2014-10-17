@@ -1,0 +1,13 @@
+﻿Build started 10/4/2014 2:50:25 PM.
+     1>Project "C:\Users\mvo\Documents\GitHub\Dsfm\SiftGPU\msvc\ServerSiftGPU\SiftGPU_Server.vcxproj" on node 5 (Build target(s)).
+     1>ClCompile:
+         C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\CL.exe /c /I../../Include/ /Zi /nologo /W3 /WX- /Od /D WIN32 /D _DEBUG /D _CONSOLE /D _CRT_SECURE_NO_WARNINGS /D _MBCS /Gm /EHsc /RTC1 /MTd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Fo"Debug_x64\\" /Fd"Debug_x64\vc120.pdb" /Gd /TP /errorReport:prompt ..\..\src\ServerSiftGPU\server.cpp
+         server.cpp
+       Link:
+         C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\link.exe /ERRORREPORT:PROMPT /OUT:"..\..\bin\server_siftgpu.exe" /INCREMENTAL /NOLOGO /LIBPATH:../../lib siftgpu_d.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"..\..\bin\server_siftgpu.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"..\..\bin\server_siftgpu.lib" /MACHINE:X64 Debug_x64\server.obj
+         SiftGPU_Server.vcxproj -> C:\Users\mvo\Documents\GitHub\Dsfm\SiftGPU\msvc\ServerSiftGPU\..\..\bin\server_siftgpu.exe
+     1>Done Building Project "C:\Users\mvo\Documents\GitHub\Dsfm\SiftGPU\msvc\ServerSiftGPU\SiftGPU_Server.vcxproj" (Build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:01.08

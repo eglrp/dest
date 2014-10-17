@@ -1,0 +1,48 @@
+﻿Build started 10/4/2014 2:50:20 PM.
+     1>Project "C:\Users\mvo\Documents\GitHub\Dsfm\SiftGPU\msvc\SiftGPU\SiftGPU.vcxproj" on node 2 (Build target(s)).
+     1>ClCompile:
+         C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\CL.exe /c /I../../Include/ /Zi /nologo /W3 /WX- /Od /D _DEBUG /D DLL_EXPORT /D WIN32 /D _WINDOWS /D _USRDLL /D SIFTGPU_DLL /D _CRT_SECURE_NO_DEPRECATE /D SERVER_SIFTGPU_ENABLED /D _VC80_UPGRADE=0x0600 /D _WINDLL /D _MBCS /Gm /EHsc /RTC1 /MTd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Fo"Debug_x64\\" /Fd"Debug_x64\vc120.pdb" /Gd /TP /errorReport:prompt ..\..\src\SiftGPU\CLTexImage.cpp ..\..\src\SiftGPU\FrameBufferObject.cpp ..\..\src\SiftGPU\GlobalUtil.cpp ..\..\src\SiftGPU\GLTexImage.cpp ..\..\src\SiftGPU\ProgramCL.cpp ..\..\src\SiftGPU\ProgramGLSL.cpp ..\..\src\SiftGPU\ProgramGPU.cpp ..\..\src\SiftGPU\PyramidCL.cpp ..\..\src\SiftGPU\PyramidGL.cpp ..\..\src\ServerSiftGPU\ServerSiftGPU.cpp ..\..\src\SiftGPU\ShaderMan.cpp ..\..\src\SiftGPU\SiftGPU.cpp ..\..\src\SiftGPU\SiftMatch.cpp ..\..\src\SiftGPU\SiftPyramid.cpp
+         SiftPyramid.cpp
+         SiftMatch.cpp
+         SiftGPU.cpp
+     1>..\..\src\SiftGPU\SiftGPU.cpp(1372): warning C4267: 'return' : conversion from 'size_t' to 'int', possible loss of data
+         ShaderMan.cpp
+         ServerSiftGPU.cpp
+     1>..\..\src\ServerSiftGPU\ServerSiftGPU.cpp(200): warning C4996: 'gethostbyname': Use getaddrinfo() or GetAddrInfoW() instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings
+                 C:\Program Files (x86)\Windows Kits\8.1\Include\um\winsock2.h(2238) : see declaration of 'gethostbyname'
+     1>..\..\src\ServerSiftGPU\ServerSiftGPU.cpp(455): warning C4267: 'argument' : conversion from 'size_t' to 'int', possible loss of data
+     1>..\..\src\ServerSiftGPU\ServerSiftGPU.cpp(476): warning C4267: 'argument' : conversion from 'size_t' to 'int', possible loss of data
+     1>..\..\src\ServerSiftGPU\ServerSiftGPU.cpp(489): warning C4267: 'argument' : conversion from 'size_t' to 'int', possible loss of data
+     1>..\..\src\ServerSiftGPU\ServerSiftGPU.cpp(559): warning C4244: 'argument' : conversion from '__int64' to 'int', possible loss of data
+         PyramidGL.cpp
+         PyramidCL.cpp
+         ProgramGPU.cpp
+         ProgramGLSL.cpp
+         ProgramCL.cpp
+         GLTexImage.cpp
+         GlobalUtil.cpp
+         FrameBufferObject.cpp
+         CLTexImage.cpp
+         Generating Code...
+       Link:
+         C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\link.exe /ERRORREPORT:PROMPT /OUT:"..\..\bin\SiftGPU_d.dll" /INCREMENTAL /NOLOGO /LIBPATH:../../lib/ opengl32.lib glu32.lib winmm.lib glew64.lib glew64s.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /DEF:"SiftGPU.def" /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"Debug_x64\/SIFTGPU.pdb" /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"../../lib/SIFTGPU_d.lib" /MACHINE:X64 /DLL Debug_x64\CLTexImage.obj
+         Debug_x64\FrameBufferObject.obj
+         Debug_x64\GlobalUtil.obj
+         Debug_x64\GLTexImage.obj
+         Debug_x64\ProgramCL.obj
+         Debug_x64\ProgramGLSL.obj
+         Debug_x64\ProgramGPU.obj
+         Debug_x64\PyramidCL.obj
+         Debug_x64\PyramidGL.obj
+         Debug_x64\ServerSiftGPU.obj
+         Debug_x64\ShaderMan.obj
+         Debug_x64\SiftGPU.obj
+         Debug_x64\SiftMatch.obj
+         Debug_x64\SiftPyramid.obj
+            Creating library ../../lib/SIFTGPU_d.lib and object ../../lib/SIFTGPU_d.exp
+         SiftGPU.vcxproj -> C:\Users\mvo\Documents\GitHub\Dsfm\SiftGPU\msvc\SiftGPU\..\..\bin\SiftGPU_d.dll
+     1>Done Building Project "C:\Users\mvo\Documents\GitHub\Dsfm\SiftGPU\msvc\SiftGPU\SiftGPU.vcxproj" (Build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:04.95

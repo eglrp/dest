@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 2.8)
+project( EventReconstruction )
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -O4")
+find_package( OpenCV REQUIRED )
+add_executable( EventReconstruction main.cpp VideoSequence.cpp Visualization.cpp Geometry.cpp BAutil.cpp ImagePro.cpp  Matrix.cpp Ultility.cpp  )
+target_link_libraries( EventReconstruction ${OpenCV_LIBS})

@@ -39,7 +39,7 @@ void SaveCurrentSfmGL2(char *path, CameraData *AllViewParas, vector<int>AvailVie
 void ReadCurrentSfmGL(char *path, bool isColor);
 
 void SaveCurrenPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID);
-void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID);
+void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime = 0);
 void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime);
 
 #endif

@@ -352,11 +352,11 @@ int TestPnP(char *Path, int nCams, int selectedCams)
 			viewIDAll3D[ptsCount].push_back(viewID);
 			uvAll3D[ptsCount].push_back(Point2d(u, v));
 		}
-	
+
 		ptsCount++;
-		if (ptsCount > n3D-1)
+		if (ptsCount > n3D - 1)
 			break;
-	
+
 	}
 	fclose(fp);
 
@@ -398,80 +398,83 @@ int TestPnP(char *Path, int nCams, int selectedCams)
 }
 int main(int argc, char* argv[])
 {
-	char Path[] = "D:/S", Fname[200], Fname2[200];
-
-	int nSviews = 190;
-	//TestPnP(Path, 10, 6);
-	//GenerateCorpusVisualWords("C:/temp/BOW", 24);
-	//ComputeWordsHistogram("C:/temp/BOW", 3);
-
-	//Undistort and compute sift for all extracted frames
-	/*int nviews = 10, nframes = 2000;
-	CameraData *AllViewsInfo = new CameraData[nviews];
-	if (ReadIntrinsicResults(Path, AllViewsInfo, nviews) != 0)
-	return 1;
-	for (int ii = 0; ii < nviews; ii++)
+	char Path[] = "C:/Data/GoPro", Fname[200], Fname2[200];
+	int mode = atoi(argv[1]);
+	if (mode == 0)
 	{
-	AllViewsInfo[ii].LensModel = RADIAL_TANGENTIAL_PRISM;
-	sprintf(Fname, "%s/%d", Path, ii);
-	sprintf(Fname2, "%s/%d/s2.mp4", Path, ii);
-	LensCorrectionVideoDriver(Fname, Fname2, AllViewsInfo[ii].K, AllViewsInfo[ii].distortion, 0, nframes, 5); //e.g. D1.png -->1.png
-	}*/
-	//ExtractSiftGPUfromVideoFrames(Path, nSviews, 50, 200); 
-
-	//BatchExtractSiftGPU(Path, 3, 200);
-	//BatchExtractSiftGPU(Path,6, 200);
-	//GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nSviews, -1, 0.6, 1, 1, 1, 0);
-	/*double start = omp_get_wtime();
-	start = omp_get_wtime();
-	for (int jj = 0; jj < nSviews - 1; jj++)
-	#pragma omp parallel for
-	for (int ii = jj + 1; ii < nSviews; ii++)
-	EssentialMatOutliersRemove(Path, -1, jj, ii, 1, 0, 50, 1, 0);
-	printf("Finished pruning matches ... in %.2fs\n", omp_get_wtime() - start);
-	GenerateMatchingTable(Path, nSviews, -1);*/
-
-	//BuildCorpus(Path, 10, 6, 1920, 1080, 5);
-	LocalizeCameraFromCorpusDriver(Path, 1, 1, 10, 3, true);
-	//LocalizeCameraFromCorpusDriver(Path, 1, 199, 10, 6, true);
-	//visualizationDriver(Path, 1, 200);
-
-	//google::InitGoogleLogging("SfM");
-	//IncrementalBundleAdjustment(Path, nviews, -1, 20000);
-
-	//vector<int>viewsID; viewsID.push_back(1), viewsID.push_back(3);
-	//DisplayImageCorrespondencesDriver(Path, viewsID, -1, 3, 1.0);
-	/*double offset = 0.0;
-	for (int ii = 1; ii < 2; ii++)
+		int computeSync = atoi(argv[2]),
+			srcID1 = atoi(argv[3]),
+			srcID2 = atoi(argv[4]);
+		double fps1 = atof(argv[5]),
+			fps2 = atof(argv[6]),
+			minZNCC = atof(argv[7]);
+		if (computeSync == 1)
+		{
+			int minSegLength = 3e6;
+			double offset = 0.0;
+			sprintf(Fname, "%s/%d/audio.wav", Path, srcID1);
+			sprintf(Fname2, "%s/%d/audio.wav", Path, srcID2);
+			if (SynAudio(Fname, Fname2, fps1, fps2, minSegLength, offset, minZNCC) != 0)
+				printf("Not succeed\n");
+			else
+				printf("Succeed\n");
+		}
+		else
+			ShowSyncLoad(Path);
+		return 0;
+	}
+	else if (mode == 1)
 	{
-	sprintf(Fname, "%s/%d/audio.wav", Path, 1);
-	sprintf(Fname2, "%s/%d/audio.wav", Path, ii + 1);
-	if (SynAudio(Fname, Fname2, 47.95, 47.95, 3e6, offset, 0.25) != 0)
-	printf("Not succeed\n");
-	else
-	printf("Succeed\n");
-	}*/
-
-	//ShowSyncLoad(Path); 
-	//Sequence mySeq[1]; mySeq[0].InitSeq(59.94, 0.0);
-
-	/*for (int ii = 2; ii <= 10; ii++)
+		char *Fname = argv[1], *Fname2 = argv[2];
+		int nNonBlurIma = 0;
+		PickStaticImagesFromVideo(Fname, Fname2, 20, 15, 30, 50, nNonBlurIma, true);
+		BlurDetectionDriver("E:/C", nNonBlurIma, 1920, 1080, 0.1);
+	}
+	else if (mode == 2)
 	{
-	sprintf(Fname, "%s/%d", Path, ii);
-	PickStaticImagesFromVideo(Fname, "c1.mp4", 20, 15, 30, 50, true);
-	BlurDetectionDriver("E:/s7/C", 241, 1920, 1080, 0.1);
-	}*/
+		//Undistort and compute sift for all extracted frames
+		int nviews = 10, nframes = 2000;
+		CameraData *AllViewsInfo = new CameraData[nviews];
+		if (ReadIntrinsicResults(Path, AllViewsInfo, nviews) != 0)
+			return 1;
+		for (int ii = 0; ii < nviews; ii++)
+		{
+			AllViewsInfo[ii].LensModel = RADIAL_TANGENTIAL_PRISM;
+			sprintf(Fname, "%s/%d", Path, ii);
+			sprintf(Fname2, "%s/%d/s2.mp4", Path, ii);
+			LensCorrectionVideoDriver(Fname, Fname2, AllViewsInfo[ii].K, AllViewsInfo[ii].distortion, 0, nframes, 5); //e.g. D1.png -->1.png
+		}
+		ExtractSiftGPUfromExtractedFrames(Path, nviews, 0, nframes);
+	}
+	else if (mode == 3)
+	{
+		int nSviews = 190;
+		GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nSviews, -1, 0.6, 1, 1, 1, 0);
+		BuildCorpus(Path, 10, 6, 1920, 1080, 5);
+	}
+	else if (mode == 4)
+	{
+		int StartTime = atoi(argv[2]),
+			StopTime = atoi(argv[3]),
+			seletectedCam = atoi(argv[4]),
+			runMatching = atoi(argv[5]);
 
-	/*const int nviews = 191;
-	CameraData CameraInfo[nviews];
-	vector<int> AvailViews;
-	for (int ii = 0; ii < nviews; ii++)
-	AvailViews.push_back(ii);
-	ReadCurrentSfmInfo(Path, CameraInfo, AvailViews, NULL, 0);
-
-	double Fmat[9];
-	int selectedViews[] = { 4, 190 };
-	computeFmatfromKRT(CameraInfo, 191, selectedViews, Fmat);*/
+		LocalizeCameraFromCorpusDriver(Path, StartTime, StopTime, runMatching, 10, seletectedCam, true);
+		visualizationDriver(Path, StartTime, StopTime);
+	}
+	else if (mode == 5)
+	{
+		GenerateCorpusVisualWords("C:/temp/BOW", 24);
+		ComputeWordsHistogram("C:/temp/BOW", 3);
+	}
+	else if (mode == 6)
+	{
+		//google::InitGoogleLogging("SfM");
+		//IncrementalBundleAdjustment(Path, nviews, -1, 20000);
+		double Fmat[9];
+		int selectedViews[] = { 4, 190 };
+		//computeFmatfromKRT(CameraInfo, 191, selectedViews, Fmat);
+	}
 
 	return 0;
 }

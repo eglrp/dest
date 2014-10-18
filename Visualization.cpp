@@ -472,7 +472,7 @@ void SaveCurrenPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailVie
 
 	return;
 }
-void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID)
+void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime)
 {
 	char Fname[200];
 
@@ -495,11 +495,15 @@ void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>Ava
 	}
 
 	sprintf(Fname, "%s/PinfoGL_%d.txt", path, camID);
-	FILE *fp = fopen(Fname, "w+");
+	FILE *fp;
+	if (AvailTime.at(0) == 0)
+		fp = fopen(Fname, "w+");
+	else
+		fp = fopen(Fname, "a+");
 	for (int ii = 0; ii < AvailTime.size(); ii++)
 	{
 		int timeID = AvailTime.at(ii);
-		fprintf(fp, "%d: ", timeID);
+		fprintf(fp, "%d: ", timeID + StartTime);
 		for (int jj = 0; jj < 16; jj++)
 			fprintf(fp, "%.16f ", AllViewParas[timeID].Rgl[jj]);
 		for (int jj = 0; jj < 3; jj++)

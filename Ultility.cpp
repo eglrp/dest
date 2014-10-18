@@ -1248,7 +1248,7 @@ void ConvertToHeatMap(double *Map, unsigned char *ColorMap, int width, int heigh
 	return;
 }
 
-int PickStaticImagesFromVideo(char *PATH, char *VideoName, int SaveFrameDif, int redetectInterval, double percentile, double MovingThresh2, bool visCamual)
+int PickStaticImagesFromVideo(char *PATH, char *VideoName, int SaveFrameDif, int redetectInterval, double percentile, double MovingThresh2, int &nNonBlurImages, bool visCamual)
 {
 	Mat colorImg, gray, prevGray, tImg, backGround, bestFrameInWind;
 	vector<Point2f> points[2];
@@ -1273,6 +1273,7 @@ int PickStaticImagesFromVideo(char *PATH, char *VideoName, int SaveFrameDif, int
 	TermCriteria termcrit(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.03);
 	Size subPixWinSize(21, 21), winSize(31, 31);
 
+	nNonBlurImages = 0;
 	int bestframeID;
 	vector<double> distance; distance.reserve(500);
 	double Movement, smallestMovement = 1000.0;
@@ -1341,6 +1342,7 @@ int PickStaticImagesFromVideo(char *PATH, char *VideoName, int SaveFrameDif, int
 					imwrite(Fname, bestFrameInWind);
 					lastSaveframe = frameID;
 					smallestMovement = 1000.0;
+					nNonBlurImages++;
 				}
 
 				if (flowMag2.size() < 50 || frameID%redetectInterval == 0)

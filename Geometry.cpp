@@ -2415,7 +2415,7 @@ int GeneratePointsCorrespondenceMatrix(char *Path, int nviews, int timeID)
 
 	return 0;
 }
-int ExtractSiftGPUfromVideoFrames(char *Path, int nviews, int startF, int nframes)
+int ExtractSiftGPUfromExtractedFrames(char *Path, int nviews, int startF, int nframes)
 {
 	// Allocation size to the largest width and largest height 1920x1080
 	// Maximum working dimension. All the SIFT octaves that needs a larger texture size will be skipped. maxd = 2560 <-> 768MB of graphic memory. 
@@ -2480,8 +2480,7 @@ int ExtractSiftGPUfromVideoFrames(char *Path, int nviews, int startF, int nframe
 
 				sprintf(Fname, "%s/%d/K%d.dat", Path, ii, timeID); WriteKPointsBinarySIFTGPU(Fname, keys);
 				sprintf(Fname, "%s/%d/D%d.dat", Path, ii, timeID); WriteDescriptorBinarySIFTGPU(Fname, descriptors);
-
-				printf("View %d: %d points ... Wrote to files. Take %.2fs\n", ii, numKeys, omp_get_wtime() - start);
+				printf("View (%d, %d): %d points ... Wrote to files. Take %.2fs\n", ii, timeID, numKeys, omp_get_wtime() - start);
 			}
 			else
 				printf("Cannot load %s", Fname);
@@ -2491,85 +2490,7 @@ int ExtractSiftGPUfromVideoFrames(char *Path, int nviews, int startF, int nframe
 
 	return 0;
 }
-int BatchExtractSiftGPU(char *Path, int viewID, int TimeLength)
-{
-	// Allocation size to the largest width and largest height 1920x1080
-	// Maximum working dimension. All the SIFT octaves that needs a larger texture size will be skipped. maxd = 2560 <-> 768MB of graphic memory. 
-	char * argv[] = { "-fo", "-1", "-v", "0", "-p", "3072x2048", "-maxd", "4096" };
-	//-fo -1    staring from -1 octave 
-	//-v 1      only print out # feature and overall time
-	//-loweo    add a (.5, .5) offset
-	//-tc <num> set a soft limit to number of detected features
-	//-m,       up to 2 orientations for each feature (change to single orientation by using -m 1)
-	//-s        enable subpixel subscale (disable by using -s 0)
-	//"-cuda", "[device_id]"  : cuda implementation (fastest for smaller images). CUDA-implementation allows you to create multiple instances for multiple threads. Checkout src\TestWin\MultiThreadSIFT
-	// "-Display", "display_name" (for OPENGL) to select monitor/GPU (XLIB/GLUT) on windows the display name would be something like \\.\DISPLAY4
-	//Only the following parameters can be changed after initialization (by calling ParseParam):-dw, -ofix, -ofix-not, -fo, -unn, -maxd, -b
-	//to change other parameters at runtime, you need to first unload the dynamically loaded libaray reload the libarary, then create a new siftgpu instance
 
-	//Init SiftGPU: START
-#ifdef _WIN32
-#ifdef _DEBUG
-	HMODULE  hsiftgpu = LoadLibrary("siftgpu_d.dll");
-#else
-	HMODULE  hsiftgpu = LoadLibrary("siftgpu.dll");
-#endif
-#else
-	void * hsiftgpu = dlopen("libsiftgpu.so", RTLD_LAZY);
-#endif
-
-	if (hsiftgpu == NULL)
-		return 0;
-
-	SiftGPU* (*pCreateNewSiftGPU)(int) = NULL;
-	SiftMatchGPU* (*pCreateNewSiftMatchGPU)(int) = NULL;
-	pCreateNewSiftGPU = (SiftGPU* (*) (int)) GET_MYPROC(hsiftgpu, "CreateNewSiftGPU");
-	pCreateNewSiftMatchGPU = (SiftMatchGPU* (*)(int)) GET_MYPROC(hsiftgpu, "CreateNewSiftMatchGPU");
-	SiftGPU* sift = pCreateNewSiftGPU(1);
-
-	int argc = sizeof(argv) / sizeof(char*);
-	sift->ParseParam(argc, argv);
-	if (sift->CreateContextGL() != SiftGPU::SIFTGPU_FULL_SUPPORTED)
-		return 0;
-	//Init SiftGPU: END
-
-	//SIFT DECTION: START
-	int numKeys, descriptorSize = SIFTBINS;
-	vector<float > descriptors; descriptors.reserve(MAXSIFTPTS * descriptorSize);
-	vector<SiftGPU::SiftKeypoint> keys; keys.reserve(MAXSIFTPTS);
-
-	vector<int>cumulativePts;
-	vector<int>PtsPerView;
-
-	int totalPts = 0;
-	char Fname[200];
-
-	double start;
-	for (int timeID = 0; timeID < TimeLength; timeID++)
-	{
-		keys.clear(), descriptors.clear();
-		start = omp_get_wtime();
-
-		sprintf(Fname, "%s/%d/%d.png", Path, viewID, timeID);
-		if (sift->RunSIFT(Fname)) //You can have at most one OpenGL-based SiftGPU (per process)--> no omp can be used
-		{
-			numKeys = sift->GetFeatureNum();
-			keys.resize(numKeys);    descriptors.resize(descriptorSize * numKeys);
-			sift->GetFeatureVector(&keys[0], &descriptors[0]);
-
-			sprintf(Fname, "%s/%d/K%d.dat", Path, viewID, timeID); WriteKPointsBinarySIFTGPU(Fname, keys);
-			sprintf(Fname, "%s/%d/D%d.dat", Path, viewID, timeID); WriteDescriptorBinarySIFTGPU(Fname, descriptors);
-			printf("View (%d, %d): %d points ... Wrote to files. Take %.2fs\n", viewID, timeID, numKeys, omp_get_wtime() - start);
-		}
-		else
-			printf("Cannot load %s", Fname);
-	}
-
-	delete sift;
-	FREE_MYLIB(hsiftgpu);
-
-	return 0;
-}
 //Use GPU for brute force Sift matching
 int GeneratePointsCorrespondenceMatrix_SiftGPU1(char *Path, int nviews, int timeID, float nndrRatio, bool distortionCorrected, int OulierRemoveTestMethod, int cameraToScan)
 {
@@ -5480,7 +5401,7 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 	for (ii = 0; ii < npts; ii++)
 		xyz[3 * ii] = Vxyz[ii].x, xyz[3 * ii + 1] = Vxyz[ii].y, xyz[3 * ii + 2] = Vxyz[ii].z;
 
-	printf("Set up Pose BA ...");
+	//printf("Set up Pose BA ...");
 	ceres::Problem problem;
 
 	int nBadCounts = 0, validPtsCount = 0;
@@ -5502,7 +5423,6 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 		if (abs(residuals[0]) > 1.5*camera.threshold || abs(residuals[1]) > 1.5*camera.threshold)
 		{
 			Good.push_back(false);
-			//printf("\n@P %d (%.3f %.3f %.3f):  %.2f %.2f", jj, xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2], residuals[0], residuals[1]);
 			if (abs(residuals[0]) > maxOutlierX)
 				maxOutlierX = residuals[0];
 			if (abs(residuals[1]) > maxOutlierY)
@@ -5516,17 +5436,15 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 			problem.AddResidualBlock(cost_function, NULL, camera.intrinsic, camera.distortion, camera.rt, &xyz[3 * jj]);
 
 			validPtsCount++;
-			ReProjectionErrorX.push_back(residuals[0]);
-			ReProjectionErrorY.push_back(residuals[1]);
+			ReProjectionErrorX.push_back(abs(residuals[0]));
+			ReProjectionErrorY.push_back(abs(residuals[1]));
 		}
 
 		if (debug)
-			fprintf(fp, "%d %.4f %.4f %.4f %.4f %.4f %.4f %.4f \n", jj, xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2], uvAll3D[jj].x, uvAll3D[jj].y, residuals[0], residuals[1]);
+			fprintf(fp, "%d %.4f %.4f %.4f %.4f %.4f %.4f %.4f \n", jj, xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2], uvAll3D[jj].x, uvAll3D[jj].y, abs(residuals[0]), abs(residuals[1]));
 	}
 	if (debug)
 		fclose(fp);
-
-	printf("\n %d bad points detected with maximum reprojection error of (%.2f %.2f) \n", nBadCounts, maxOutlierX, maxOutlierY);
 
 	double miniX = *min_element(ReProjectionErrorX.begin(), ReProjectionErrorX.end());
 	double maxiX = *max_element(ReProjectionErrorX.begin(), ReProjectionErrorX.end());
@@ -5536,11 +5454,15 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 	double maxiY = *max_element(ReProjectionErrorY.begin(), ReProjectionErrorY.end());
 	double avgY = MeanArray(ReProjectionErrorY);
 	double stdY = sqrt(VarianceArray(ReProjectionErrorY, avgY));
-	printf("Reprojection error before BA \n Min: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
 
+#pragma omp critical
+	{
+		printf("\n %d bad points detected with maximum reprojection error of (%.2f %.2f) \n", nBadCounts, maxOutlierX, maxOutlierY);
+		printf("Reprojection error before BA \n Min: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
+	}
 
 	//Set up constant parameters:
-	printf("...set up fixed parameters ...");
+	//printf("...set up fixed parameters ...");
 	if (fixIntrinsic)
 		problem.SetParameterBlockConstant(camera.intrinsic);
 	if (fixDistortion)
@@ -5550,7 +5472,7 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 			problem.SetParameterBlockConstant(xyz + 3 * ii);
 
 
-	printf("...run \n");
+	//printf("...run \n");
 	ceres::Solver::Options options;
 	options.num_threads = 4;
 	options.max_num_iterations = 30;
@@ -5574,22 +5496,6 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 	ReProjectionErrorX.clear(), ReProjectionErrorY.clear();
 	pointErrX = 0.0, pointErrY = 0.0;
 
-	/*{
-		FILE *fp = fopen("C:/temp/results.txt", "w+");
-		for (int ii = 0; ii < 5; ii++)
-		fprintf(fp, "%.2f ", camera.intrinsic[ii]);
-		fprintf(fp, "\n");
-		for (int ii = 0; ii < 7; ii++)
-		fprintf(fp, "%.2f ", camera.distortion[ii]);
-		fprintf(fp, "\n");
-		for (int ii = 0; ii < 6; ii++)
-		fprintf(fp, "%.2f ", camera.rt[ii]);
-		fprintf(fp, "\n");
-		for (int ii = 0; ii < npts; ii++)
-		fprintf(fp, "%.3f %.3f %.3f\n", xyz[3 * ii], xyz[3 * ii + 1], xyz[3 * ii + 2]);
-		fclose(fp);
-		}*/
-
 	if (debug)
 		sprintf(Fname, "C:/temp/reprojectionA.txt"), fp = fopen(Fname, "w+");
 	for (int ii = 0; ii < npts; ii++)
@@ -5601,9 +5507,10 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 
 			PinholeReprojectionDebug(camera.intrinsic, camera.distortion, camera.rt, uvAll3D[ii], Point3d(xyz[3 * ii], xyz[3 * ii + 1], xyz[3 * ii + 2]), residuals);
 
-			ReProjectionErrorX.push_back(residuals[0]);
-			ReProjectionErrorY.push_back(residuals[1]);
-			fprintf(fp, "%d %.4f %.4f %.4f %.4f %.4f %.4f %.4f \n", ii, xyz[3 * ii], xyz[3 * ii + 1], xyz[3 * ii + 2], uvAll3D[ii].x, uvAll3D[ii].y, residuals[0], residuals[1]);
+			ReProjectionErrorX.push_back(abs(residuals[0]));
+			ReProjectionErrorY.push_back(abs(residuals[1]));
+			if (debug)
+				fprintf(fp, "%d %.4f %.4f %.4f %.4f %.4f %.4f %.4f \n", ii, xyz[3 * ii], xyz[3 * ii + 1], xyz[3 * ii + 2], uvAll3D[ii].x, uvAll3D[ii].y, abs(residuals[0]), abs(residuals[1]));
 		}
 	}
 	if (debug)
@@ -5618,12 +5525,13 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 	maxiY = *max_element(ReProjectionErrorY.begin(), ReProjectionErrorY.end());
 	avgY = MeanArray(ReProjectionErrorY);
 	stdY = sqrt(VarianceArray(ReProjectionErrorY, avgY));
+#pragma omp critical
 	printf("Reprojection error after BA \n Min: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
 
 	delete[]xyz;
 	return 0;
 }
-int LocalizeCameraFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraParas, int cameraID, int timeID, vector<int> CorpusViewToMatch, const float nndrRatio)
+int MatchCameraToCorpus(char *Path, Corpus &corpusData, int cameraID, int timeID, vector<int> CorpusViewToMatch, const float nndrRatio)
 {
 	//Load image and extract features
 	const int descriptorSize = SIFTBINS;
@@ -5675,7 +5583,6 @@ int LocalizeCameraFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraP
 	const int knn = 2, ntrees = 4, maxLeafCheck = 128;
 
 	vector<Point2f> twoD; twoD.reserve(5000);
-	vector<Point3f>threeD; threeD.reserve(5000);
 	vector<int> threeDiD; threeDiD.reserve(5000);
 
 	//Finding nearest neighbor
@@ -5716,32 +5623,28 @@ int LocalizeCameraFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraP
 				if (indices.at<int>(i, 0) >= 0 && indices.at<int>(i, 1) >= 0 && dists.at<float>(i, 0) <= nndrRatio * dists.at<float>(i, 1))
 				{
 					int cur3Did = corpusData.threeDIdAllViews.at(camera2ID).at(i);
-					if (corpusData.viewIdAll3D.at(cur3Did).size() > 2)
+					bool used = false;
+					for (int kk = 0; kk < threeDiD.size(); kk++)
 					{
-						bool used = false;
-						for (int kk = 0; kk < threeD.size(); kk++)
+						if (cur3Did == threeDiD.at(kk))
 						{
-							if (cur3Did == threeDiD.at(kk))
-							{
-								used = true;
-								break;
-							}
+							used = true;
+							break;
 						}
-						if (used)
-							continue;
-
-						if (ShowCorrespondence)
-						{
-							KeyPoint t;
-							t.pt = keypoints1.at(ind1).pt; key1.push_back(t);
-							t.pt = corpusData.uvAllViews.at(camera2ID).at(i); key2.push_back(t);
-						}
-
-						twoD.push_back(keypoints1.at(ind1).pt);
-						threeD.push_back(corpusData.xyz.at(cur3Did));
-						threeDiD.push_back(cur3Did);
-						count++;
 					}
+					if (used)
+						continue;
+
+					if (ShowCorrespondence)
+					{
+						KeyPoint t;
+						t.pt = keypoints1.at(ind1).pt; key1.push_back(t);
+						t.pt = corpusData.uvAllViews.at(camera2ID).at(i); key2.push_back(t);
+					}
+
+					twoD.push_back(keypoints1.at(ind1).pt);
+					threeDiD.push_back(cur3Did);
+					count++;
 				}
 			}
 		}
@@ -5753,25 +5656,28 @@ int LocalizeCameraFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraP
 				{
 					int ind1 = matches.at(i).at(0).trainIdx;
 					int cur3Did = corpusData.threeDIdAllViews.at(camera2ID).at(i);
-					if (corpusData.viewIdAll3D.at(cur3Did).size() >= 3)
+					bool used = false;
+					for (int kk = 0; kk < threeDiD.size(); kk++)
 					{
-						bool used = false;
-						for (int kk = 0; kk < threeD.size(); kk++)
+						if (cur3Did == threeDiD.at(kk))
 						{
-							if (cur3Did == threeDiD.at(kk))
-							{
-								used = true;
-								break;
-							}
+							used = true;
+							break;
 						}
-						if (used)
-							continue;
-
-						twoD.push_back(keypoints1.at(ind1).pt);
-						threeD.push_back(corpusData.xyz.at(cur3Did));
-						threeDiD.push_back(cur3Did);
-						count++;
 					}
+					if (used)
+						continue;
+
+					if (ShowCorrespondence)
+					{
+						KeyPoint t;
+						t.pt = keypoints1.at(ind1).pt; key1.push_back(t);
+						t.pt = corpusData.uvAllViews.at(camera2ID).at(i); key2.push_back(t);
+					}
+
+					twoD.push_back(keypoints1.at(ind1).pt);
+					threeDiD.push_back(cur3Did);
+					count++;
 				}
 			}
 		}
@@ -5810,14 +5716,38 @@ int LocalizeCameraFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraP
 		printf("(%d, %d) to Corpus %d: %d 3+ points in %.2fs.\n", cameraID, timeID, camera2ID, count, omp_get_wtime() - start);
 	}
 
-	//PnP pose estimation from Corpus
-	int npts = threeD.size();
+	sprintf(Fname, "%s/%d/3D2D_%d.txt", Path, cameraID, timeID);
+	FILE *fp = fopen(Fname, "w+");
+	fprintf(fp, "%d\n", threeDiD.size());
+	for (int jj = 0; jj < threeDiD.size(); jj++)
+		fprintf(fp, "%d %.16f %.16f \n", threeDiD[jj], twoD[jj].x, twoD[jj].y);
+	fclose(fp);
+
+	return 0;
+}
+int EstimateCameraPoseFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraParas, int cameraID, int timeID)
+{
+	char Fname[200];
+	int threeDid, npts, ptsCount = 0;
+	double u, v;
+
+	sprintf(Fname, "%s/%d/3D2D_%d.txt", Path, cameraID, timeID);
+	FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		return 1;
+	}
+	fscanf(fp, "%d ", &npts);
 	Point2d *pts = new Point2d[npts];
 	Point3d *t3D = new Point3d[npts];
-	//Point2d pts[240];
-	//Point3d t3D[240];
-	for (int ii = 0; ii < npts; ii++)
-		pts[ii] = twoD.at(ii), t3D[ii] = threeD.at(ii);
+	while (fscanf(fp, "%d %lf %lf ", &threeDid, &u, &v) != EOF)
+	{
+		pts[ptsCount].x = u, pts[ptsCount].y = v;
+		t3D[ptsCount].x = corpusData.xyz.at(threeDid).x, t3D[ptsCount].y = corpusData.xyz.at(threeDid).y, t3D[ptsCount].z = corpusData.xyz.at(threeDid).z;
+		ptsCount++;
+	}
+	fclose(fp);
 
 	if (cameraParas.LensModel == RADIAL_TANGENTIAL_PRISM && abs(cameraParas.distortion[0]) > 0.001)
 		LensCorrectionPoint(pts, cameraParas.K, cameraParas.distortion, npts);
@@ -5827,42 +5757,16 @@ int LocalizeCameraFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraP
 	//printf("EPnP + Ransac for View (%d, %d)...", cameraID, timeID);
 	GetrtFromRT(&cameraParas, 1);
 
-	/*{
-		FILE *fp = fopen("C:/temp/3D2D.txt", "w+");
-		for (int jj = 0; jj < npts; jj++)
-		{
-		int pid = threeDiD[jj];
-		fprintf(fp, "%.4f %.4f %.4f %.4f %.4f %d ", t3D[jj].x, t3D[jj].y, t3D[jj].z, pts[jj].x, pts[jj].y, corpusData.viewIdAll3D[pid].size());
-		for (int ii = 0; ii < corpusData.viewIdAll3D[pid].size(); ii++)
-		{
-		float u = corpusData.uvAll3D[pid].at(ii).x, v = corpusData.uvAll3D[pid].at(ii).y;
-		fprintf(fp, "%d %.16f %.16f ", corpusData.viewIdAll3D[pid].at(ii), corpusData.uvAll3D[pid].at(ii).x, corpusData.uvAll3D[pid].at(ii).y);
-		}
-		fprintf(fp, "\n");
-		}
-		fclose(fp);
-
-		FILE *fp = fopen("C:/temp/3D2D.txt", "w+");
-		for (int jj = 0; jj < npts; jj++)
-		{
-		int pid = threeDiD[jj];
-		fprintf(fp, "%.4f %.4f %.4f %.16f %.16f %d ", t3D[jj].x, t3D[jj].y, t3D[jj].z, pts[jj].x, pts[jj].y, corpusData.viewIdAll3D[pid].size());
-
-		fprintf(fp, "\n");
-		}
-		fclose(fp);
-		}*/
-
 	vector<bool> Good; Good.reserve(npts);
 	vector<Point3d> Vxyz; Vxyz.reserve(npts);
 	vector<Point2d> uv; uv.reserve(npts);
 	for (int ii = 0; ii < npts; ii++)
 	{
-		Vxyz.push_back(Point3d(threeD.at(ii).x, threeD.at(ii).y, threeD.at(ii).z));
-		uv.push_back(Point2d(twoD.at(ii).x, twoD.at(ii).y));
+		Vxyz.push_back(Point3d(t3D[ii].x, t3D[ii].y, t3D[ii].z));
+		uv.push_back(Point2d(pts[ii].x, pts[ii].y));
 	}
-	PoseBA(Path, cameraParas, Vxyz, uv, Good, true, true, true);
-	printf("Estimated pose for View (%d, %d). Camera center: %.4f %.4f %.4f ...", cameraID, timeID, cameraParas.T[0], cameraParas.T[1], cameraParas.T[2]);
+
+	PoseBA(Path, cameraParas, Vxyz, uv, Good, true, true, false);
 
 	ninliers = 0;
 	for (int ii = 0; ii < npts; ii++)
@@ -5880,33 +5784,25 @@ int LocalizeCameraFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraP
 	mat_mul(iR, cameraParas.T, center, 3, 3, 1); //Center = -iR*T 
 	cameraParas.camCenter[0] = -center[0], cameraParas.camCenter[1] = -center[1], cameraParas.camCenter[2] = -center[2];
 
-	/*sprintf(Fname, "%s/PinfoGL.txt", Path);
-	FILE *fp = fopen(Fname, "a+");
-	fprintf(fp, "%d: ", timeID);
-	for (int jj = 0; jj < 16; jj++)
-	fprintf(fp, "%.16f ", cameraParas.Rgl[jj]);
-	for (int jj = 0; jj < 3; jj++)
-	fprintf(fp, "%.16f ", cameraParas.camCenter[jj]);
-	fprintf(fp, "\n");
-	fclose(fp);*/
 	delete[]pts, delete[]t3D;
 	if (ninliers < cameraParas.ninlierThresh)
 	{
-		printf(" fails ... low inliers (%d/%d)\n\n", ninliers, npts);
+		printf("Estimated pose for View (%d, %d).. fails ... low inliers (%d/%d). Camera center: %.4f %.4f %.4f \n\n", cameraID, timeID, ninliers, npts, cameraParas.T[0], cameraParas.T[1], cameraParas.T[2]);
 		return 1;
 	}
 	else
 	{
-		printf(" succeeds ...(%d/%d) inliers\n\n", ninliers, npts);
+		printf("Estimated pose for View (%d, %d).. succeds ... inliers (%d/%d). Camera center: %.4f %.4f %.4f \n\n", cameraID, timeID, ninliers, npts, cameraParas.T[0], cameraParas.T[1], cameraParas.T[2]);
 		return 0;
 	}
 }
-int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, int nCams, int selectedCams, bool distortionCorrected)
+int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, bool RunMatching, int nCams, int selectedCams, bool distortionCorrected)
 {
-	char Fname[200];
 	Corpus corpusData;
 	ReadCorpusInfo(Path, corpusData);
 
+	double start = omp_get_wtime();
+	char Fname[200];
 	CameraData *AllCamsInfo = new CameraData[nCams];
 	if (ReadIntrinsicResults(Path, AllCamsInfo, nCams) != 0)
 		return 1;
@@ -5918,35 +5814,49 @@ int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, int 
 				AllCamsInfo[ii].distortion[jj] = 0.0;
 	}
 
-	int toMatch;
-	vector<int> availTimes;
-	availTimes.reserve(StopTime - StartTime + 1);
-
-	CameraData *SelectedCameraInfo = new CameraData[StopTime - StartTime + 1];
-	for (int timeID = StartTime; timeID <= StopTime; timeID++)
+	if (RunMatching)
 	{
-		vector<int> CorpusViewToMatch; 
-		CorpusViewToMatch.reserve(corpusData.nCamera);
+		int toMatch;
 
-		sprintf(Fname, "%s/%d/ToMatch.txt", Path, selectedCams);
-		FILE *fp = fopen(Fname, "r");
-		if (fp == NULL)
-			printf("Cannot read %s\n", Fname);
-		while (fscanf(fp, "%d ", &toMatch) != EOF)
-			CorpusViewToMatch.push_back(toMatch);
-		fclose(fp);
+		for (int timeID = StartTime; timeID <= StopTime; timeID++)
+		{
+			vector<int> CorpusViewToMatch;
+			CorpusViewToMatch.reserve(corpusData.nCamera);
 
-		CopyCamereInfo(AllCamsInfo[selectedCams], SelectedCameraInfo[timeID - 1]);
+			sprintf(Fname, "%s/%d/ToMatch.txt", Path, selectedCams);
+			FILE *fp = fopen(Fname, "r");
+			if (fp == NULL)
+				printf("Cannot read %s\n", Fname);
+			while (fscanf(fp, "%d ", &toMatch) != EOF)
+				CorpusViewToMatch.push_back(toMatch);
+			fclose(fp);
 
-		if (LocalizeCameraFromCorpus(Path, corpusData, SelectedCameraInfo[timeID - 1], selectedCams, timeID, CorpusViewToMatch))
-			availTimes.push_back(-1); //Fail
-		else
-			availTimes.push_back(timeID - 1);
+			MatchCameraToCorpus(Path, corpusData, selectedCams, timeID, CorpusViewToMatch);
+		}
+		delete[]AllCamsInfo;
 	}
-	printf("Finished estimating poses for camera %d\n", selectedCams);
-	SaveVideoCameraPosesGL(Path, SelectedCameraInfo, availTimes, selectedCams);
+	else
+	{
+		vector<int> computedTime; computedTime.reserve(StopTime - StartTime + 1);
+		CameraData *SelectedCameraInfo = new CameraData[StopTime - StartTime + 1];
+		for (int timeID = StartTime; timeID <= StopTime; timeID++)
+		{
+			computedTime.clear();
+			CopyCamereInfo(AllCamsInfo[selectedCams], SelectedCameraInfo[timeID - StartTime]);
+			if (EstimateCameraPoseFromCorpus(Path, corpusData, SelectedCameraInfo[timeID - StartTime], selectedCams, timeID))
+				computedTime.push_back(-1);
+			else
+				computedTime.push_back(timeID - 1);
 
-	delete[]AllCamsInfo, delete[]SelectedCameraInfo;
+			SaveVideoCameraPosesGL(Path, SelectedCameraInfo, computedTime, selectedCams, StartTime);
+		}
+		printf("Finished estimating poses for camera %d\n", selectedCams);
+		SaveVideoCameraPosesGL(Path, SelectedCameraInfo, computedTime, selectedCams, StartTime);
+
+		delete[]AllCamsInfo, delete[]SelectedCameraInfo;
+	}
+
+	printf("Total time %d: %.3fs\n", selectedCams, omp_get_wtime() - start);
 
 	return 0;
 }

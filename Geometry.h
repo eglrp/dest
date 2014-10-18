@@ -44,7 +44,7 @@ void computeFmatfromKRT(CameraData *CameraInfo, int nvews, int *selectedCams, do
 
 int GeneratePointsCorrespondenceMatrix(char *Path, int nviews, int timeID);
 void GenerateViewCorrespondenceMatrix(char *Path, int nviews, int timeID);
-int ExtractSiftGPUfromVideoFrames(char *Path, int nviews, int start, int nframes);
+int ExtractSiftGPUfromExtractedFrames(char *Path, int nviews, int start, int nframes);
 int BatchExtractSiftGPU(char *Path, int viewID, int TimeLength);
 int GeneratePointsCorrespondenceMatrix_SiftGPU1(char *Path, int nviews, int timeID, float nndrRatio = 0.8, bool distortionCorrected = true, int OulierRemoveTestMethod = 1, int nCams = 10, int cameraToScan = 1);
 int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int timeID, float nndrRatio = 0.8, bool distortionCorrected = true, int OulierRemoveTestMethod = 1, int nCams = 10, int cameraToScan = 1);
@@ -77,8 +77,10 @@ void IncrementalBundleAdjustment(char *Path, int nviews, int timeID, int maxKeyp
 
 int BuildCorpus(char *Path, int nCameras, int CameraToScan, int width, int height, bool distortionCorrected, int NDplus = 5);
 int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d> uvAll3D, vector<bool> &Good, bool fixIntrinsic, bool fixDistortion, bool debug);
-int LocalizeCameraFromCorpus(char *Path, Corpus CorpusData, CameraData  &cameraParas, int cameraID, int timeID, vector<int> CorpusViewToMatch, const float nndrRatio = 0.6f);
-int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, int nviews, int selectedView, bool distortionCorrected);
+
+int MatchCameraToCorpus(char *Path, Corpus &corpusData, int cameraID, int timeID, vector<int> CorpusViewToMatch, const float nndrRatio = 0.6f);
+int EstimateCameraPoseFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraParas, int cameraID, int timeID);
+int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, bool RunMatching, int nCams, int selectedCams, bool distortionCorrected);
 
 class epnp 
 {

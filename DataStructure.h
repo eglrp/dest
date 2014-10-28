@@ -17,6 +17,7 @@ using namespace std;
 #define LIMIT3D 1e-6
 #define Pi 3.1415926535897932
 
+
 struct CameraData
 {
 	double K[9], distortion[7], R[9], T[3], rt[6], P[12], intrinsic[5];
@@ -52,6 +53,13 @@ struct Corpus
 	vector < vector<int>> orgtwoDIdAll3D; //visualsfm output order
 	vector<vector<Point2d>> uvAllViews;
 	Mat SiftDesc, SurfDesc;
+};
+
+struct CorpusandVideo
+{
+	int nViewsCorpus, nVideos, startTime, stopTime, CorpussharedIntrinsics;
+	CameraData *CorpusInfo;
+	CameraData *VideoInfo;
 };
 
 struct CamInfo

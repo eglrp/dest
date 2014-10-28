@@ -26,7 +26,7 @@ const GLfloat Green[3] = { 0, 1, 0 };
 const GLfloat Scale = 0.25f;
 VisualizationManager g_vis;
 
-const int nviews = 10;
+int nviews = 10;
 bool drawPose = false, hasColor = false;
 
 void DrawCamera()
@@ -266,15 +266,19 @@ void visualization()
 	glutMainLoop();
 
 }
-int visualizationDriver(char *Path, int StartTime, int StopTime)
+int visualizationDriver(char *Path, int nViews, int StartTime, int StopTime)
 {
+	nviews = nViews;
 	hasColor = true, drawPose = true;
+
+	if (StartTime == -1)
+		drawPose = false;
 
 	VisualizationManager g_vis;
 	ReadCurrentSfmGL(Path, hasColor);
 
 	if (drawPose)
-		ReadCurrentPosesGL(Path, nviews, StartTime, StopTime);
+		ReadCurrentPosesGL(Path, nViews, StartTime, StopTime);
 	visualization();
 
 	return 0;
@@ -496,7 +500,7 @@ void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>Ava
 
 	sprintf(Fname, "%s/PinfoGL_%d.txt", path, camID);
 	FILE *fp;
-	if (AvailTime.at(0) == 0)
+	if (StartTime == 0)
 		fp = fopen(Fname, "w+");
 	else
 		fp = fopen(Fname, "a+");

@@ -628,678 +628,6 @@ void CvEMEstimator::getCoeffMat(double *e, double *A)
 	}
 }
 
-//EPNP
-epnp::epnp(void)
-{
-	maximum_number_of_correspondences = 0;
-	number_of_correspondences = 0;
-
-	pws = 0;
-	us = 0;
-	alphas = 0;
-	pcs = 0;
-}
-epnp::~epnp()
-{
-	delete[] pws;
-	delete[] us;
-	delete[] alphas;
-	delete[] pcs;
-}
-void epnp::set_internal_parameters(double uc, double vc, double fu, double fv)
-{
-	this->uc = uc;
-	this->vc = vc;
-	this->fu = fu;
-	this->fv = fv;
-}
-void epnp::set_maximum_number_of_correspondences(int n)
-{
-	if (maximum_number_of_correspondences < n) {
-		if (pws != 0) delete[] pws;
-		if (us != 0) delete[] us;
-		if (alphas != 0) delete[] alphas;
-		if (pcs != 0) delete[] pcs;
-
-		maximum_number_of_correspondences = n;
-		pws = new double[3 * maximum_number_of_correspondences];
-		us = new double[2 * maximum_number_of_correspondences];
-		alphas = new double[4 * maximum_number_of_correspondences];
-		pcs = new double[3 * maximum_number_of_correspondences];
-	}
-}
-void epnp::reset_correspondences(void)
-{
-	number_of_correspondences = 0;
-}
-void epnp::add_correspondence(double X, double Y, double Z, double u, double v)
-{
-	pws[3 * number_of_correspondences] = X;
-	pws[3 * number_of_correspondences + 1] = Y;
-	pws[3 * number_of_correspondences + 2] = Z;
-
-	us[2 * number_of_correspondences] = u;
-	us[2 * number_of_correspondences + 1] = v;
-
-	number_of_correspondences++;
-}
-void epnp::choose_control_points(void)
-{
-	// Take C0 as the reference points centroid:
-	cws[0][0] = cws[0][1] = cws[0][2] = 0;
-	for (int i = 0; i < number_of_correspondences; i++)
-		for (int j = 0; j < 3; j++)
-			cws[0][j] += pws[3 * i + j];
-
-	for (int j = 0; j < 3; j++)
-		cws[0][j] /= number_of_correspondences;
-
-
-	// Take C1, C2, and C3 from PCA on the reference points:
-	CvMat * PW0 = cvCreateMat(number_of_correspondences, 3, CV_64F);
-
-	double pw0tpw0[3 * 3], dc[3], uct[3 * 3];
-	CvMat PW0tPW0 = cvMat(3, 3, CV_64F, pw0tpw0);
-	CvMat DC = cvMat(3, 1, CV_64F, dc);
-	CvMat UCt = cvMat(3, 3, CV_64F, uct);
-
-	for (int i = 0; i < number_of_correspondences; i++)
-		for (int j = 0; j < 3; j++)
-			PW0->data.db[3 * i + j] = pws[3 * i + j] - cws[0][j];
-
-	cvMulTransposed(PW0, &PW0tPW0, 1);
-	cvSVD(&PW0tPW0, &DC, &UCt, 0, CV_SVD_MODIFY_A | CV_SVD_U_T);
-
-	cvReleaseMat(&PW0);
-
-	for (int i = 1; i < 4; i++) {
-		double k = sqrt(dc[i - 1] / number_of_correspondences);
-		for (int j = 0; j < 3; j++)
-			cws[i][j] = cws[0][j] + k * uct[3 * (i - 1) + j];
-	}
-}
-void epnp::compute_barycentric_coordinates(void)
-{
-	double cc[3 * 3], cc_inv[3 * 3];
-	CvMat CC = cvMat(3, 3, CV_64F, cc);
-	CvMat CC_inv = cvMat(3, 3, CV_64F, cc_inv);
-
-	for (int i = 0; i < 3; i++)
-		for (int j = 1; j < 4; j++)
-			cc[3 * i + j - 1] = cws[j][i] - cws[0][i];
-
-	cvInvert(&CC, &CC_inv, CV_SVD);
-	double * ci = cc_inv;
-	for (int i = 0; i < number_of_correspondences; i++) {
-		double * pi = pws + 3 * i;
-		double * a = alphas + 4 * i;
-
-		for (int j = 0; j < 3; j++)
-			a[1 + j] =
-			ci[3 * j] * (pi[0] - cws[0][0]) +
-			ci[3 * j + 1] * (pi[1] - cws[0][1]) +
-			ci[3 * j + 2] * (pi[2] - cws[0][2]);
-		a[0] = 1.0f - a[1] - a[2] - a[3];
-	}
-}
-void epnp::fill_M(CvMat * M, const int row, const double * as, const double u, const double v)
-{
-	double * M1 = M->data.db + row * 12;
-	double * M2 = M1 + 12;
-
-	for (int i = 0; i < 4; i++) {
-		M1[3 * i] = as[i] * fu;
-		M1[3 * i + 1] = 0.0;
-		M1[3 * i + 2] = as[i] * (uc - u);
-
-		M2[3 * i] = 0.0;
-		M2[3 * i + 1] = as[i] * fv;
-		M2[3 * i + 2] = as[i] * (vc - v);
-	}
-}
-void epnp::compute_ccs(const double * betas, const double * ut)
-{
-	for (int i = 0; i < 4; i++)
-		ccs[i][0] = ccs[i][1] = ccs[i][2] = 0.0f;
-
-	for (int i = 0; i < 4; i++) {
-		const double * v = ut + 12 * (11 - i);
-		for (int j = 0; j < 4; j++)
-			for (int k = 0; k < 3; k++)
-				ccs[j][k] += betas[i] * v[3 * j + k];
-	}
-}
-void epnp::compute_pcs(void)
-{
-	for (int i = 0; i < number_of_correspondences; i++) {
-		double * a = alphas + 4 * i;
-		double * pc = pcs + 3 * i;
-
-		for (int j = 0; j < 3; j++)
-			pc[j] = a[0] * ccs[0][j] + a[1] * ccs[1][j] + a[2] * ccs[2][j] + a[3] * ccs[3][j];
-	}
-}
-double epnp::compute_pose(double R[3][3], double t[3])
-{
-	choose_control_points();
-	compute_barycentric_coordinates();
-
-	CvMat * M = cvCreateMat(2 * number_of_correspondences, 12, CV_64F);
-
-	for (int i = 0; i < number_of_correspondences; i++)
-		fill_M(M, 2 * i, alphas + 4 * i, us[2 * i], us[2 * i + 1]);
-
-	double mtm[12 * 12], d[12], ut[12 * 12];
-	CvMat MtM = cvMat(12, 12, CV_64F, mtm);
-	CvMat D = cvMat(12, 1, CV_64F, d);
-	CvMat Ut = cvMat(12, 12, CV_64F, ut);
-
-	cvMulTransposed(M, &MtM, 1);
-	cvSVD(&MtM, &D, &Ut, 0, CV_SVD_MODIFY_A | CV_SVD_U_T);
-	cvReleaseMat(&M);
-
-	double l_6x10[6 * 10], rho[6];
-	CvMat L_6x10 = cvMat(6, 10, CV_64F, l_6x10);
-	CvMat Rho = cvMat(6, 1, CV_64F, rho);
-
-	compute_L_6x10(ut, l_6x10);
-	compute_rho(rho);
-
-	double Betas[4][4], rep_errors[4];
-	double Rs[4][3][3], ts[4][3];
-
-	find_betas_approx_1(&L_6x10, &Rho, Betas[1]);
-	gauss_newton(&L_6x10, &Rho, Betas[1]);
-	rep_errors[1] = compute_R_and_t(ut, Betas[1], Rs[1], ts[1]);
-
-	find_betas_approx_2(&L_6x10, &Rho, Betas[2]);
-	gauss_newton(&L_6x10, &Rho, Betas[2]);
-	rep_errors[2] = compute_R_and_t(ut, Betas[2], Rs[2], ts[2]);
-
-	find_betas_approx_3(&L_6x10, &Rho, Betas[3]);
-	gauss_newton(&L_6x10, &Rho, Betas[3]);
-	rep_errors[3] = compute_R_and_t(ut, Betas[3], Rs[3], ts[3]);
-
-	int N = 1;
-	if (rep_errors[2] < rep_errors[1]) N = 2;
-	if (rep_errors[3] < rep_errors[N]) N = 3;
-
-	copy_R_and_t(Rs[N], ts[N], R, t);
-
-	return rep_errors[N];
-}
-void epnp::copy_R_and_t(const double R_src[3][3], const double t_src[3], double R_dst[3][3], double t_dst[3])
-{
-	for (int i = 0; i < 3; i++) {
-		for (int j = 0; j < 3; j++)
-			R_dst[i][j] = R_src[i][j];
-		t_dst[i] = t_src[i];
-	}
-}
-double epnp::dist2(const double * p1, const double * p2)
-{
-	return
-		(p1[0] - p2[0]) * (p1[0] - p2[0]) +
-		(p1[1] - p2[1]) * (p1[1] - p2[1]) +
-		(p1[2] - p2[2]) * (p1[2] - p2[2]);
-}
-double epnp::dot(const double * v1, const double * v2)
-{
-	return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
-}
-double epnp::reprojection_error(const double R[3][3], const double t[3])
-{
-	double sum2 = 0.0;
-
-	for (int i = 0; i < number_of_correspondences; i++) {
-		double * pw = pws + 3 * i;
-		double Xc = dot(R[0], pw) + t[0];
-		double Yc = dot(R[1], pw) + t[1];
-		double inv_Zc = 1.0 / (dot(R[2], pw) + t[2]);
-		double ue = uc + fu * Xc * inv_Zc;
-		double ve = vc + fv * Yc * inv_Zc;
-		double u = us[2 * i], v = us[2 * i + 1];
-
-		sum2 += sqrt((u - ue) * (u - ue) + (v - ve) * (v - ve));
-	}
-
-	return sum2 / number_of_correspondences;
-}
-void epnp::estimate_R_and_t(double R[3][3], double t[3])
-{
-	double pc0[3], pw0[3];
-
-	pc0[0] = pc0[1] = pc0[2] = 0.0;
-	pw0[0] = pw0[1] = pw0[2] = 0.0;
-
-	for (int i = 0; i < number_of_correspondences; i++) {
-		const double * pc = pcs + 3 * i;
-		const double * pw = pws + 3 * i;
-
-		for (int j = 0; j < 3; j++) {
-			pc0[j] += pc[j];
-			pw0[j] += pw[j];
-		}
-	}
-	for (int j = 0; j < 3; j++) {
-		pc0[j] /= number_of_correspondences;
-		pw0[j] /= number_of_correspondences;
-	}
-
-	double abt[3 * 3], abt_d[3], abt_u[3 * 3], abt_v[3 * 3];
-	CvMat ABt = cvMat(3, 3, CV_64F, abt);
-	CvMat ABt_D = cvMat(3, 1, CV_64F, abt_d);
-	CvMat ABt_U = cvMat(3, 3, CV_64F, abt_u);
-	CvMat ABt_V = cvMat(3, 3, CV_64F, abt_v);
-
-	cvSetZero(&ABt);
-	for (int i = 0; i < number_of_correspondences; i++) {
-		double * pc = pcs + 3 * i;
-		double * pw = pws + 3 * i;
-
-		for (int j = 0; j < 3; j++) {
-			abt[3 * j] += (pc[j] - pc0[j]) * (pw[0] - pw0[0]);
-			abt[3 * j + 1] += (pc[j] - pc0[j]) * (pw[1] - pw0[1]);
-			abt[3 * j + 2] += (pc[j] - pc0[j]) * (pw[2] - pw0[2]);
-		}
-	}
-
-	cvSVD(&ABt, &ABt_D, &ABt_U, &ABt_V, CV_SVD_MODIFY_A);
-
-	for (int i = 0; i < 3; i++)
-		for (int j = 0; j < 3; j++)
-			R[i][j] = dot(abt_u + 3 * i, abt_v + 3 * j);
-
-	const double det =
-		R[0][0] * R[1][1] * R[2][2] + R[0][1] * R[1][2] * R[2][0] + R[0][2] * R[1][0] * R[2][1] -
-		R[0][2] * R[1][1] * R[2][0] - R[0][1] * R[1][0] * R[2][2] - R[0][0] * R[1][2] * R[2][1];
-
-	if (det < 0) {
-		R[2][0] = -R[2][0];
-		R[2][1] = -R[2][1];
-		R[2][2] = -R[2][2];
-	}
-
-	t[0] = pc0[0] - dot(R[0], pw0);
-	t[1] = pc0[1] - dot(R[1], pw0);
-	t[2] = pc0[2] - dot(R[2], pw0);
-}
-void epnp::print_pose(const double R[3][3], const double t[3])
-{
-	cout << R[0][0] << " " << R[0][1] << " " << R[0][2] << " " << t[0] << endl;
-	cout << R[1][0] << " " << R[1][1] << " " << R[1][2] << " " << t[1] << endl;
-	cout << R[2][0] << " " << R[2][1] << " " << R[2][2] << " " << t[2] << endl;
-}
-void epnp::solve_for_sign(void)
-{
-	if (pcs[2] < 0.0) {
-		for (int i = 0; i < 4; i++)
-			for (int j = 0; j < 3; j++)
-				ccs[i][j] = -ccs[i][j];
-
-		for (int i = 0; i < number_of_correspondences; i++) {
-			pcs[3 * i] = -pcs[3 * i];
-			pcs[3 * i + 1] = -pcs[3 * i + 1];
-			pcs[3 * i + 2] = -pcs[3 * i + 2];
-		}
-	}
-}
-double epnp::compute_R_and_t(const double * ut, const double * betas, double R[3][3], double t[3])
-{
-	compute_ccs(betas, ut);
-	compute_pcs();
-
-	solve_for_sign();
-
-	estimate_R_and_t(R, t);
-
-	return reprojection_error(R, t);
-}
-// betas10        = [B11 B12 B22 B13 B23 B33 B14 B24 B34 B44]
-// betas_approx_1 = [B11 B12     B13         B14]
-void epnp::find_betas_approx_1(const CvMat * L_6x10, const CvMat * Rho, double * betas)
-{
-	double l_6x4[6 * 4], b4[4];
-	CvMat L_6x4 = cvMat(6, 4, CV_64F, l_6x4);
-	CvMat B4 = cvMat(4, 1, CV_64F, b4);
-
-	for (int i = 0; i < 6; i++) {
-		cvmSet(&L_6x4, i, 0, cvmGet(L_6x10, i, 0));
-		cvmSet(&L_6x4, i, 1, cvmGet(L_6x10, i, 1));
-		cvmSet(&L_6x4, i, 2, cvmGet(L_6x10, i, 3));
-		cvmSet(&L_6x4, i, 3, cvmGet(L_6x10, i, 6));
-	}
-
-	cvSolve(&L_6x4, Rho, &B4, CV_SVD);
-
-	if (b4[0] < 0) {
-		betas[0] = sqrt(-b4[0]);
-		betas[1] = -b4[1] / betas[0];
-		betas[2] = -b4[2] / betas[0];
-		betas[3] = -b4[3] / betas[0];
-	}
-	else {
-		betas[0] = sqrt(b4[0]);
-		betas[1] = b4[1] / betas[0];
-		betas[2] = b4[2] / betas[0];
-		betas[3] = b4[3] / betas[0];
-	}
-}
-// betas10        = [B11 B12 B22 B13 B23 B33 B14 B24 B34 B44]
-// betas_approx_2 = [B11 B12 B22                            ]
-void epnp::find_betas_approx_2(const CvMat * L_6x10, const CvMat * Rho, double * betas)
-{
-	double l_6x3[6 * 3], b3[3];
-	CvMat L_6x3 = cvMat(6, 3, CV_64F, l_6x3);
-	CvMat B3 = cvMat(3, 1, CV_64F, b3);
-
-	for (int i = 0; i < 6; i++) {
-		cvmSet(&L_6x3, i, 0, cvmGet(L_6x10, i, 0));
-		cvmSet(&L_6x3, i, 1, cvmGet(L_6x10, i, 1));
-		cvmSet(&L_6x3, i, 2, cvmGet(L_6x10, i, 2));
-	}
-
-	cvSolve(&L_6x3, Rho, &B3, CV_SVD);
-
-	if (b3[0] < 0) {
-		betas[0] = sqrt(-b3[0]);
-		betas[1] = (b3[2] < 0) ? sqrt(-b3[2]) : 0.0;
-	}
-	else {
-		betas[0] = sqrt(b3[0]);
-		betas[1] = (b3[2] > 0) ? sqrt(b3[2]) : 0.0;
-	}
-
-	if (b3[1] < 0) betas[0] = -betas[0];
-
-	betas[2] = 0.0;
-	betas[3] = 0.0;
-}
-// betas10        = [B11 B12 B22 B13 B23 B33 B14 B24 B34 B44]
-// betas_approx_3 = [B11 B12 B22 B13 B23                    ]
-void epnp::find_betas_approx_3(const CvMat * L_6x10, const CvMat * Rho, double * betas)
-{
-	double l_6x5[6 * 5], b5[5];
-	CvMat L_6x5 = cvMat(6, 5, CV_64F, l_6x5);
-	CvMat B5 = cvMat(5, 1, CV_64F, b5);
-
-	for (int i = 0; i < 6; i++) {
-		cvmSet(&L_6x5, i, 0, cvmGet(L_6x10, i, 0));
-		cvmSet(&L_6x5, i, 1, cvmGet(L_6x10, i, 1));
-		cvmSet(&L_6x5, i, 2, cvmGet(L_6x10, i, 2));
-		cvmSet(&L_6x5, i, 3, cvmGet(L_6x10, i, 3));
-		cvmSet(&L_6x5, i, 4, cvmGet(L_6x10, i, 4));
-	}
-
-	cvSolve(&L_6x5, Rho, &B5, CV_SVD);
-
-	if (b5[0] < 0) {
-		betas[0] = sqrt(-b5[0]);
-		betas[1] = (b5[2] < 0) ? sqrt(-b5[2]) : 0.0;
-	}
-	else {
-		betas[0] = sqrt(b5[0]);
-		betas[1] = (b5[2] > 0) ? sqrt(b5[2]) : 0.0;
-	}
-	if (b5[1] < 0) betas[0] = -betas[0];
-	betas[2] = b5[3] / betas[0];
-	betas[3] = 0.0;
-}
-void epnp::compute_L_6x10(const double * ut, double * l_6x10)
-{
-	const double * v[4];
-
-	v[0] = ut + 12 * 11;
-	v[1] = ut + 12 * 10;
-	v[2] = ut + 12 * 9;
-	v[3] = ut + 12 * 8;
-
-	double dv[4][6][3];
-
-	for (int i = 0; i < 4; i++) {
-		int a = 0, b = 1;
-		for (int j = 0; j < 6; j++) {
-			dv[i][j][0] = v[i][3 * a] - v[i][3 * b];
-			dv[i][j][1] = v[i][3 * a + 1] - v[i][3 * b + 1];
-			dv[i][j][2] = v[i][3 * a + 2] - v[i][3 * b + 2];
-
-			b++;
-			if (b > 3) {
-				a++;
-				b = a + 1;
-			}
-		}
-	}
-
-	for (int i = 0; i < 6; i++) {
-		double * row = l_6x10 + 10 * i;
-
-		row[0] = dot(dv[0][i], dv[0][i]);
-		row[1] = 2.0f * dot(dv[0][i], dv[1][i]);
-		row[2] = dot(dv[1][i], dv[1][i]);
-		row[3] = 2.0f * dot(dv[0][i], dv[2][i]);
-		row[4] = 2.0f * dot(dv[1][i], dv[2][i]);
-		row[5] = dot(dv[2][i], dv[2][i]);
-		row[6] = 2.0f * dot(dv[0][i], dv[3][i]);
-		row[7] = 2.0f * dot(dv[1][i], dv[3][i]);
-		row[8] = 2.0f * dot(dv[2][i], dv[3][i]);
-		row[9] = dot(dv[3][i], dv[3][i]);
-	}
-}
-void epnp::compute_rho(double * rho)
-{
-	rho[0] = dist2(cws[0], cws[1]);
-	rho[1] = dist2(cws[0], cws[2]);
-	rho[2] = dist2(cws[0], cws[3]);
-	rho[3] = dist2(cws[1], cws[2]);
-	rho[4] = dist2(cws[1], cws[3]);
-	rho[5] = dist2(cws[2], cws[3]);
-}
-void epnp::compute_A_and_b_gauss_newton(const double * l_6x10, const double * rho, double betas[4], CvMat * A, CvMat * b)
-{
-	for (int i = 0; i < 6; i++) {
-		const double * rowL = l_6x10 + i * 10;
-		double * rowA = A->data.db + i * 4;
-
-		rowA[0] = 2 * rowL[0] * betas[0] + rowL[1] * betas[1] + rowL[3] * betas[2] + rowL[6] * betas[3];
-		rowA[1] = rowL[1] * betas[0] + 2 * rowL[2] * betas[1] + rowL[4] * betas[2] + rowL[7] * betas[3];
-		rowA[2] = rowL[3] * betas[0] + rowL[4] * betas[1] + 2 * rowL[5] * betas[2] + rowL[8] * betas[3];
-		rowA[3] = rowL[6] * betas[0] + rowL[7] * betas[1] + rowL[8] * betas[2] + 2 * rowL[9] * betas[3];
-
-		cvmSet(b, i, 0, rho[i] -
-			(
-			rowL[0] * betas[0] * betas[0] +
-			rowL[1] * betas[0] * betas[1] +
-			rowL[2] * betas[1] * betas[1] +
-			rowL[3] * betas[0] * betas[2] +
-			rowL[4] * betas[1] * betas[2] +
-			rowL[5] * betas[2] * betas[2] +
-			rowL[6] * betas[0] * betas[3] +
-			rowL[7] * betas[1] * betas[3] +
-			rowL[8] * betas[2] * betas[3] +
-			rowL[9] * betas[3] * betas[3]
-			));
-	}
-}
-void epnp::gauss_newton(const CvMat * L_6x10, const CvMat * Rho, double betas[4])
-{
-	const int iterations_number = 5;
-
-	double a[6 * 4], b[6], x[4];
-	CvMat A = cvMat(6, 4, CV_64F, a);
-	CvMat B = cvMat(6, 1, CV_64F, b);
-	CvMat X = cvMat(4, 1, CV_64F, x);
-
-	for (int k = 0; k < iterations_number; k++) {
-		compute_A_and_b_gauss_newton(L_6x10->data.db, Rho->data.db,
-			betas, &A, &B);
-		qr_solve(&A, &B, &X);
-
-		for (int i = 0; i < 4; i++)
-			betas[i] += x[i];
-	}
-}
-void epnp::qr_solve(CvMat * A, CvMat * b, CvMat * X)
-{
-	static int max_nr = 0;
-	static double * A1, *A2;
-
-	const int nr = A->rows;
-	const int nc = A->cols;
-
-	if (max_nr != 0 && max_nr < nr) {
-		delete[] A1;
-		delete[] A2;
-	}
-	if (max_nr < nr) {
-		max_nr = nr;
-		A1 = new double[nr];
-		A2 = new double[nr];
-	}
-
-	double * pA = A->data.db, *ppAkk = pA;
-	for (int k = 0; k < nc; k++) {
-		double * ppAik = ppAkk, eta = fabs(*ppAik);
-		for (int i = k + 1; i < nr; i++) {
-			double elt = fabs(*ppAik);
-			if (eta < elt) eta = elt;
-			ppAik += nc;
-		}
-
-		if (eta == 0) {
-			A1[k] = A2[k] = 0.0;
-			cerr << "God damnit, A is singular, this shouldn't happen." << endl;
-			return;
-		}
-		else {
-			double * ppAik = ppAkk, sum = 0.0, inv_eta = 1. / eta;
-			for (int i = k; i < nr; i++) {
-				*ppAik *= inv_eta;
-				sum += *ppAik * *ppAik;
-				ppAik += nc;
-			}
-			double sigma = sqrt(sum);
-			if (*ppAkk < 0)
-				sigma = -sigma;
-			*ppAkk += sigma;
-			A1[k] = sigma * *ppAkk;
-			A2[k] = -eta * sigma;
-			for (int j = k + 1; j < nc; j++) {
-				double * ppAik = ppAkk, sum = 0;
-				for (int i = k; i < nr; i++) {
-					sum += *ppAik * ppAik[j - k];
-					ppAik += nc;
-				}
-				double tau = sum / A1[k];
-				ppAik = ppAkk;
-				for (int i = k; i < nr; i++) {
-					ppAik[j - k] -= tau * *ppAik;
-					ppAik += nc;
-				}
-			}
-		}
-		ppAkk += nc + 1;
-	}
-
-	// b <- Qt b
-	double * ppAjj = pA, *pb = b->data.db;
-	for (int j = 0; j < nc; j++) {
-		double * ppAij = ppAjj, tau = 0;
-		for (int i = j; i < nr; i++)	{
-			tau += *ppAij * pb[i];
-			ppAij += nc;
-		}
-		tau /= A1[j];
-		ppAij = ppAjj;
-		for (int i = j; i < nr; i++) {
-			pb[i] -= tau * *ppAij;
-			ppAij += nc;
-		}
-		ppAjj += nc + 1;
-	}
-
-	// X = R-1 b
-	double * pX = X->data.db;
-	pX[nc - 1] = pb[nc - 1] / A2[nc - 1];
-	for (int i = nc - 2; i >= 0; i--) {
-		double * ppAij = pA + i * nc + (i + 1), sum = 0;
-
-		for (int j = i + 1; j < nc; j++) {
-			sum += *ppAij * pX[j];
-			ppAij++;
-		}
-		pX[i] = (pb[i] - sum) / A2[i];
-	}
-}
-void epnp::relative_error(double & rot_err, double & transl_err, const double Rtrue[3][3], const double ttrue[3], const double Rest[3][3], const double test[3])
-{
-	double qtrue[4], qest[4];
-
-	mat_to_quat(Rtrue, qtrue);
-	mat_to_quat(Rest, qest);
-
-	double rot_err1 = sqrt((qtrue[0] - qest[0]) * (qtrue[0] - qest[0]) +
-		(qtrue[1] - qest[1]) * (qtrue[1] - qest[1]) +
-		(qtrue[2] - qest[2]) * (qtrue[2] - qest[2]) +
-		(qtrue[3] - qest[3]) * (qtrue[3] - qest[3])) /
-		sqrt(qtrue[0] * qtrue[0] + qtrue[1] * qtrue[1] + qtrue[2] * qtrue[2] + qtrue[3] * qtrue[3]);
-
-	double rot_err2 = sqrt((qtrue[0] + qest[0]) * (qtrue[0] + qest[0]) +
-		(qtrue[1] + qest[1]) * (qtrue[1] + qest[1]) +
-		(qtrue[2] + qest[2]) * (qtrue[2] + qest[2]) +
-		(qtrue[3] + qest[3]) * (qtrue[3] + qest[3])) /
-		sqrt(qtrue[0] * qtrue[0] + qtrue[1] * qtrue[1] + qtrue[2] * qtrue[2] + qtrue[3] * qtrue[3]);
-
-	rot_err = min(rot_err1, rot_err2);
-
-	transl_err =
-		sqrt((ttrue[0] - test[0]) * (ttrue[0] - test[0]) +
-		(ttrue[1] - test[1]) * (ttrue[1] - test[1]) +
-		(ttrue[2] - test[2]) * (ttrue[2] - test[2])) /
-		sqrt(ttrue[0] * ttrue[0] + ttrue[1] * ttrue[1] + ttrue[2] * ttrue[2]);
-}
-void epnp::mat_to_quat(const double R[3][3], double q[4])
-{
-	double tr = R[0][0] + R[1][1] + R[2][2];
-	double n4;
-
-	if (tr > 0.0f) {
-		q[0] = R[1][2] - R[2][1];
-		q[1] = R[2][0] - R[0][2];
-		q[2] = R[0][1] - R[1][0];
-		q[3] = tr + 1.0f;
-		n4 = q[3];
-	}
-	else if ((R[0][0] > R[1][1]) && (R[0][0] > R[2][2])) {
-		q[0] = 1.0f + R[0][0] - R[1][1] - R[2][2];
-		q[1] = R[1][0] + R[0][1];
-		q[2] = R[2][0] + R[0][2];
-		q[3] = R[1][2] - R[2][1];
-		n4 = q[0];
-	}
-	else if (R[1][1] > R[2][2]) {
-		q[0] = R[1][0] + R[0][1];
-		q[1] = 1.0f + R[1][1] - R[0][0] - R[2][2];
-		q[2] = R[2][1] + R[1][2];
-		q[3] = R[2][0] - R[0][2];
-		n4 = q[1];
-	}
-	else {
-		q[0] = R[2][0] + R[0][2];
-		q[1] = R[2][1] + R[1][2];
-		q[2] = 1.0f + R[2][2] - R[0][0] - R[1][1];
-		q[3] = R[0][1] - R[1][0];
-		n4 = q[2];
-	}
-	double scale = 0.5f / double(sqrt(n4));
-
-	q[0] *= scale;
-	q[1] *= scale;
-	q[2] *= scale;
-	q[3] *= scale;
-}
-//EPNP ENDS
-
 // Input should be a vector of n 2D points or a Nx2 matrix
 Mat findEssentialMat(InputArray _points1, InputArray _points2, Mat K1, Mat K2, int method, double prob, double threshold, int maxIters, OutputArray _mask)
 {
@@ -1710,6 +1038,324 @@ int EMatTest()
 	return 0;
 }
 
+int USAC_FindFundamentalMatrix(ConfigParamsFund cfg, vector<Point2d> pts1, vector<Point2d>pts2, double *Fmat, vector<int>&Inlier)
+{
+	srand((unsigned int)time(NULL));
+
+	FundMatrixEstimator* fund = new FundMatrixEstimator;
+	fund->initParamsUSAC(cfg);
+
+	// set up the fundamental matrix estimation problem
+	std::vector<double> point_data; point_data.reserve(6 * cfg.common.numDataPoints);
+	for (int ii = 0; ii < cfg.common.numDataPoints; ii++)
+	{
+		point_data.push_back(pts1.at(ii).x), point_data.push_back(pts1.at(ii).y), point_data.push_back(1.0);
+		point_data.push_back(pts2.at(ii).x), point_data.push_back(pts2.at(ii).y), point_data.push_back(1.0);
+	}
+
+	fund->initDataUSAC(cfg);
+	fund->initProblem(cfg, &point_data[0]);
+	if (!fund->solve())
+		return 1;
+
+	// write out results
+	for (unsigned int i = 0; i < 3; ++i)
+		for (unsigned int j = 0; j < 3; ++j)
+			Fmat[3 * i + j] = fund->final_model_params_[3 * i + j];
+
+	Inlier.reserve(cfg.common.numDataPoints);
+	for (unsigned int i = 0; i < cfg.common.numDataPoints; ++i)
+		Inlier.push_back(fund->usac_results_.inlier_flags_[i]);
+
+	// clean up
+	point_data.clear();
+	//prosac_data.clear();
+	fund->cleanupProblem();
+	delete fund;
+
+	return 0;
+}
+int USAC_FindFundamentalDriver(char *Path, int id1, int id2, int timeID)
+{
+	ConfigParamsFund cfg;
+	bool USEPROSAC = false, USESPRT = true, USELOSAC = true;
+	/// store common parameters
+	cfg.common.confThreshold = 0.99;
+	cfg.common.minSampleSize = 7;
+	cfg.common.inlierThreshold = 1.5;
+	cfg.common.maxHypotheses = 850000;
+	cfg.common.maxSolutionsPerSample = 3;
+	cfg.common.prevalidateSample = true;
+	cfg.common.prevalidateModel = true;
+	cfg.common.testDegeneracy = true;
+	cfg.common.randomSamplingMethod = USACConfig::SAMP_UNIFORM;
+	cfg.common.verifMethod = USACConfig::VERIF_SPRT;
+	cfg.common.localOptMethod = USACConfig::LO_LOSAC;
+
+	// read in PROSAC parameters if required
+	if (USEPROSAC)
+	{
+		cfg.prosac.maxSamples;
+		cfg.prosac.beta;
+		cfg.prosac.nonRandConf;
+		cfg.prosac.minStopLen;
+	}
+
+	// read in SPRT parameters if required
+	if (USESPRT)
+	{
+		cfg.sprt.tM = 200.0;
+		cfg.sprt.mS = 2.38;
+		cfg.sprt.delta = 0.05;
+		cfg.sprt.epsilon = 0.15;
+	}
+
+	// read in LO parameters if required
+	if (USELOSAC)
+	{
+		cfg.losac.innerSampleSize = 15;
+		cfg.losac.innerRansacRepetitions = 5;
+		cfg.losac.thresholdMultiplier = 2.0;
+		cfg.losac.numStepsIterative = 4;
+	}
+	cfg.fund.inputFilePath = Path;// "C:/temp/test1/orig_pts.txt";
+
+	// read data from from file
+	char Fname[200];
+
+	vector<KeyPoint> Keys1, Keys2;
+	if (timeID < 0)
+		sprintf(Fname, "%s/K%d.dat", Path, id1);
+	else
+		sprintf(Fname, "%s/%d/K%d.dat", Path, id1, timeID);
+	if (!ReadKPointsBinarySIFTGPU(Fname, Keys1))
+		return 1;
+
+	if (timeID < 0)
+		sprintf(Fname, "%s/K%d.dat", Path, id2);
+	else
+		sprintf(Fname, "%s/%d/K%d.dat", Path, id2, timeID);
+	if (!ReadKPointsBinarySIFTGPU(Fname, Keys2))
+		return 1;
+
+	if (timeID < 0)
+		sprintf(Fname, "%s/M_%d_%d.dat", Path, id1, id2);
+	else
+		sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, id1, id2);
+
+	int npts, pid1, pid2;
+	FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot open %s\n", Fname);
+		return 1;
+	}
+	fscanf(fp, "%d ", &npts);
+	cfg.common.numDataPoints = npts;
+
+	vector<Point2d>pts1, pts2;
+	pts1.reserve(npts); pts2.reserve(npts);
+	while (fscanf(fp, "%d %d ", &pid1, &pid2) != EOF)
+	{
+		pts1.push_back(Point2d(Keys1[pid1].pt.x, Keys1[pid1].pt.y));
+		pts2.push_back(Point2d(Keys2[pid2].pt.x, Keys2[pid2].pt.y));
+	}
+	fclose(fp);
+
+	std::vector<unsigned int> prosac_data;
+	if (USEPROSAC)
+	{
+		prosac_data.resize(cfg.common.numDataPoints);
+		if (!readPROSACDataFromFile(cfg.prosac.sortedPointsFile, cfg.common.numDataPoints, prosac_data))
+			return 1;
+		cfg.prosac.sortedPointIndices = &prosac_data[0];
+	}
+	else
+		cfg.prosac.sortedPointIndices = NULL;
+
+	double Fmat[9];
+	vector<int> Inlier;
+	USAC_FindFundamentalMatrix(cfg, pts1, pts2, Fmat, Inlier);
+
+	/*sprintf(Fname, "%s/orig_pts.txt", Path); fp = fopen(Fname, "w+");
+	fprintf(fp, "%d\n", cfg.common.numDataPoints);
+	for (int ii = 0; ii < cfg.common.numDataPoints; ii++)
+	fprintf(fp, "%.2f %.2f %.2f %.2f\n", pts1[ii].x, pts1[ii].y, pts2[ii].x, pts2[ii].y);
+	fclose(fp);*/
+
+	// write out results
+	sprintf(Fname, "%s/F.txt", Path); fp = fopen(Fname, "w+");
+	for (int ii = 0; ii < 9; ii++)
+		fprintf(fp, "%.8f ", Fmat[ii]);
+	fclose(fp);
+
+	sprintf(Fname, "%s/inliers.txt", Path); fp = fopen(Fname, "w+");
+	for (int ii = 0; ii < cfg.common.numDataPoints; ii++)
+		fprintf(fp, "%d\n", Inlier[ii]);
+	fclose(fp);
+
+	return 0;
+}
+int USAC_FindHomography(ConfigParamsHomog cfg, vector<Point2d> pts1, vector<Point2d>pts2, double *Hmat, vector<int>&Inlier)
+{
+	srand((unsigned int)time(NULL));
+
+	HomogEstimator* homog = new HomogEstimator;
+	homog->initParamsUSAC(cfg);
+
+	// set up the homography estimation problem
+	std::vector<double> point_data; point_data.reserve(6 * cfg.common.numDataPoints);
+	for (int ii = 0; ii < cfg.common.numDataPoints; ii++)
+	{
+		point_data.push_back(pts1.at(ii).x), point_data.push_back(pts1.at(ii).y), point_data.push_back(1.0);
+		point_data.push_back(pts2.at(ii).x), point_data.push_back(pts2.at(ii).y), point_data.push_back(1.0);
+	}
+
+	homog->initDataUSAC(cfg);
+	homog->initProblem(cfg, &point_data[0]);
+	if (!homog->solve())
+		return 1;
+
+	// write out results
+	for (unsigned int i = 0; i < 3; ++i)
+		for (unsigned int j = 0; j < 3; ++j)
+			Hmat[3 * i + j] = homog->final_model_params_[3 * i + j];
+
+	Inlier.reserve(cfg.common.numDataPoints);
+	for (unsigned int i = 0; i < cfg.common.numDataPoints; ++i)
+		Inlier.push_back(homog->usac_results_.inlier_flags_[i]);
+
+	// clean up
+	point_data.clear();
+	//prosac_data.clear();
+	homog->cleanupProblem();
+	delete homog;
+
+	return 0;
+}
+int USAC_FindHomographyDriver(char *Path, int id1, int id2, int timeID)
+{
+	bool USEPROSAC = false, USESPRT = true, USELOSAC = true;
+
+	ConfigParamsHomog cfg;
+	/// store common parameters
+	cfg.common.confThreshold = 0.99;
+	cfg.common.minSampleSize = 4;
+	cfg.common.inlierThreshold = 2.0;
+	cfg.common.maxHypotheses = 850000;
+	cfg.common.maxSolutionsPerSample = 1;
+	cfg.common.prevalidateSample = true;
+	cfg.common.prevalidateModel = true;
+	cfg.common.testDegeneracy = true;
+	cfg.common.randomSamplingMethod = USACConfig::SAMP_UNIFORM;
+	cfg.common.verifMethod = USACConfig::VERIF_SPRT;
+	cfg.common.localOptMethod = USACConfig::LO_LOSAC;
+
+	// read in PROSAC parameters if required
+	if (USEPROSAC)
+	{
+		cfg.prosac.maxSamples;
+		cfg.prosac.beta;
+		cfg.prosac.nonRandConf;
+		cfg.prosac.minStopLen;
+	}
+
+	// read in SPRT parameters if required
+	if (USESPRT)
+	{
+		cfg.sprt.tM = 100.0;
+		cfg.sprt.mS = 1.0;
+		cfg.sprt.delta = 0.01;
+		cfg.sprt.epsilon = 0.2;
+	}
+
+	// read in LO parameters if required
+	if (USELOSAC)
+	{
+		cfg.losac.innerSampleSize = 12;
+		cfg.losac.innerRansacRepetitions = 3;
+		cfg.losac.thresholdMultiplier = 2.0;
+		cfg.losac.numStepsIterative = 4;
+	}
+	cfg.homog.inputFilePath = Path;// "C:/temp/test1/orig_pts.txt";
+
+	// read data from from file
+	char Fname[200];
+
+	vector<KeyPoint> Keys1, Keys2;
+	if (timeID < 0)
+		sprintf(Fname, "%s/K%d.dat", Path, id1);
+	else
+		sprintf(Fname, "%s/%d/K%d.dat", Path, id1, timeID);
+	if (!ReadKPointsBinarySIFTGPU(Fname, Keys1))
+		return 1;
+
+	if (timeID < 0)
+		sprintf(Fname, "%s/K%d.dat", Path, id2);
+	else
+		sprintf(Fname, "%s/%d/K%d.dat", Path, id2, timeID);
+	if (!ReadKPointsBinarySIFTGPU(Fname, Keys2))
+		return 1;
+
+	if (timeID < 0)
+		sprintf(Fname, "%s/M_%d_%d.dat", Path, id1, id2);
+	else
+		sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, id1, id2);
+
+	int npts, pid1, pid2;
+	FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot open %s\n", Fname);
+		return 1;
+	}
+	fscanf(fp, "%d ", &npts);
+	cfg.common.numDataPoints = npts;
+
+	vector<Point2d>pts1, pts2;
+	pts1.reserve(npts); pts2.reserve(npts);
+	while (fscanf(fp, "%d %d ", &pid1, &pid2) != EOF)
+	{
+		pts1.push_back(Point2d(Keys1[pid1].pt.x, Keys1[pid1].pt.y));
+		pts2.push_back(Point2d(Keys2[pid2].pt.x, Keys2[pid2].pt.y));
+	}
+	fclose(fp);
+
+	std::vector<unsigned int> prosac_data;
+	if (USEPROSAC)
+	{
+		prosac_data.resize(cfg.common.numDataPoints);
+		if (!readPROSACDataFromFile(cfg.prosac.sortedPointsFile, cfg.common.numDataPoints, prosac_data))
+			return 1;
+		cfg.prosac.sortedPointIndices = &prosac_data[0];
+	}
+	else
+		cfg.prosac.sortedPointIndices = NULL;
+
+	double Hmat[9];
+	vector<int> Inlier;
+	USAC_FindHomography(cfg, pts1, pts2, Hmat, Inlier);
+
+	/*sprintf(Fname, "%s/orig_pts.txt", Path); fp = fopen(Fname, "w+");
+	fprintf(fp, "%d\n", cfg.common.numDataPoints);
+	for (int ii = 0; ii < cfg.common.numDataPoints; ii++)
+	fprintf(fp, "%.2f %.2f %.2f %.2f\n", pts1[ii].x, pts1[ii].y, pts2[ii].x, pts2[ii].y);
+	fclose(fp);*/
+
+	// write out results
+	sprintf(Fname, "%s/H.txt", Path); fp = fopen(Fname, "w+");
+	for (int ii = 0; ii < 9; ii++)
+		fprintf(fp, "%.8f ", Hmat[ii]);
+	fclose(fp);
+
+	sprintf(Fname, "%s/inliers.txt", Path); fp = fopen(Fname, "w+");
+	for (int ii = 0; ii < cfg.common.numDataPoints; ii++)
+		fprintf(fp, "%d\n", Inlier[ii]);
+	fclose(fp);
+
+	return 0;
+}
+
 void FishEyeUndistortionPoint(double omega, double DistCtrX, double DistCtrY, Point2d *Points, int npts)
 {
 	double x, y, ru, rd, x_u, y_u, t;
@@ -2062,16 +1708,17 @@ int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCa
 			return 1;
 
 		//Start sorting
-		for (int i = 0; i < min(SRawPairWiseMatchID.size(), 20000); i++)
+		int nsPairwiseMatchID = SRawPairWiseMatchID.size();
+		for (int i = 0; i < min(nsPairwiseMatchID, 20000); i++)
 		{
 			SortingVec[i] = SRawPairWiseMatchID.at(i).x;
 			tId[i] = i;
 		}
-		Quick_Sort_Int(SortingVec, tId, 0, min(SRawPairWiseMatchID.size(), 20000) - 1);
+		Quick_Sort_Int(SortingVec, tId, 0, min(nsPairwiseMatchID, 20000) - 1);
 
 		//Store sorted vector
 		RawPairWiseMatchID.push_back(SRawPairWiseMatchID.at(tId[0]));
-		for (unsigned int i = 1; i < min(SRawPairWiseMatchID.size(), 20000); i++)
+		for (unsigned int i = 1; i < min(nsPairwiseMatchID, 20000); i++)
 			if (SortingVec[i] != SortingVec[i - 1])
 				RawPairWiseMatchID.push_back(SRawPairWiseMatchID.at(tId[i]));
 
@@ -2415,7 +2062,7 @@ int GeneratePointsCorrespondenceMatrix(char *Path, int nviews, int timeID)
 
 	return 0;
 }
-int ExtractSiftGPUfromExtractedFrames(char *Path, int nviews, int startF, int nframes)
+int ExtractSiftGPUfromExtractedFrames(char *Path, vector<int> nviews, int startF, int nframes)
 {
 	// Allocation size to the largest width and largest height 1920x1080
 	// Maximum working dimension. All the SIFT octaves that needs a larger texture size will be skipped. maxd = 2560 <-> 768MB of graphic memory. 
@@ -2466,21 +2113,22 @@ int ExtractSiftGPUfromExtractedFrames(char *Path, int nviews, int startF, int nf
 	double start = omp_get_wtime();
 	for (int timeID = startF; timeID < startF + nframes; timeID++)
 	{
-		for (int ii = 0; ii < nviews; ii++)
+		for (int ii = 0; ii < nviews.size(); ii++)
 		{
+			int viewID = nviews[ii];
 			keys.clear(), descriptors.clear();
 			double start = omp_get_wtime();
 
-			sprintf(Fname, "%s/%d/%d.png", Path, ii, timeID);
+			sprintf(Fname, "%s/%d/%d.png", Path, viewID, timeID);
 			if (sift->RunSIFT(Fname)) //You can have at most one OpenGL-based SiftGPU (per process)--> no omp can be used
 			{
 				numKeys = sift->GetFeatureNum();
 				keys.resize(numKeys);    descriptors.resize(descriptorSize * numKeys);
 				sift->GetFeatureVector(&keys[0], &descriptors[0]);
 
-				sprintf(Fname, "%s/%d/K%d.dat", Path, ii, timeID); WriteKPointsBinarySIFTGPU(Fname, keys);
-				sprintf(Fname, "%s/%d/D%d.dat", Path, ii, timeID); WriteDescriptorBinarySIFTGPU(Fname, descriptors);
-				printf("View (%d, %d): %d points ... Wrote to files. Take %.2fs\n", ii, timeID, numKeys, omp_get_wtime() - start);
+				sprintf(Fname, "%s/%d/K%d.dat", Path, viewID, timeID); WriteKPointsBinarySIFTGPU(Fname, keys);
+				sprintf(Fname, "%s/%d/D%d.dat", Path, viewID, timeID); WriteDescriptorBinarySIFTGPU(Fname, descriptors);
+				printf("View (%d, %d): %d points ... Wrote to files. Take %.2fs\n", viewID, timeID, numKeys, omp_get_wtime() - start);
 			}
 			else
 				printf("Cannot load %s", Fname);
@@ -2793,8 +2441,6 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 	for (int ii = 0; ii < cumulativePts.size(); ii++)
 		fprintf(fp, "%d\n", cumulativePts.at(ii));
 	fclose(fp);
-
-	return 0;
 	//SIFT DECTION: ENDS
 
 	///SIFT MATCHING: START
@@ -2955,137 +2601,6 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 	printf("Finished pruning matches ... in %.2fs\n", omp_get_wtime() - start);
 
 	GenerateMatchingTable(Path, nviews, timeID);
-	/*//Generate Visbible Points Table
-	vector<int> *KeysBelongTo3DPoint = new vector <int>[nviews];
-	for (int jj = 0; jj < nviews; jj++)
-	{
-	KeysBelongTo3DPoint[jj].reserve(cumulativePts[jj + 1] - cumulativePts[jj]);
-	for (int ii = 0; ii < cumulativePts[jj + 1] - cumulativePts[jj]; ii++)
-	KeysBelongTo3DPoint[jj].push_back(-1);
-	}
-
-	vector<int>*ViewMatch = new vector<int>[totalPts]; //cotains all visible views of 1 3D point
-	vector<int>*PointIDMatch = new vector<int>[totalPts];//cotains all keyID of the visible views of 1 3D point
-	int count3D = 0;
-	start = omp_get_wtime();
-	for (int jj = 0; jj < nviews; jj++)
-	{
-	for (int ii = jj + 1; ii < nviews; ii++)
-	{
-	int PairWiseID = ii - jj - 1;
-	for (int i = 0; i <= jj - 1; i++)
-	PairWiseID += nviews - i - 1;
-	printf("@(%d, %d) with %d 3+ points ...TE: %.2fs\n ", jj, ii, count3D, omp_get_wtime() - start);
-
-	for (int kk = 0; kk < AllPairWiseMatchingId[PairWiseID].size(); kk++)
-	{
-	int id1 = AllPairWiseMatchingId[PairWiseID].at(kk).x;
-	int id2 = AllPairWiseMatchingId[PairWiseID].at(kk).y;
-	int ID3D1 = KeysBelongTo3DPoint[jj].at(id1), ID3D2 = KeysBelongTo3DPoint[ii].at(id2);
-	if (ID3D1 == -1 && ID3D2 == -1) //Both are never seeen before
-	{
-	ViewMatch[count3D].push_back(jj), ViewMatch[count3D].push_back(ii);
-	PointIDMatch[count3D].push_back(id1), PointIDMatch[count3D].push_back(id2);
-	KeysBelongTo3DPoint[jj].at(id1) = count3D, KeysBelongTo3DPoint[ii].at(id2) = count3D; //this pair of corres constitutes 3D point #count
-	count3D++;
-	}
-	else if (ID3D1 == -1 && ID3D2 != -1)
-	{
-	ViewMatch[ID3D2].push_back(jj);
-	PointIDMatch[ID3D2].push_back(id1);
-	KeysBelongTo3DPoint[jj].at(id1) = ID3D2; //this point constitutes 3D point #ID3D2
-	}
-	else if (ID3D1 != -1 && ID3D2 == -1)
-	{
-	ViewMatch[ID3D1].push_back(ii);
-	PointIDMatch[ID3D1].push_back(id2);
-	KeysBelongTo3DPoint[ii].at(id2) = ID3D1; //this point constitutes 3D point #ID3D2
-	}
-	else if (ID3D1 != -1 && ID3D2 != -1 && ID3D1 != ID3D2)//Strange case where 1 point (usually not vey discrimitive or repeating points) is matched to multiple points in the same view pair
-	//--> Just concatanate the one with fewer points to largrer one and hope MultiTriangulationRansac can do sth.
-	{
-	if (ViewMatch[ID3D1].size() >= ViewMatch[ID3D2].size())
-	{
-	int nmatches = ViewMatch[ID3D2].size();
-	for (int ll = 0; ll < nmatches; ll++)
-	{
-	ViewMatch[ID3D1].push_back(ViewMatch[ID3D2].at(ll));
-	PointIDMatch[ID3D1].push_back(PointIDMatch[ID3D2].at(ll));
-	}
-	ViewMatch[ID3D2].clear(), PointIDMatch[ID3D2].clear();
-	}
-	else
-	{
-	int nmatches = ViewMatch[ID3D1].size();
-	for (int ll = 0; ll < nmatches; ll++)
-	{
-	ViewMatch[ID3D2].push_back(ViewMatch[ID3D1].at(ll));
-	PointIDMatch[ID3D2].push_back(PointIDMatch[ID3D1].at(ll));
-	}
-	ViewMatch[ID3D1].clear(), PointIDMatch[ID3D1].clear();
-	}
-	}
-	else//(ID3D1 == ID3D2): cycle in the corres, i.e. a-b, a-c, and b-c
-	continue;
-	}
-	}
-	}
-
-	int count = 0, maxmatches = 0, npts = 0;
-	if (timeID < 0)
-	sprintf(Fname, "%s/ViewPM.txt", Path);
-	else
-	sprintf(Fname, "%s/ViewPM_%d.txt", Path, timeID);
-	fp = fopen(Fname, "w+");
-	if (fp != NULL)
-	{
-	for (int jj = 0; jj < count3D; jj++)
-	{
-	int nmatches = ViewMatch[jj].size();
-	if (nmatches < 2)
-	//	printf("2DVisibleList3D: %d?\n", jj);
-	continue;
-	else
-	npts++;
-	if (nmatches > 2)
-	count++;
-	if (nmatches > maxmatches)
-	maxmatches = nmatches;
-
-	fprintf(fp, "%d ", nmatches);
-	for (int ii = 0; ii < nmatches; ii++)
-	fprintf(fp, "%d ", ViewMatch[jj].at(ii));
-	fprintf(fp, "\n");
-	}
-	fclose(fp);
-	}
-	printf("#3+ points: %d. Max #matches views:  %d. #matches point: %d\n", count, maxmatches, npts);
-
-
-	if (timeID < 0)
-	sprintf(Fname, "%s/IDPM.txt", Path);
-	else
-	sprintf(Fname, "%s/IDPM_%d.txt", Path, timeID);
-	fp = fopen(Fname, "w+");
-	if (fp != NULL)
-	{
-	for (int jj = 0; jj < count3D; jj++)
-	{
-	int nmatches = PointIDMatch[jj].size();
-	if (nmatches < 2)
-	continue;
-
-	fprintf(fp, "%d ", nmatches);
-	for (int ii = 0; ii < nmatches; ii++)
-	fprintf(fp, "%d ", PointIDMatch[jj].at(ii));
-	fprintf(fp, "\n");
-	}
-	fclose(fp);
-	}
-	printf("Finished generateing point correspondence matrix\n");*/
-
-	//delete[]AllPairWiseMatchingId, delete[]KeysBelongTo3DPoint;
-	//delete[]ViewMatch, delete[]PointIDMatch;
 	delete[] match_buf;
 	delete sift;
 	delete matcher;
@@ -3923,7 +3438,8 @@ void NviewTriangulationRANSAC(Point2d *pts, double *P, Point3d *WC, bool *Passed
 				break;
 		}
 
-		if (bestCount >= max(nview*inlierPercent, 2))
+		int t = nview*inlierPercent;
+		if (bestCount >= max(t, 2))
 		{
 			int count = 0; Inliers[ii].reserve(nview);
 			for (jj = 0; jj < nview; jj++)
@@ -4320,9 +3836,9 @@ void DetermineDevicePose(double *K, double *distortion, int LensModel, double *R
 		cvK.at<float>(ii) = (float)K[ii];
 
 	Mat Inliers;
-	double ProThresh = 0.99, PercentInlier = 0.4;
-	int terMax = (int)(log(1.0 - ProThresh) / log(1.0 - pow(PercentInlier, 4)) + 0.5); //log(1-eps) / log(1 - (inlier%)^min_pts_requires)
-	solvePnPRansac(cv3D, cvpts, cvK, Mat(), rvec, tvec, false, terMax, thresh, npts*PercentInlier, Inliers, CV_EPNP);// CV_ITERATIVE);
+	double ProThresh = 0.995, PercentInlier = 0.4;
+	int iterMax = (int)(log(1.0 - ProThresh) / log(1.0 - pow(PercentInlier, 4)) + 0.5); //log(1-eps) / log(1 - (inlier%)^min_pts_requires)
+	solvePnPRansac(cv3D, cvpts, cvK, Mat(), rvec, tvec, false, iterMax, thresh, npts*PercentInlier, Inliers, CV_EPNP);// CV_ITERATIVE);
 
 	ninliers = Inliers.rows;
 	//cout << rvec << endl;
@@ -4490,8 +4006,8 @@ struct PinholeReprojectionError {
 		// Apply second and fourth order radial distortion.
 		T xcn2 = xcn*xcn, ycn2 = ycn*ycn, xycn = xcn*ycn, r2 = xcn2 + ycn2, r4 = r2*r2, r6 = r2*r4;
 		T radial = T(1.0) + distortion[0] * r2 + distortion[1] * r4 + distortion[2] * r6;
-		T tangentialX = T(2.0)*distortion[4] * xycn + distortion[3] * (r2 + T(2.0)*xcn2);
-		T tangentailY = distortion[4] * (r2 + T(2.0)*ycn2) + T(2.0)*distortion[4] * xycn;
+		T tangentialX = T(2.0)*distortion[3] * xycn + distortion[4] * (r2 + T(2.0)*xcn2);
+		T tangentailY = distortion[3] * (r2 + T(2.0)*ycn2) + T(2.0)*distortion[4] * xycn;
 		T prismX = distortion[5] * r2;
 		T prismY = distortion[6] * r2;
 		T xcn_ = radial*xcn + tangentialX + prismX;
@@ -4509,6 +4025,46 @@ struct PinholeReprojectionError {
 	}
 	static ceres::CostFunction* Create(const double observed_x, const double observed_y) {
 		return (new ceres::AutoDiffCostFunction<PinholeReprojectionError, 2, 5, 7, 6, 3>(new PinholeReprojectionError(observed_x, observed_y)));
+	}
+	double observed_x, observed_y;
+};
+struct PinholeReprojectionError2 {
+	PinholeReprojectionError2(double observed_x, double observed_y) : observed_x(observed_x), observed_y(observed_y) {}
+	template <typename T>	bool operator()(const T* const fxfy, const T* const skew, const T* const uv0, const T* const Radial12, const T* const Tangential12, const T*const Radial3Prism, const T* const RT, const T* const point, T* residuals) const
+	{
+		// camera[0,1,2] are the angle-axis rotation.
+		T p[3];
+		ceres::AngleAxisRotatePoint(RT, point, p);
+
+		// camera[3,4,5] are the translation.
+		p[0] += RT[3], p[1] += RT[4], p[2] += RT[5];
+
+		// Project to normalize coordinate
+		T xcn = p[0] / p[2];
+		T ycn = p[1] / p[2];
+
+		// Apply second and fourth order radial distortion.
+		T xcn2 = xcn*xcn, ycn2 = ycn*ycn, xycn = xcn*ycn, r2 = xcn2 + ycn2, r4 = r2*r2, r6 = r2*r4;
+		T radial = T(1.0) + Radial12[0] * r2 + Radial12[1] * r4 + Radial3Prism[0] * r6;
+		T tangentialX = T(2.0)*Tangential12[0] * xycn + Tangential12[1] * (r2 + T(2.0)*xcn2);
+		T tangentailY = Tangential12[0] * (r2 + T(2.0)*ycn2) + T(2.0)*Tangential12[1] * xycn;
+		T prismX = Radial3Prism[1] * r2;
+		T prismY = Radial3Prism[2] * r2;
+		T xcn_ = radial*xcn + tangentialX + prismX;
+		T ycn_ = radial*ycn + tangentailY + prismY;
+
+		// Compute final projected point position.
+		T predicted_x = fxfy[0] * xcn_ + skew[0] * ycn_ + uv0[0];
+		T predicted_y = fxfy[1] * ycn_ + uv0[1];
+
+		// The error is the difference between the predicted and observed position.
+		residuals[0] = predicted_x - T(observed_x);
+		residuals[1] = predicted_y - T(observed_y);
+
+		return true;
+	}
+	static ceres::CostFunction* Create(const double observed_x, const double observed_y) {
+		return (new ceres::AutoDiffCostFunction<PinholeReprojectionError2, 2, 2, 1, 2, 2, 2, 3, 6, 3>(new PinholeReprojectionError2(observed_x, observed_y)));
 	}
 	double observed_x, observed_y;
 };
@@ -4917,6 +4473,12 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 			ceres::CostFunction* cost_function = PinholeReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
 			problem.AddResidualBlock(cost_function, NULL, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
 
+			//Set up constant parameters:-->move to here in case some views don't have any 3D points
+			if (fixIntrinsic)
+				problem.SetParameterBlockConstant(camera[viewID].intrinsic);
+			if (fixDistortion)
+				problem.SetParameterBlockConstant(camera[viewID].distortion);
+
 			PinholeReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
 			validViewcount++;
 			pointErrX += pow(residuals[0], 2), pointErrY += pow(residuals[1], 2);
@@ -4968,17 +4530,6 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 	double avgY = MeanArray(ReProjectionErrorY);
 	double stdY = sqrt(VarianceArray(ReProjectionErrorY, avgY));
 	printf("Reprojection error before BA \n Min: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
-
-
-	//Set up constant parameters:
-	printf("...set up fixed parameters ...");
-	for (int ii = 0; ii < nviews; ii++)
-	{
-		if (fixIntrinsic)
-			problem.SetParameterBlockConstant(camera[ii].intrinsic);
-		if (fixDistortion)
-			problem.SetParameterBlockConstant(camera[ii].distortion);
-	}
 
 	printf("...run BA...\n");
 	ceres::Solver::Options options;
@@ -5054,45 +4605,55 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 	delete[]notGood;
 	return 0;
 }
-int BuildCorpus(char *Path, int nCameras, int CameraToScan, int width, int height, bool distortionCorrected, int NDplus)
+int BuildCorpus(char *Path, int nCameras, int CameraToScan, int width, int height, bool IntrinsicCalibrated, bool distortionCorrected, int NDplus)
 {
 	printf("Reading Corpus and camera info");
 	char Fname[200];
-	sprintf(Fname, "%s/Corpus.nvm", Path);
 
-	string nvmfile = Fname;
 	Corpus corpusData;
-	if (!loadNVMLite(nvmfile, corpusData, width, height, 1))
-		return 1;
-	int nviews = corpusData.nCamera;
-
-	CameraData *cameraInfo = new CameraData[nCameras];
-	if (ReadIntrinsicResults(Path, cameraInfo, nCameras) != 0)
-		return 1;
-	if (CameraToScan != -1)
+	if (IntrinsicCalibrated)
 	{
-		for (int ii = 0; ii < nviews; ii++)
+		sprintf(Fname, "%s/Corpus.nvm", Path);
+		string nvmfile = Fname;
+		if (!loadNVMLite(nvmfile, corpusData, 1))
+			return 1;
+		int nviews = corpusData.nCamera;
+
+		CameraData *cameraInfo = new CameraData[nCameras];
+		if (ReadIntrinsicResults(Path, cameraInfo, nCameras) != 0)
+			return 1;
+		if (CameraToScan != -1)
 		{
-			for (int jj = 0; jj < 9; jj++)
-				corpusData.camera[ii].K[jj] = cameraInfo[CameraToScan].K[jj];
-			for (int jj = 0; jj < 7; jj++)
-				corpusData.camera[ii].distortion[jj] = cameraInfo[CameraToScan].distortion[jj];
+			for (int ii = 0; ii < nviews; ii++)
+			{
+				for (int jj = 0; jj < 9; jj++)
+					corpusData.camera[ii].K[jj] = cameraInfo[CameraToScan].K[jj];
+				for (int jj = 0; jj < 7; jj++)
+					corpusData.camera[ii].distortion[jj] = cameraInfo[CameraToScan].distortion[jj];
+			}
+		}
+		else
+		{
+			for (int ii = 0; ii < nviews; ii++)
+			{
+				for (int jj = 0; jj < 9; jj++)
+					corpusData.camera[ii].K[jj] = cameraInfo[ii].K[jj];
+				for (int jj = 0; jj < 7; jj++)
+					corpusData.camera[ii].distortion[jj] = cameraInfo[ii].distortion[jj];
+			}
 		}
 	}
 	else
 	{
-		for (int ii = 0; ii < nviews; ii++)
-		{
-			for (int jj = 0; jj < 9; jj++)
-				corpusData.camera[ii].K[jj] = cameraInfo[ii].K[jj];
-			for (int jj = 0; jj < 7; jj++)
-				corpusData.camera[ii].distortion[jj] = cameraInfo[ii].distortion[jj];
-		}
+		sprintf(Fname, "%s/BA_Camera_AllParams_after.txt", Path);
+		if (!loadBundleAdjustedNVMResults(Fname, corpusData))
+			return 1;
 	}
+	int nviews = corpusData.nCamera;
 
 	for (int ii = 0; ii < nviews; ii++)
 	{
-		corpusData.camera[ii].LensModel = RADIAL_TANGENTIAL_PRISM, corpusData.camera[ii].threshold = 3.0, corpusData.camera[ii].ninlierThresh = 50, corpusData.camera[ii];
+		corpusData.camera[ii].LensModel = RADIAL_TANGENTIAL_PRISM, corpusData.camera[ii].threshold = 1.5, corpusData.camera[ii].ninlierThresh = 50, corpusData.camera[ii];
 		GetrtFromRT(corpusData.camera[ii].rt, corpusData.camera[ii].R, corpusData.camera[ii].T);
 		GetIntrinsicFromK(corpusData.camera[ii]);
 		AssembleP(corpusData.camera[ii].K, corpusData.camera[ii].R, corpusData.camera[ii].T, corpusData.camera[ii].P);
@@ -5188,8 +4749,6 @@ int BuildCorpus(char *Path, int nCameras, int CameraToScan, int width, int heigh
 	double start = omp_get_wtime();
 	for (int jj = 0; jj < n3D; jj++)
 	{
-		if (goodNDplus == 1019)
-			int a = 0;
 		if (jj % 1000 == 0)
 			printf("@\r# %.2f%% (%.2fs) Triangualating corpus..", 100.0*jj / n3D, omp_get_wtime() - start);
 		int nviewsi = ViewMatch[jj].size();
@@ -5249,6 +4808,26 @@ int BuildCorpus(char *Path, int nCameras, int CameraToScan, int width, int heigh
 	printf("@\r# %.2f%% (%.2fs) \n", 100.0, omp_get_wtime() - start);
 	printf("Found %d (%d+) points.\n", goodNDplus, NDplus);
 
+	fp = fopen("C:/temp/BA.txt", "w+");
+	for (int ii = 0; ii < nviews; ii++)
+	{
+		for (int jj = 0; jj < 5; jj++)
+			fprintf(fp, "%.8f ", corpusData.camera[ii].intrinsic[jj]);
+		for (int jj = 0; jj < 7; jj++)
+			fprintf(fp, "%.8f ", corpusData.camera[ii].distortion[jj]);
+		for (int jj = 0; jj < 6; jj++)
+			fprintf(fp, "%.8f ", corpusData.camera[ii].rt[jj]);
+		fprintf(fp, "\n");
+	}
+	for (int ii = 0; ii < goodNDplus; ii++)
+	{
+		int nviewsi = corpusData.viewIdAll3D[ii].size();
+		fprintf(fp, "%.6f %.6f %.6f %d ", corpusData.xyz[ii].x, corpusData.xyz[ii].y, corpusData.xyz[ii].z, nviewsi);
+		for (int jj = 0; jj < nviewsi; jj++)
+			fprintf(fp, "%d %.4f %.4f ", corpusData.viewIdAll3D[ii].at(jj), corpusData.uvAll3D[ii].at(jj).x, corpusData.uvAll3D[ii].at(jj).y);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
 
 	printf("Runing BA on the triangulated points...");
 	AllViewsBA(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, nviews, true, true, false);
@@ -5285,8 +4864,8 @@ int BuildCorpus(char *Path, int nCameras, int CameraToScan, int width, int heigh
 	}
 	delete[]notGood;
 
-	printf("and generate Corpus visibility info....");
 	//And generate 3D id, uv, sift id for all views
+	printf("and generate Corpus visibility info....");
 	vector<vector<int>> siftIDAllViews;
 	corpusData.threeDIdAllViews.reserve(nviews);
 	corpusData.uvAllViews.reserve(nviews);
@@ -5329,7 +4908,8 @@ int BuildCorpus(char *Path, int nCameras, int CameraToScan, int width, int heigh
 		myImgReader(Fname, AllImages + kk * 3 * length, width, height, 3);
 		printf("@\r# %.2f%% (%.2fs) Reading images...", 100.0*kk / nviews, omp_get_wtime() - start);
 	}
-	printf("@\r# %.2f%% (%.2fs) Reading images...\n", 100.0, omp_get_wtime() - start);
+	printf("@\r# %.2f%% (%.2fs) Loaded all images...\n", 100.0, omp_get_wtime() - start);
+
 	corpusData.rgb.reserve(goodNDplus);
 	for (int kk = 0; kk < goodNDplus; kk++)
 	{
@@ -5409,6 +4989,13 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 	vector<double> ReProjectionErrorY; ReProjectionErrorY.reserve(npts);
 	double maxOutlierX = 0.0, maxOutlierY = 0.0, pointErrX = 0.0, pointErrY = 0.0;
 
+	double fxfy[2] = { camera.intrinsic[0], camera.intrinsic[1] };
+	double skew = camera.intrinsic[2];
+	double uv0[2] = { camera.intrinsic[3], camera.intrinsic[4] };
+	double Radial12[2] = { camera.distortion[0], camera.distortion[1] };
+	double Tangential[2] = { camera.distortion[3], camera.distortion[4] };
+	double Radial3Prism[3] = { camera.distortion[2], camera.distortion[5], camera.distortion[6] };
+
 	if (debug)
 		sprintf(Fname, "C:/temp/reprojectionB.txt"), fp = fopen(Fname, "w+");
 	for (int jj = 0; jj < npts; jj++)
@@ -5420,7 +5007,7 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 		}
 
 		PinholeReprojectionDebug(camera.intrinsic, camera.distortion, camera.rt, uvAll3D[jj], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-		if (abs(residuals[0]) > 1.5*camera.threshold || abs(residuals[1]) > 1.5*camera.threshold)
+		if (abs(residuals[0]) > 1.25*camera.threshold || abs(residuals[1]) > 1.25*camera.threshold)
 		{
 			Good.push_back(false);
 			if (abs(residuals[0]) > maxOutlierX)
@@ -5432,8 +5019,10 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 		else
 		{
 			Good.push_back(true);
-			ceres::CostFunction* cost_function = PinholeReprojectionError::Create(uvAll3D[jj].x, uvAll3D[jj].y);
-			problem.AddResidualBlock(cost_function, NULL, camera.intrinsic, camera.distortion, camera.rt, &xyz[3 * jj]);
+			//ceres::CostFunction* cost_function = PinholeReprojectionError::Create(uvAll3D[jj].x, uvAll3D[jj].y);
+			//problem.AddResidualBlock(cost_function, NULL, camera.intrinsic, camera.distortion, camera.rt, &xyz[3 * jj]);
+			ceres::CostFunction* cost_function = PinholeReprojectionError2::Create(uvAll3D[jj].x, uvAll3D[jj].y);
+			problem.AddResidualBlock(cost_function, NULL, fxfy, &skew, uv0, Radial12, Tangential, Radial3Prism, camera.rt, &xyz[3 * jj]);
 
 			validPtsCount++;
 			ReProjectionErrorX.push_back(abs(residuals[0]));
@@ -5462,11 +5051,14 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 	}
 
 	//Set up constant parameters:
-	//printf("...set up fixed parameters ...");
-	if (fixIntrinsic)
+	printf("...set up fixed parameters ...");
+	/*if (fixIntrinsic)
 		problem.SetParameterBlockConstant(camera.intrinsic);
-	if (fixDistortion)
-		problem.SetParameterBlockConstant(camera.distortion);
+		if (fixDistortion)
+		problem.SetParameterBlockConstant(camera.distortion);*/
+	problem.SetParameterBlockConstant(&skew);
+	problem.SetParameterBlockConstant(Radial3Prism);
+
 	for (int ii = 0; ii < npts; ii++)
 		if (Good.at(ii))
 			problem.SetParameterBlockConstant(xyz + 3 * ii);
@@ -5487,6 +5079,13 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 	std::cout << summary.BriefReport() << "\n";
 
 	//Store refined parameters
+	camera.intrinsic[0] = fxfy[0], camera.intrinsic[1] = fxfy[1];
+	camera.intrinsic[2] = skew;
+	camera.intrinsic[3] = uv0[0], camera.intrinsic[4] = uv0[1];
+	camera.distortion[0] = Radial12[0], camera.distortion[1] = Radial12[1];
+	camera.distortion[3] = Tangential[0], camera.distortion[4] = Tangential[1];
+	camera.distortion[2] = Radial3Prism[0], camera.distortion[5] = Radial3Prism[1], camera.distortion[6] = Radial3Prism[2];
+
 	GetKFromIntrinsic(&camera, 1);
 	GetRTFromrt(&camera, 1);
 	AssembleP(camera.K, camera.R, camera.T, camera.P);
@@ -5531,7 +5130,7 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 	delete[]xyz;
 	return 0;
 }
-int MatchCameraToCorpus(char *Path, Corpus &corpusData, int cameraID, int timeID, vector<int> CorpusViewToMatch, const float nndrRatio)
+int MatchCameraToCorpus(char *Path, Corpus &corpusData, int cameraID, int timeID, vector<int> CorpusViewToMatch, const float nndrRatio, const int ninlierThresh)
 {
 	//Load image and extract features
 	const int descriptorSize = SIFTBINS;
@@ -5578,19 +5177,42 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, int cameraID, int timeID
 		exit(1);
 	}
 
+	//USAC config
+	bool USEPROSAC = false, USESPRT = true, USELOSAC = true;
+	ConfigParamsFund cfg;
+	cfg.common.confThreshold = 0.99, cfg.common.minSampleSize = 7, cfg.common.inlierThreshold = 1.5;
+	cfg.common.maxHypotheses = 850000, cfg.common.maxSolutionsPerSample = 3;
+	cfg.common.prevalidateSample = true, cfg.common.prevalidateModel = true, cfg.common.testDegeneracy = true;
+	cfg.common.randomSamplingMethod = USACConfig::SAMP_UNIFORM, cfg.common.verifMethod = USACConfig::VERIF_SPRT, cfg.common.localOptMethod = USACConfig::LO_LOSAC;
+
+	if (USEPROSAC)
+		cfg.prosac.maxSamples, cfg.prosac.beta, cfg.prosac.nonRandConf, cfg.prosac.minStopLen;
+	if (USESPRT)
+		cfg.sprt.tM = 200.0, cfg.sprt.mS = 2.38, cfg.sprt.delta = 0.05, cfg.sprt.epsilon = 0.15;
+	if (USELOSAC)
+		cfg.losac.innerSampleSize = 15, cfg.losac.innerRansacRepetitions = 5, cfg.losac.thresholdMultiplier = 2.0, cfg.losac.numStepsIterative = 4;
+
 	//Match extracted features with Corpus
 	const bool useBFMatcher = false;
 	const int knn = 2, ntrees = 4, maxLeafCheck = 128;
 
 	vector<Point2f> twoD; twoD.reserve(5000);
 	vector<int> threeDiD; threeDiD.reserve(5000);
+	vector<int>viewID; viewID.reserve(5000);
 
 	//Finding nearest neighbor
-	bool ShowCorrespondence = false;
+	bool ShowCorrespondence = 0;
+	vector<Point2d>key1, key2;
+	vector<int>CorrespondencesID;
+	double Fmat[9];
+	vector<int>cur3Ds, Inliers;
+	key1.reserve(5000), key2.reserve(5000);
+	CorrespondencesID.reserve(5000), cur3Ds.reserve(5000), Inliers.reserve(5000);
+
 	for (int ii = 0; ii < CorpusViewToMatch.size(); ii++)
 	{
-		vector<KeyPoint>key1, key2;
-		vector<int>CorrespondencesID;
+		key1.clear(), key2.clear();
+		cur3Ds.clear(), Inliers.clear(), CorrespondencesID.clear();
 
 		int camera2ID = CorpusViewToMatch.at(ii);
 		int startID = corpusData.IDCumView.at(camera2ID), endID = corpusData.IDCumView.at(camera2ID + 1);
@@ -5623,28 +5245,10 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, int cameraID, int timeID
 				if (indices.at<int>(i, 0) >= 0 && indices.at<int>(i, 1) >= 0 && dists.at<float>(i, 0) <= nndrRatio * dists.at<float>(i, 1))
 				{
 					int cur3Did = corpusData.threeDIdAllViews.at(camera2ID).at(i);
-					bool used = false;
-					for (int kk = 0; kk < threeDiD.size(); kk++)
-					{
-						if (cur3Did == threeDiD.at(kk))
-						{
-							used = true;
-							break;
-						}
-					}
-					if (used)
-						continue;
+					cur3Ds.push_back(cur3Did);
 
-					if (ShowCorrespondence)
-					{
-						KeyPoint t;
-						t.pt = keypoints1.at(ind1).pt; key1.push_back(t);
-						t.pt = corpusData.uvAllViews.at(camera2ID).at(i); key2.push_back(t);
-					}
-
-					twoD.push_back(keypoints1.at(ind1).pt);
-					threeDiD.push_back(cur3Did);
-					count++;
+					key1.push_back(Point2d(keypoints1.at(ind1).pt.x, keypoints1.at(ind1).pt.y));
+					key2.push_back(corpusData.uvAllViews.at(camera2ID).at(i));
 				}
 			}
 		}
@@ -5654,31 +5258,77 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, int cameraID, int timeID
 			{
 				if (matches.at(i).size() == 2 && matches.at(i).at(0).distance <= nndrRatio * matches.at(i).at(1).distance)
 				{
-					int ind1 = matches.at(i).at(0).trainIdx;
 					int cur3Did = corpusData.threeDIdAllViews.at(camera2ID).at(i);
-					bool used = false;
-					for (int kk = 0; kk < threeDiD.size(); kk++)
-					{
-						if (cur3Did == threeDiD.at(kk))
-						{
-							used = true;
-							break;
-						}
-					}
-					if (used)
-						continue;
+					cur3Ds.push_back(cur3Did);
 
-					if (ShowCorrespondence)
-					{
-						KeyPoint t;
-						t.pt = keypoints1.at(ind1).pt; key1.push_back(t);
-						t.pt = corpusData.uvAllViews.at(camera2ID).at(i); key2.push_back(t);
-					}
-
-					twoD.push_back(keypoints1.at(ind1).pt);
-					threeDiD.push_back(cur3Did);
-					count++;
+					int ind1 = matches.at(i).at(0).trainIdx;
+					key1.push_back(Point2d(keypoints1.at(ind1).pt.x, keypoints1.at(ind1).pt.y));
+					key2.push_back(corpusData.uvAllViews.at(camera2ID).at(i));
 				}
+			}
+		}
+
+		//TO DO: Work to set threshold on the ransac
+		cfg.common.numDataPoints = key1.size();
+		USAC_FindFundamentalMatrix(cfg, key1, key2, Fmat, Inliers);
+
+		/*sprintf(Fname, "%s/orig_pts.txt", Path); FILE *fp = fopen(Fname, "w+");
+		fprintf(fp, "%d\n", cfg.common.numDataPoints);
+		for (int ii = 0; ii < cfg.common.numDataPoints; ii++)
+		fprintf(fp, "%.2f %.2f %.2f %.2f\n", key1[ii].x, key1[ii].y, key2[ii].x, key2[ii].y);
+		fclose(fp);
+
+		sprintf(Fname, "%s/F.txt", Path); fp = fopen(Fname, "w+");
+		for (int ii = 0; ii < 9; ii++)
+		fprintf(fp, "%.8f ", Fmat[ii]);
+		fclose(fp);
+
+		sprintf(Fname, "%s/inliers.txt", Path); fp = fopen(Fname, "w+");
+		for (int ii = 0; ii < cfg.common.numDataPoints; ii++)
+		fprintf(fp, "%d\n", Inliers[ii]);
+		fclose(fp);*/
+
+		int FittedPts = 0;
+		for (int ii = 0; ii < cfg.common.numDataPoints; ii++)
+			if (Inliers[ii] == 1)
+				FittedPts++;
+		if (FittedPts < ninlierThresh)
+		{
+			printf("(%d, %d) to Corpus %d: failed Fundamental matrix test\n\n", cameraID, timeID, camera2ID);
+			continue;
+		}
+
+		/*sprintf(Fname, "C:/temp/%d_%d.txt", cameraID, camera2ID);
+		FILE *fp = fopen(Fname, "w+");
+		for (int jj = 0; jj < Inliers.size(); jj++)
+		{
+		if (Inliers[jj] == 1)
+		fprintf(fp, "%d %.2f %.2f %.2f %.2f\n", cur3Ds[jj], key1[jj].x, key1[jj].y, key2[jj].x, key2[jj].y);
+		}
+		fclose(fp);*/
+
+		//Add matches to 2d-3d list
+		for (int jj = 0; jj < Inliers.size(); jj++)
+		{
+			if (Inliers[jj] == 1)
+			{
+				int cur3Did = cur3Ds[jj];
+				bool used = false;
+				for (int kk = 0; kk < threeDiD.size(); kk++)
+				{
+					if (cur3Did == threeDiD.at(kk))
+					{
+						used = true;
+						break;
+					}
+				}
+				if (used)
+					continue;
+
+				twoD.push_back(Point2f(key1[jj].x, key1[jj].y));
+				threeDiD.push_back(cur3Did);
+				viewID.push_back(camera2ID);
+				count++;
 			}
 		}
 
@@ -5702,7 +5352,8 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, int cameraID, int timeID
 
 			CorrespondencesID.clear();
 			for (int ii = 0; ii < key1.size(); ii++)
-				CorrespondencesID.push_back(ii), CorrespondencesID.push_back(ii);
+				if (Inliers[ii] == 1)
+					CorrespondencesID.push_back(ii), CorrespondencesID.push_back(ii);
 
 			IplImage* correspond = cvCreateImage(cvSize(Img1->width + Img2->width, Img1->height), 8, nchannels);
 			cvSetImageROI(correspond, cvRect(0, 0, Img1->width, Img1->height));
@@ -5713,7 +5364,7 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, int cameraID, int timeID
 			DisplayImageCorrespondence(correspond, Img1->width, 0, key1, key2, CorrespondencesID, 1.0);
 		}
 #pragma omp critical
-		printf("(%d, %d) to Corpus %d: %d 3+ points in %.2fs.\n", cameraID, timeID, camera2ID, count, omp_get_wtime() - start);
+		printf("(%d, %d) to Corpus %d: %d 3+ points in %.2fs.\n\n", cameraID, timeID, camera2ID, count, omp_get_wtime() - start);
 	}
 
 	sprintf(Fname, "%s/%d/3D2D_%d.txt", Path, cameraID, timeID);
@@ -5723,9 +5374,28 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, int cameraID, int timeID
 		fprintf(fp, "%d %.16f %.16f \n", threeDiD[jj], twoD[jj].x, twoD[jj].y);
 	fclose(fp);
 
+	/*sprintf(Fname, "%s/%d/_3D2D_%d.txt", Path, cameraID, timeID); fp = fopen(Fname, "w+");
+	fprintf(fp, "%d\n", threeDiD.size());
+	for (int jj = 0; jj < threeDiD.size(); jj++)
+	{
+		int pid = threeDiD[jj], vid = viewID[jj];
+		Point2d twoDCorpus;
+		for (int i = 0; i < corpusData.viewIdAll3D[pid].size(); i++)
+		{
+			if (corpusData.viewIdAll3D[pid].at(i) == vid)
+			{
+				twoDCorpus = corpusData.uvAll3D[pid].at(i);
+				break;
+			}
+		}
+
+		fprintf(fp, "%d %.2f %.2f %d %.2f %.2f\n", threeDiD[jj], twoD[jj].x, twoD[jj].y, vid, twoDCorpus.x, twoDCorpus.y);
+	}
+	fclose(fp);*/
+
 	return 0;
 }
-int EstimateCameraPoseFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraParas, int cameraID, int timeID)
+int EstimateCameraPoseFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraParas, int cameraID, bool fixedIntrinsc, bool fixedDistortion, int timeID)
 {
 	char Fname[200];
 	int threeDid, npts, ptsCount = 0;
@@ -5766,7 +5436,20 @@ int EstimateCameraPoseFromCorpus(char *Path, Corpus corpusData, CameraData  &cam
 		uv.push_back(Point2d(pts[ii].x, pts[ii].y));
 	}
 
-	PoseBA(Path, cameraParas, Vxyz, uv, Good, true, true, false);
+	PoseBA(Path, cameraParas, Vxyz, uv, Good, fixedIntrinsc, fixedDistortion, false);
+	printf("Intrinsic: %.1f %.1f %.1f %.1f %.1f\n", cameraParas.intrinsic[0], cameraParas.intrinsic[1], cameraParas.intrinsic[2], cameraParas.intrinsic[3], cameraParas.intrinsic[4]);
+	printf("Distortion: ");
+	for (int ii = 0; ii < 7; ii++)
+		printf("%.1e ", cameraParas.distortion[ii]);
+	printf("\n");
+
+	fp = fopen("C:/temp/intrinsic.txt", "a+");
+	for (int ii = 0; ii < 5; ii++)
+		fprintf(fp, "%.1f ", cameraParas.intrinsic[ii]);
+	for (int ii = 0; ii < 7; ii++)
+		fprintf(fp, "%.1e ", cameraParas.distortion[ii]);
+	fprintf(fp, "\n");
+	fclose(fp);
 
 	ninliers = 0;
 	for (int ii = 0; ii < npts; ii++)
@@ -5798,26 +5481,20 @@ int EstimateCameraPoseFromCorpus(char *Path, Corpus corpusData, CameraData  &cam
 }
 int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, bool RunMatching, int nCams, int selectedCams, bool distortionCorrected)
 {
+	int width = 1920, height = 1080;
 	Corpus corpusData;
-	ReadCorpusInfo(Path, corpusData);
+	if (RunMatching)
+		ReadCorpusInfo(Path, corpusData, false, false);
+	else
+		ReadCorpusInfo(Path, corpusData, false, true);
 
 	double start = omp_get_wtime();
 	char Fname[200];
-	CameraData *AllCamsInfo = new CameraData[nCams];
-	if (ReadIntrinsicResults(Path, AllCamsInfo, nCams) != 0)
-		return 1;
-	for (int ii = 0; ii < nCams; ii++)
-	{
-		AllCamsInfo[ii].LensModel = RADIAL_TANGENTIAL_PRISM, AllCamsInfo[ii].threshold = 3.0, AllCamsInfo[ii].ninlierThresh = 40;
-		if (distortionCorrected)
-			for (int jj = 0; jj < 7; jj++)
-				AllCamsInfo[ii].distortion[jj] = 0.0;
-	}
 
 	if (RunMatching)
 	{
 		int toMatch;
-
+		const int ninlierThresh = 40;
 		for (int timeID = StartTime; timeID <= StopTime; timeID++)
 		{
 			vector<int> CorpusViewToMatch;
@@ -5831,22 +5508,50 @@ int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, bool
 				CorpusViewToMatch.push_back(toMatch);
 			fclose(fp);
 
-			MatchCameraToCorpus(Path, corpusData, selectedCams, timeID, CorpusViewToMatch);
+			MatchCameraToCorpus(Path, corpusData, selectedCams, timeID, CorpusViewToMatch, ninlierThresh);
 		}
-		delete[]AllCamsInfo;
 	}
 	else
 	{
+		bool fixedIntrinsc = true, fixedDistortion = true;
+		CameraData *AllCamsInfo = new CameraData[nCams];
+		if (ReadIntrinsicResults(Path, AllCamsInfo, nCams) != 0)
+		{
+			//Uncalibrated cam-->have to search for focal length
+			fixedIntrinsc = false, fixedDistortion = false;
+			for (int ii = 0; ii < nCams; ii++)
+			{
+				double focal = 0.945*max(width, height);
+				AllCamsInfo[ii].intrinsic[0] = focal, AllCamsInfo[ii].intrinsic[1] = focal, AllCamsInfo[ii].intrinsic[2] = 0,
+					AllCamsInfo[ii].intrinsic[3] = width / 2, AllCamsInfo[ii].intrinsic[4] = height / 2;
+				GetKFromIntrinsic(AllCamsInfo[ii]);
+
+				AllCamsInfo[ii].threshold = 3.0, AllCamsInfo[ii].ninlierThresh = 40;
+				for (int jj = 0; jj < 7; jj++)
+					AllCamsInfo[ii].distortion[jj] = 0.0;
+			}
+		}
+		else
+		{
+			for (int ii = 0; ii < nCams; ii++)
+			{
+				AllCamsInfo[ii].LensModel = RADIAL_TANGENTIAL_PRISM, AllCamsInfo[ii].threshold = 3.0, AllCamsInfo[ii].ninlierThresh = 40;
+				if (distortionCorrected)
+					for (int jj = 0; jj < 7; jj++)
+						AllCamsInfo[ii].distortion[jj] = 0.0;
+			}
+		}
+
 		vector<int> computedTime; computedTime.reserve(StopTime - StartTime + 1);
 		CameraData *SelectedCameraInfo = new CameraData[StopTime - StartTime + 1];
 		for (int timeID = StartTime; timeID <= StopTime; timeID++)
 		{
 			computedTime.clear();
 			CopyCamereInfo(AllCamsInfo[selectedCams], SelectedCameraInfo[timeID - StartTime]);
-			if (EstimateCameraPoseFromCorpus(Path, corpusData, SelectedCameraInfo[timeID - StartTime], selectedCams, timeID))
+			if (EstimateCameraPoseFromCorpus(Path, corpusData, SelectedCameraInfo[timeID - StartTime], selectedCams, fixedIntrinsc, fixedDistortion, timeID))
 				computedTime.push_back(-1);
 			else
-				computedTime.push_back(timeID - 1);
+				computedTime.push_back(timeID - StartTime);
 
 			SaveVideoCameraPosesGL(Path, SelectedCameraInfo, computedTime, selectedCams, StartTime);
 		}
@@ -5875,6 +5580,91 @@ void computeFmatfromKRT(CameraData *CameraInfo, int nvews, int *selectedCams, do
 		CameraInfo[selectedCams[0]].rt[3], CameraInfo[selectedCams[0]].rt[4], CameraInfo[selectedCams[0]].rt[5] };
 	double rt2[6] = { CameraInfo[selectedCams[1]].rt[0], CameraInfo[selectedCams[1]].rt[1], CameraInfo[selectedCams[1]].rt[2],
 		CameraInfo[selectedCams[1]].rt[3], CameraInfo[selectedCams[1]].rt[4], CameraInfo[selectedCams[1]].rt[5] };
+
+	double RT1[16], RT2[16], R1[9], R2[9], T1[3], T2[3];
+	GetRTFromrt(rt1, R1, T1);
+	RT1[0] = R1[0], RT1[1] = R1[1], RT1[2] = R1[2], RT1[3] = T1[0];
+	RT1[4] = R1[3], RT1[5] = R1[4], RT1[6] = R1[5], RT1[7] = T1[1];
+	RT1[8] = R1[6], RT1[9] = R1[7], RT1[10] = R1[8], RT1[11] = T1[2];
+	RT1[12] = 0, RT1[13] = 0, RT1[14] = 0, RT1[15] = 1;
+
+	GetRTFromrt(rt2, R2, T2);
+	RT2[0] = R2[0], RT2[1] = R2[1], RT2[2] = R2[2], RT2[3] = T2[0];
+	RT2[4] = R2[3], RT2[5] = R2[4], RT2[6] = R2[5], RT2[7] = T2[1];
+	RT2[8] = R2[6], RT2[9] = R2[7], RT2[10] = R2[8], RT2[11] = T2[2];
+	RT2[12] = 0, RT2[13] = 0, RT2[14] = 0, RT2[15] = 1;
+
+	double iRT1[16], RT12[16], R12[9], T12[3];
+	mat_invert(RT1, iRT1, 4);
+	mat_mul(RT2, iRT1, RT12, 4, 4, 4);
+	DesembleRT(R12, T12, RT12);
+
+	double Emat12[9], Tx[9];
+	Tx[0] = 0.0, Tx[1] = -T12[2], Tx[2] = T12[1];
+	Tx[3] = T12[2], Tx[4] = 0.0, Tx[5] = -T12[0];
+	Tx[6] = -T12[1], Tx[7] = T12[0], Tx[8] = 0.0;
+
+	mat_mul(Tx, R12, Emat12, 3, 3, 3);
+
+	double iK1[9], iK2[9];
+	mat_invert(K1, iK1, 3);
+	mat_invert(K2, iK2, 3);
+	mat_transpose(iK2, tmat, 3, 3);
+	mat_mul(tmat, Emat12, tmat2, 3, 3, 3);
+	mat_mul(tmat2, iK1, Fmat, 3, 3, 3);
+
+	for (ii = 0; ii < 9; ii++)
+		Fmat[ii] = Fmat[ii] / Fmat[8];
+
+	return;
+}
+//if ChooseCorpusView != -1, selectedCams and seletectedTime will be overwritten
+void computeFmatfromKRT(CorpusandVideo &CorpusandVideoInfo, int *selectedCams, int *seletectedTime, int ChooseCorpusView1, int ChooseCorpusView2, double *Fmat)
+{
+	int ii, startTime = CorpusandVideoInfo.startTime, stopTime = CorpusandVideoInfo.stopTime;
+	double tmat[9], tmat2[9];
+	double K1[9], K2[9], rt1[6], rt2[6];
+
+	if (ChooseCorpusView1 != -1)
+	{
+		K1[0] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView1].K[0], K1[1] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView1].K[1], K1[2] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView1].K[2],
+			K1[3] = 0, K1[4] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView1].K[4], K1[5] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView1].K[5],
+			K1[6] = 0, K1[7] = 0, K1[8] = 1.0;
+
+		rt1[0] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView1].rt[0], rt1[1] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView1].rt[1], rt1[2] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView1].rt[2],
+			rt1[3] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView1].rt[3], rt1[4] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView1].rt[4], rt1[5] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView1].rt[5];
+	}
+	else
+	{
+		int ID = selectedCams[0] * (stopTime - startTime + 1) + seletectedTime[0];
+		K1[0] = CorpusandVideoInfo.VideoInfo[ID].K[0], K1[1] = CorpusandVideoInfo.VideoInfo[ID].K[1], K1[2] = CorpusandVideoInfo.VideoInfo[ID].K[2],
+			K1[3] = 0, K1[4] = CorpusandVideoInfo.VideoInfo[ID].K[4], K1[5] = CorpusandVideoInfo.VideoInfo[ID].K[5],
+			K1[6] = 0, K1[7] = 0, K1[8] = 1.0;
+
+		rt1[0] = CorpusandVideoInfo.VideoInfo[ID].rt[0], rt1[1] = CorpusandVideoInfo.VideoInfo[ID].rt[1], rt1[2] = CorpusandVideoInfo.VideoInfo[ID].rt[2],
+			rt1[3] = CorpusandVideoInfo.VideoInfo[ID].rt[3], rt1[4] = CorpusandVideoInfo.VideoInfo[ID].rt[4], rt1[5] = CorpusandVideoInfo.VideoInfo[ID].rt[5];
+	}
+
+	if (ChooseCorpusView2 != -1)
+	{
+		K2[0] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView2].K[0], K2[1] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView2].K[1], K2[2] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView2].K[2],
+			K2[3] = 0, K2[4] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView2].K[4], K2[5] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView2].K[5],
+			K2[6] = 0, K2[7] = 0, K2[8] = 1.0;
+
+		rt2[0] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView2].rt[0], rt2[1] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView2].rt[1], rt2[2] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView2].rt[2],
+			rt2[3] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView2].rt[3], rt2[4] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView2].rt[4], rt2[5] = CorpusandVideoInfo.CorpusInfo[ChooseCorpusView2].rt[5];
+	}
+	else
+	{
+		int ID = selectedCams[1] * (stopTime - startTime + 1) + seletectedTime[1];
+		K2[0] = CorpusandVideoInfo.VideoInfo[ID].K[0], K2[1] = CorpusandVideoInfo.VideoInfo[ID].K[1], K2[2] = CorpusandVideoInfo.VideoInfo[ID].K[2],
+			K2[3] = 0, K2[4] = CorpusandVideoInfo.VideoInfo[ID].K[4], K2[5] = CorpusandVideoInfo.VideoInfo[ID].K[5],
+			K2[6] = 0, K2[7] = 0, K2[8] = 1.0;
+
+		rt2[0] = CorpusandVideoInfo.VideoInfo[ID].rt[0], rt2[1] = CorpusandVideoInfo.VideoInfo[ID].rt[1], rt2[2] = CorpusandVideoInfo.VideoInfo[ID].rt[2],
+			rt2[3] = CorpusandVideoInfo.VideoInfo[ID].rt[3], rt2[4] = CorpusandVideoInfo.VideoInfo[ID].rt[4], rt2[5] = CorpusandVideoInfo.VideoInfo[ID].rt[5];
+	}
+
 
 	double RT1[16], RT2[16], R1[9], R2[9], T1[3], T2[3];
 	GetRTFromrt(rt1, R1, T1);

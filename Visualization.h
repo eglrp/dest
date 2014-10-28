@@ -32,7 +32,7 @@ void MouseMotion(int x, int y);
 void ReshapeGL(int width, int height);
 
 void visualization();
-int visualizationDriver(char *Path, int StartTime, int StopTime);
+int visualizationDriver(char *Path, int nViews, int StartTime, int StopTime);
 
 void SaveCurrentSfmGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, Point3d *All3D, Point3i *AllColor, int npts);
 void SaveCurrentSfmGL2(char *path, CameraData *AllViewParas, vector<int>AvailViews, vector<Point3d>All3D, vector<Point3i>AllColor);

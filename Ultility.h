@@ -85,6 +85,7 @@ bool WriteDescriptorBinarySIFTGPU(char *fn, vector<float > descriptors, bool sil
 bool ReadDescriptorBinarySIFTGPU(char *fn, vector<float > &descriptors, bool silent = false);
 Mat ReadDescriptorBinarySIFTGPU(char *fn, bool silent = false);
 
+void dec2bin(int dec, int*bin, int num_bin);
 double nChoosek(int n, int k);
 int MyFtoI(double W);
 bool IsNumber(double x);
@@ -95,8 +96,8 @@ double gaussian_noise(double mean, double std);
 float MeanArray(float *data, int length);
 double MeanArray(double *data, int length);
 double VarianceArray(double *data, int length, double mean = NULL);
-double MeanArray(vector<double>data);
-double VarianceArray(vector<double>data, double mean = NULL);
+double MeanArray(vector<double>&data);
+double VarianceArray(vector<double>&data, double mean = NULL);
 void normalize(double *x, int dim = 3);
 double norm_dot_product(double *x, double *y, int dim = 3);
 void cross_product(double *x, double *y, double *xy);
@@ -469,6 +470,7 @@ void nonMaximaSuppression(const Mat& src, const int sz, Mat& dst, const Mat mask
 int LensCorrectionVideoDriver(char *Path, char *VideoName, double *K, double *distortion, int LensType, int nimages, int interpAlgo);
 int LensCorrectionDriver(char *Path, double *K, double *distortion, int LensType, int nimages, int interpAlgo);
 int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, vector<KeyPoint> keypoints1, vector<KeyPoint> keypoints2, vector<int>pair, double density);
+int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, vector<Point2d> keypoints1, vector<Point2d> keypoints2, vector<int>pair, double density);
 int DisplayImageCorrespondencesDriver(char *Path, vector<int>viewsID, int timeID, int nchannels, double density = 0.25);
 
 int ReadIntrinsicResults(char *path, CameraData *DeviceParas, int nCam);
@@ -483,11 +485,13 @@ void GenerateViewandPointCorrespondences(vector<int> *ViewCorres, vector<int> *P
 void Save3DPoints(char *Path, Point3d *All3D, vector<int>Selected3DIndex);
 void DisplayMatrix(char *Fname, Mat m);
 
+void convertRvectoRmat(double *r, double *R);
 void GetIntrinsicFromK(CameraData *AllViewsParas, vector<int> AvailViews);
-void GetKFromIntrinsic(CameraData *AllViewsParas, vector<int> AvailViews);
-void GetIntrinsicFromK(CameraData &camera);
 void GetIntrinsicFromK(CameraData *AllViewsParas, int nviews);
+void GetKFromIntrinsic(CameraData *AllViewsParas, vector<int> AvailViews);
 void GetKFromIntrinsic(CameraData *AllViewsParas, int nviews);
+void GetIntrinsicFromK(CameraData &camera);
+void GetKFromIntrinsic(CameraData &camera);
 
 void GetrtFromRT(CameraData *AllViewsParas, vector<int> AvailViews);
 void GetrtFromRT(CameraData *AllViewsParas, int nviews);
@@ -503,183 +507,17 @@ void CopyCamereInfo(CameraData Src, CameraData &Dst);
 void BlurDetectionDriver(char *Path, int nimages, int width, int height, float blurThresh);
 
 int BAVisualSfMDriver(char *Path, char *nvmName, char *camInfo, char *IntrinsicInfo = NULL, bool lensconversion = 1, int sharedIntrinsics = 0);
-bool loadNVMLite(const string filepath, Corpus &CorpusData, int width, int height, int sharedIntrinsics);
+bool loadNVMLite(const string filepath, Corpus &CorpusData, int sharedIntrinsics);
+bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
+
 int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool outputtext = false);
 int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool inputtext = false, bool notReadDescriptor = false);
 bool loadIndividualNVMforpose(char *Path, CameraData *CameraInfo, vector<int>availViews, int timeIDstart, int timeIDstop, int nviews, bool sharedIntrinsics);
+int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel = RADIAL_TANGENTIAL_PRISM, bool distortionCorrected = true);
+
+void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker, int &npts, double sigma, int search_area, int NMS_BW, double thresh);
 
 int GenerateCorpusVisualWords(char *Path, int nimages);
 int ComputeWordsHistogram(char *Path, int nimages);
-///////////////////////////////////////////////////////////////////
-//DESCRIPTOR TYPE
-typedef unsigned char	DTYPE;
-//FEATURE LOCATION TYPE
-typedef float LTYPE;
-
-class FeatureData
-{
-	typedef struct sift_fileheader_v2
-	{
-		int	 szFeature;
-		int  szVersion;
-		int  npoint;
-		int  nLocDim;
-		int  nDesDim;
-	}sift_fileheader_v2;
-	typedef struct sift_fileheader_v1
-	{
-		int  npoint;
-		int  nLocDim;
-		int  nDesDim;
-	}sift_fileheader_v1;
-
-	enum
-	{
-		//		READ_BUFFER_SIZE = 0x100000,
-		SIFT_NAME = ('S' + ('I' << 8) + ('F' << 16) + ('T' << 24)),
-		MSER_NAME = ('M' + ('S' << 8) + ('E' << 16) + ('R' << 24)),
-		RECT_NAME = ('R' + ('E' << 8) + ('C' << 16) + ('T' << 24)),
-		//SIFT_VERSION_2=('V'+('2'<<8)+('.'<<16)+('0'<<24)),
-		//SIFT_VERSION_3=('V'+('3'<<8)+('.'<<16)+('0'<<24)),
-		SIFT_VERSION_4 = ('V' + ('4' << 8) + ('.' << 16) + ('0' << 24)),
-		SIFT_VERSION_5 = ('V' + ('5' << 8) + ('.' << 16) + ('0' << 24)),
-		SIFT_EOF = (0xff + ('E' << 8) + ('O' << 16) + ('F' << 24)),
-	};
-
-	//	static char readBuf[READ_BUFFER_SIZE];
-	//	static char sift_version[8];
-	static inline int IsValidFeatureName(int value)
-	{
-		return value == SIFT_NAME || value == MSER_NAME;
-	}
-	static inline int IsValidVersionName(int value)
-	{
-		return value == SIFT_VERSION_4 || value == SIFT_VERSION_5;
-	}
-
-public:
-	class LocationData : public Points < LTYPE >
-	{
-	public:
-		int              _file_version;
-	public:
-		//each feature has x,y, z, size, orientation
-		//for rect feature, there is x, y, width, height
-		//for eclips feature, there is u,v,a,b,c +z
-	public:
-		void glPaint2D(int style);
-		LocationData(int d, int n) :Points<LTYPE>(d, n), _file_version(0){	};
-		LocationData(LocationData& sup, int index[], int n) : Points<LTYPE>(sup, index, n), _file_version(0){};
-		static void glPaintTexSIFT(const float * loc, float td[3]);
-		static void glPaintTexFrontalVIP(const float * loc, float td[3]);
-		static void glPaintSIFT(const LTYPE* loc);
-		static void glPaintSIFTSQ(LTYPE*  loc);
-		static void glPaintELIPS(LTYPE*  loc);
-		static void glPaintRECT(LTYPE* loc);
-		static void SetPaintColor(LTYPE sz);
-	};
-
-	class DescriptorData : public Points < DTYPE >
-	{
-		//generally d is 128
-	public:
-		DescriptorData(DescriptorData& sup, int index[], int n) : Points<DTYPE>(sup, index, n){};
-		DescriptorData(int d, int n) :Points<DTYPE>(d, n){};
-	};
-	static float gSiftDisplayScale;
-	static int	 gSiftVisualStyle;
-protected:
-	// the set of feature descriptors
-	DescriptorData * _desData;
-	// the set of feature locations
-	LocationData *   _locData;
-	int              _npoint;
-	int				 _updated;
-public:
-	void SetUpdated(){ _updated = 1; }
-	int  GetUpdated(){ return _updated; }
-	void CopyToFeatureData(FeatureData &fd);
-	int  appendSIFTB(const char* szFile, int pos);
-	int  validate()	{ return _locData && _desData; }
-	void ResizeFeatureData(int npoint, int locDim = 5, int desDim = 128)
-	{
-		if (npoint == 0)
-		{
-			if (_locData) delete _locData;
-			if (_desData) delete _desData;
-			_locData = NULL;
-			_desData = NULL;
-		}
-		else
-		{
-			if (_locData)
-				_locData->resize(locDim, npoint);
-			else
-				_locData = new LocationData(locDim, npoint);
-			if (_desData)
-				_desData->resize(desDim, npoint);
-			else
-				_desData = new DescriptorData(desDim, npoint);
-			_locData->_file_version = SIFT_VERSION_4;
-		}
-		_npoint = npoint;
-
-	}
-	void operator = (FeatureData& ref) { ref.CopyToFeatureData(*this); }
-	void ResizeLocationData(int npoint, int locDim)
-	{
-		if (npoint == 0)
-		{
-			if (_locData) delete _locData;
-			if (_desData) delete _desData;
-			_locData = NULL;
-			_desData = NULL;
-		}
-		else
-		{
-			if (_locData)
-				_locData->resize(locDim, npoint);
-			else
-				_locData = new LocationData(locDim, npoint);
-			if (_desData)
-			{
-				delete _desData;
-				_desData = NULL;
-			}
-			_locData->_file_version = SIFT_VERSION_4;
-		}
-	}
-
-	void ShrinkLocationData(int ndim = 2, int npoint = -1);
-	void ReleaseDescriptorData()
-	{
-		if (_desData)
-		{
-			delete _desData;
-			_desData = NULL;
-		}
-	}
-public:
-
-	FeatureData();
-	virtual ~FeatureData();
-	void ReleaseFeatureData();
-	DescriptorData&  getDescriptorData() { return *_desData; }
-	LocationData&   getLocationData()const { return *_locData; }
-	int		IsValidFeatureData(){ return getFeatureNum() > 0; }
-	int		getFeatureNum(){ return _npoint; }
-	int		getLoadedFeatureNum(){ return _locData ? _locData->npoint() : 0; }
-	int  ReadSIFTB_LOCT(const char* szFile, int fmax);
-	int  ReadSIFTB_DES(const char* szFile, int fmax);
-	static int ReadSIFTB_DES(const char* szFile, unsigned char * buf, int nmax);
-	static int ReadSIFTB_LOC(const char* szFile, float * buf, int &nmax);
-	static int ReadSIFTB(const char* szFile, float * locbuf, unsigned char * desbuf);
-	int  ReadSIFTB(const char* szFile);
-	void saveSIFTB2(const char* szFile);
-};
-
-
-typedef FeatureData::LocationData FeatureLocationData;
-typedef FeatureData::DescriptorData FeatureDescriptorData;
 
 #endif

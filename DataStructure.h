@@ -11,8 +11,8 @@ using namespace std;
 
 #define MAXSIFTPTS 15000
 #define SIFTBINS 128
-#define FISHEYE  0
-#define RADIAL_TANGENTIAL_PRISM  1
+#define FISHEYE  -1
+#define RADIAL_TANGENTIAL_PRISM  0
 #define LUT  2
 #define LIMIT3D 1e-6
 #define Pi 3.1415926535897932
@@ -57,8 +57,13 @@ struct Corpus
 
 struct CorpusandVideo
 {
-	int nViewsCorpus, nVideos, startTime, stopTime, CorpussharedIntrinsics;
+	int nViewsCorpus, nVideos, startTime, stopTime, CorpusSharedIntrinsics;
 	CameraData *CorpusInfo;
+	CameraData *VideoInfo;
+};
+struct VideoData
+{
+	int nVideos, startTime, stopTime;
 	CameraData *VideoInfo;
 };
 

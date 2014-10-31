@@ -23,11 +23,12 @@ static float g_lightBright[4] = { 1, 1, 1, 1 };  // Position of light
 
 const GLfloat Red[3] = { 1, 0, 0 };
 const GLfloat Green[3] = { 0, 1, 0 };
-const GLfloat Scale = 0.25f;
+GLfloat Scale = 0.25f;
 VisualizationManager g_vis;
 
-int nviews = 10;
-bool drawPose = false, hasColor = false;
+int nviews = 10, timeID = 0, otimeID = 0, maxTime, minTime;
+bool drawPose = false, hasColor = false, ThreeDRecon = false;
+char Path[] = "D:/Juggling";
 
 void DrawCamera()
 {
@@ -62,6 +63,13 @@ void DrawCamera()
 }
 void RenderObjects()
 {
+	if (otimeID != timeID && ThreeDRecon)
+	{
+		ReadCurrent3DGL(Path, hasColor, timeID);
+		otimeID = timeID;
+		printf("Loaded frame %d\n", timeID);
+	}
+
 	for (unsigned int i = 0; i < g_vis.PointPosition.size(); ++i)
 	{
 		glPushMatrix();
@@ -75,20 +83,20 @@ void RenderObjects()
 	}
 
 	//draw pyramid
-	if (drawPose)
+	if (drawPose && !ThreeDRecon)
 	{
 		for (int j = 0; j < nviews; j++)
 		{
 			float CameraColor[3] = { 1, 0, 0 };// 1.0*rand() / RAND_MAX, 1.0*rand() / RAND_MAX, 1.0*rand() / RAND_MAX
 			if (g_vis.glCameraPoseInfo[j].size() > 1)
-			{ 
+			{
 				/*glPushMatrix();
 				glBegin(GL_LINE_STRIP);
 				for (unsigned int i = 0; i < g_vis.glCameraPoseInfo[j].size(); ++i)
 				{
-					float* centerPt = g_vis.glCameraPoseInfo[j].at(i).camCenter;
-					glVertex3f(centerPt[0], centerPt[1], centerPt[2]);
-					glColor3f(CameraColor[0], CameraColor[1], CameraColor[2]);
+				float* centerPt = g_vis.glCameraPoseInfo[j].at(i).camCenter;
+				glVertex3f(centerPt[0], centerPt[1], centerPt[2]);
+				glColor3f(CameraColor[0], CameraColor[1], CameraColor[2]);
 				}
 				glEnd();*/
 
@@ -105,7 +113,7 @@ void RenderObjects()
 			}
 		}
 	}
-	else
+	else if (!ThreeDRecon)
 	{
 		for (unsigned int i = 0; i < g_vis.glCameraInfo.size(); ++i)
 		{
@@ -176,6 +184,22 @@ void Keyboard(unsigned char key, int x, int y)
 	case 't':
 		//SelectFromMenu(MENU_TEXTURING);
 		break;
+	case 'n':
+	{
+		timeID++;
+		if (timeID > maxTime)
+			timeID = maxTime;
+		glutPostRedisplay();
+		break;
+	}
+	case 'b':
+	{
+		timeID--;
+		if (timeID < minTime)
+			timeID = minTime;
+		glutPostRedisplay();
+		break;
+	}
 	}
 }
 void MouseButton(int button, int state, int x, int y)
@@ -266,16 +290,25 @@ void visualization()
 	glutMainLoop();
 
 }
-int visualizationDriver(char *Path, int nViews, int StartTime, int StopTime)
+int visualizationDriver(char *Path, int nViews, int StartTime, int StopTime, bool Color, bool Pose, bool ThreeD)
 {
 	nviews = nViews;
-	hasColor = true, drawPose = true;
+	hasColor = Color, drawPose = Pose, ThreeDRecon = ThreeD;
+
+	if (ThreeDRecon)
+	{
+		Scale = Scale / 5;
+		minTime = StartTime, maxTime = StopTime;
+	}
 
 	if (StartTime == -1)
 		drawPose = false;
 
 	VisualizationManager g_vis;
-	ReadCurrentSfmGL(Path, hasColor);
+	if (!ThreeDRecon)
+		ReadCurrentSfmGL(Path, hasColor);
+	else
+		ReadCurrent3DGL(Path, hasColor, timeID);
 
 	if (drawPose)
 		ReadCurrentPosesGL(Path, nViews, StartTime, StopTime);
@@ -437,7 +470,32 @@ void ReadCurrentSfmGL(char *path, bool isColor)
 
 	return;
 }
+void ReadCurrent3DGL(char *path, bool isColor, int timeID)
+{
+	char Fname[200];
+	g_vis.PointPosition.clear(); g_vis.PointPosition.reserve(10e5);
+	if (isColor)
+		g_vis.PointColor.clear(), g_vis.PointColor.reserve(10e5);
 
+	Point3i iColor; Point3f fColor; Point3f t3d;
+	sprintf(Fname, "%s/3dGL_%d.xyz", path, timeID); FILE *fp = fopen(Fname, "r");
+	while (fscanf(fp, "%f %f %f ", &t3d.x, &t3d.y, &t3d.z) != EOF)
+	{
+		if (isColor)
+		{
+			fscanf(fp, "%d %d %d ", &iColor.x, &iColor.y, &iColor.z);
+			fColor.x = 1.0*iColor.x / 255;
+			fColor.y = 1.0*iColor.y / 255;
+			fColor.z = 1.0*iColor.z / 255;
+			g_vis.PointColor.push_back(fColor);
+		}
+
+		g_vis.PointPosition.push_back(t3d);
+	}
+	fclose(fp);
+
+	return;
+}
 void SaveCurrenPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID)
 {
 	char Fname[200];
@@ -499,15 +557,11 @@ void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>Ava
 	}
 
 	sprintf(Fname, "%s/PinfoGL_%d.txt", path, camID);
-	FILE *fp;
-	if (StartTime == 0)
-		fp = fopen(Fname, "w+");
-	else
-		fp = fopen(Fname, "a+");
+	FILE *fp = fopen(Fname, "a+");
 	for (int ii = 0; ii < AvailTime.size(); ii++)
 	{
 		int timeID = AvailTime.at(ii);
-		fprintf(fp, "%d: ", timeID + StartTime);
+		fprintf(fp, "%d ", timeID + StartTime);
 		for (int jj = 0; jj < 16; jj++)
 			fprintf(fp, "%.16f ", AllViewParas[timeID].Rgl[jj]);
 		for (int jj = 0; jj < 3; jj++)
@@ -521,17 +575,17 @@ void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>Ava
 void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime)
 {
 	char Fname[200];
-	g_vis.glCameraPoseInfo = new vector<CamInfo>[(StopTime-StartTime+1)*nviews];
+	g_vis.glCameraPoseInfo = new vector<CamInfo>[(StopTime - StartTime + 1)*nviews];
 
 	int timeID;
 	CamInfo temp;
 	for (int ii = 0; ii < nviews; ii++)
 	{
-		sprintf(Fname, "%s/PinfoGL_%d.txt", path, ii);	
+		sprintf(Fname, "%s/PinfoGL_%d.txt", path, ii);
 		FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 			continue;
-		while (fscanf(fp, "%d: ", &timeID) != EOF)
+		while (fscanf(fp, "%d ", &timeID) != EOF)
 		{
 
 			for (int jj = 0; jj < 16; jj++)

@@ -5,7 +5,212 @@
 using namespace cv;
 using namespace std;
 
+//SiftGPU 
+#define SIFTGPU_DLL_RUNTIME// Load at runtime if the above macro defined comment the macro above to use static linking
+#ifdef _WIN32
+#ifdef SIFTGPU_DLL_RUNTIME
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#define FREE_MYLIB FreeLibrary
+#define GET_MYPROC GetProcAddress
+#endif
+#else
+#ifdef SIFTGPU_DLL_RUNTIME
+#include <dlfcn.h>
+#define FREE_MYLIB dlclose
+#define GET_MYPROC dlsym
+#endif
+#endif
 
+int siftgpu(char *Fname1, char *Fname2, const float nndrRatio, const double fractionMatchesDisplayed)
+
+{
+	// Allocation size to the largest width and largest height 1920x1080
+	// Maximum working dimension. All the SIFT octaves that needs a larger texture size will be skipped. maxd = 2560 <-> 768MB of graphic memory. 
+	char * argv[] = { "-fo", "-1", "-v", "0", "-p", "1920x1080", "-maxd", "4096" };
+	//-fo -1    staring from -1 octave 
+	//-v 1      only print out # feature and overall time
+	//-loweo    add a (.5, .5) offset
+	//-tc <num> set a soft limit to number of detected features
+	//-m,       up to 2 orientations for each feature (change to single orientation by using -m 1)
+	//-s        enable subpixel subscale (disable by using -s 0)
+	//"-cuda", "[device_id]"  : cuda implementation (fastest for smaller images). CUDA-implementation allows you to create multiple instances for multiple threads. Checkout src\TestWin\MultiThreadSIFT
+	// "-Display", "display_name" (for OPENGL) to select monitor/GPU (XLIB/GLUT) on windows the display name would be something like \\.\DISPLAY4
+	//Only the following parameters can be changed after initialization (by calling ParseParam):-dw, -ofix, -ofix-not, -fo, -unn, -maxd, -b
+	//to change other parameters at runtime, you need to first unload the dynamically loaded libaray reload the libarary, then create a new siftgpu instance
+
+	//Init SiftGPU: START
+#ifdef _WIN32
+#ifdef _DEBUG
+	HMODULE  hsiftgpu = LoadLibrary("siftgpu_d.dll");
+#else
+	HMODULE  hsiftgpu = LoadLibrary("siftgpu.dll");
+#endif
+#else
+	void * hsiftgpu = dlopen("libsiftgpu.so", RTLD_LAZY);
+#endif
+
+	if (hsiftgpu == NULL)
+		return 0;
+
+	SiftGPU* (*pCreateNewSiftGPU)(int) = NULL;
+	SiftMatchGPU* (*pCreateNewSiftMatchGPU)(int) = NULL;
+	pCreateNewSiftGPU = (SiftGPU* (*) (int)) GET_MYPROC(hsiftgpu, "CreateNewSiftGPU");
+	pCreateNewSiftMatchGPU = (SiftMatchGPU* (*)(int)) GET_MYPROC(hsiftgpu, "CreateNewSiftMatchGPU");
+	SiftGPU* sift = pCreateNewSiftGPU(1);
+
+	int argc = sizeof(argv) / sizeof(char*);
+	sift->ParseParam(argc, argv);
+	if (sift->CreateContextGL() != SiftGPU::SIFTGPU_FULL_SUPPORTED)
+		return 0;
+	//Init SiftGPU: END
+
+	//SIFT DECTION: START
+	int numKeys1, numKeys2, descriptorSize = SIFTBINS;
+	vector<float > desc1, desc2; desc1.reserve(MAXSIFTPTS * descriptorSize), desc2.reserve(MAXSIFTPTS * descriptorSize);
+	vector<SiftGPU::SiftKeypoint> keys1, keys2; keys1.reserve(MAXSIFTPTS), keys2.reserve(MAXSIFTPTS);
+
+	int totalPts = 0;
+	char Fname[200];
+
+	double start;
+	if (sift->RunSIFT(Fname1)) //You can have at most one OpenGL-based SiftGPU (per process)--> no omp can be used
+	{
+		//sprintf(Fname, "%s/%d.sift", Path, ii);sift->SaveSIFT(Fname);
+		numKeys1 = sift->GetFeatureNum();
+		keys1.resize(numKeys1);    desc1.resize(descriptorSize * numKeys1);
+		sift->GetFeatureVector(&keys1[0], &desc1[0]);
+
+		//sprintf(Fname, "K%d.dat", 0); WriteKPointsBinarySIFTGPU(Fname, keys1);
+		sprintf(Fname, "D%d.dat", 0); WriteDescriptorBinarySIFTGPU(Fname, desc1);
+		printf("#%d sift deteced...\n", numKeys1);
+	}
+	if (sift->RunSIFT(Fname2)) //You can have at most one OpenGL-based SiftGPU (per process)--> no omp can be used
+	{
+		//sprintf(Fname, "%s/%d.sift", Path, ii);sift->SaveSIFT(Fname);
+		numKeys2 = sift->GetFeatureNum();
+		keys2.resize(numKeys2);    desc2.resize(descriptorSize * numKeys2);
+		sift->GetFeatureVector(&keys2[0], &desc2[0]);
+
+		//sprintf(Fname, "K%d.dat", 1); WriteKPointsBinarySIFTGPU(Fname, keys2);
+		sprintf(Fname, "D%d.dat", 1); WriteDescriptorBinarySIFTGPU(Fname, desc2);
+		printf("#%d sift deteced...\n", numKeys2);
+	}
+	//SIFT DECTION: ENDS
+
+	///SIFT MATCHING: START
+	SiftMatchGPU* matcher = pCreateNewSiftMatchGPU(8192);
+	matcher->VerifyContextGL(); //must call once
+	int(*match_buf)[2] = new int[MAXSIFTPTS][2];
+
+	vector<Point2i> RawPairWiseMatchID; RawPairWiseMatchID.reserve(10000);
+
+	const int ninlierThesh = 50;
+	bool BinaryDesc = false, useBFMatcher = false; // SET TO TRUE TO USE BRUTE FORCE MATCHER
+	const int knn = 2, ntrees = 4, maxLeafCheck = 128;
+
+	start = omp_get_wtime();
+	printf("Running feature matching...\n");
+	sprintf(Fname, "D%d.dat", 0);
+	Mat descriptors1 = ReadDescriptorBinarySIFTGPU(Fname);
+	if (descriptors1.rows == 1)
+		return 1;
+
+	sprintf(Fname, "D%d.dat", 1);
+	Mat descriptors2 = ReadDescriptorBinarySIFTGPU(Fname);
+	if (descriptors2.rows == 1)
+		return 1;
+
+	//Finding nearest neighbor
+	Mat indices, dists;
+	vector<vector<DMatch> > matches;
+	if (BinaryDesc)
+	{
+		//printf("Binary descriptors detected...\n");// ORB, Brief, BRISK, FREAK
+		if (useBFMatcher)
+		{
+			cv::BFMatcher matcher(cv::NORM_HAMMING); // use cv::NORM_HAMMING2 for ORB descriptor with WTA_K == 3 or 4 (see ORB constructor)
+			matcher.knnMatch(descriptors2, descriptors1, matches, knn);
+		}
+		else
+		{
+			// Create Flann LSH index
+			cv::flann::Index flannIndex(descriptors1, cv::flann::LshIndexParams(12, 20, 2), cvflann::FLANN_DIST_HAMMING);
+			flannIndex.knnSearch(descriptors2, indices, dists, knn, cv::flann::SearchParams());
+		}
+	}
+	else
+	{
+		if (useBFMatcher)
+		{
+			cv::BFMatcher matcher(cv::NORM_L2);
+			matcher.knnMatch(descriptors2, descriptors1, matches, knn);
+		}
+		else
+		{
+			// Create Flann KDTree index
+			cv::flann::Index flannIndex(descriptors1, cv::flann::KDTreeIndexParams(ntrees));//, cvflann::FLANN_DIST_EUCLIDEAN);
+			flannIndex.knnSearch(descriptors2, indices, dists, knn, cv::flann::SearchParams(maxLeafCheck));
+		}
+	}
+
+	// Find correspondences by NNDR (Nearest Neighbor Distance Ratio)
+	if (!useBFMatcher)
+	{
+		for (int i = 0; i < descriptors2.rows; ++i)
+		{
+			int ind1 = indices.at<int>(i, 0);
+			if (indices.at<int>(i, 0) >= 0 && indices.at<int>(i, 1) >= 0 && dists.at<float>(i, 0) <= nndrRatio * dists.at<float>(i, 1))
+				RawPairWiseMatchID.push_back(Point2i(ind1, i));
+		}
+	}
+	else
+	{
+		for (unsigned int i = 0; i < matches.size(); ++i)
+			if (matches.at(i).size() == 2 && matches.at(i).at(0).distance <= nndrRatio * matches.at(i).at(1).distance)
+				RawPairWiseMatchID.push_back(Point2i(matches.at(i).at(0).trainIdx, i));
+	}
+	printf("%d matches found... in %.2fs\n", RawPairWiseMatchID.size(), omp_get_wtime() - start);
+
+	KeyPoint key;
+	vector<int> CorresID;
+	vector<Point2d> Keys1, Keys2;
+	for (int i = 0; i < keys1.size(); i++)
+		Keys1.push_back(Point2d(keys1[i].x, keys1[i].y));
+	for (int i = 0; i < keys2.size(); i++)
+		Keys2.push_back(Point2d(keys2[i].x, keys2[i].y));
+	for (int i = 0; i < RawPairWiseMatchID.size(); ++i)
+		CorresID.push_back(RawPairWiseMatchID[i].x), CorresID.push_back(RawPairWiseMatchID[i].y);
+
+	int nchannels = 3;
+	IplImage *Img1 = cvLoadImage(Fname1, nchannels == 3 ? 1 : 0);
+	if (Img1->imageData == NULL)
+	{
+		printf("Cannot load %s\n", Fname1);
+		return 1;
+	}
+	IplImage *Img2 = cvLoadImage(Fname2, nchannels == 3 ? 1 : 0);
+	if (Img2->imageData == NULL)
+	{
+		printf("Cannot load %s\n", Fname2);
+		return 1;
+	}
+
+	IplImage* correspond = cvCreateImage(cvSize(Img1->width + Img2->width, Img1->height), 8, nchannels);
+	cvSetImageROI(correspond, cvRect(0, 0, Img1->width, Img1->height));
+	cvCopy(Img1, correspond);
+	cvSetImageROI(correspond, cvRect(Img1->width, 0, correspond->width, correspond->height));
+	cvCopy(Img2, correspond);
+	cvResetImageROI(correspond);
+	DisplayImageCorrespondence(correspond, Img1->width, 0, Keys1, Keys2, CorresID, fractionMatchesDisplayed);
+
+	delete[] match_buf;
+	delete sift;
+	delete matcher;
+	FREE_MYLIB(hsiftgpu);
+
+	return 0;
+}
 
 void dec2bin(int dec, int*bin, int num_bin)
 {
@@ -940,6 +1145,170 @@ Mat ReadDescriptorBinarySIFTGPU(char *fn, bool silent)
 	return descriptors;
 }
 
+void GenereteKeyPointsRGB(char *ImgName, char *KName, char *KeyRGBName)
+{
+	Mat view = imread(ImgName, 1);
+	if (view.data == NULL)
+	{
+		cout << "Cannot load: " << ImgName << endl;
+		return;
+	}
+	int width = view.cols, height = view.rows, length = width*height, nchannels = 3;
+	unsigned char *Img = new unsigned char[length*nchannels];
+	for (int kk = 0; kk < nchannels; kk++)
+	{
+		for (int jj = 0; jj < height; jj++)
+			for (int ii = 0; ii < width; ii++)
+				Img[ii + jj*width + kk*length] = view.data[nchannels*ii + jj*nchannels*width + kk];
+	}
+
+	vector<KeyPoint>kpts; kpts.reserve(30000);
+	if (!ReadKPointsBinarySIFTGPU(KName, kpts))
+		return;
+
+	Point3i rgb;
+	vector<Point3i>Argb; Argb.reserve(kpts.size());
+	for (int kk = 0; kk < kpts.size(); kk++)
+	{
+		int x = kpts[kk].pt.x;
+		int y = kpts[kk].pt.y;
+		int id = x + y*width;
+
+		rgb.z = Img[id];//b
+		rgb.y = Img[length + id];//g
+		rgb.x = Img[2 * length + id];//r
+		Argb.push_back(rgb);
+	}
+
+	WriteKPointsRGBBinarySIFTGPU(KeyRGBName, kpts, Argb);
+
+	delete[]Img;
+}
+bool WriteKPointsRGBBinarySIFTGPU(char *fn, vector<SiftKeypoint>kpts, vector<Point3i> rgb, bool silent)
+{
+	ofstream fout;
+	fout.open(fn, ios::binary);
+	if (!fout.is_open())
+	{
+		if (silent)
+			cout << "Cannot write: " << fn << endl;
+		return false;
+	}
+
+	int npts = kpts.size();
+	fout.write(reinterpret_cast<char *>(&npts), sizeof(int));
+	for (int j = 0; j < npts; ++j)
+	{
+		fout.write(reinterpret_cast<char *>(&kpts.at(j).x), sizeof(float));
+		fout.write(reinterpret_cast<char *>(&kpts.at(j).y), sizeof(float));
+		fout.write(reinterpret_cast<char *>(&kpts.at(j).o), sizeof(float));
+		fout.write(reinterpret_cast<char *>(&kpts.at(j).s), sizeof(float));
+		fout.write(reinterpret_cast<char *>(&rgb.at(j).x), sizeof(int));
+		fout.write(reinterpret_cast<char *>(&rgb.at(j).y), sizeof(int));
+		fout.write(reinterpret_cast<char *>(&rgb.at(j).z), sizeof(int));
+	}
+	fout.close();
+
+	return true;
+}
+bool ReadKPointsRGBBinarySIFTGPU(char *fn, vector<SiftKeypoint> &kpts, vector<Point3i> &rgb, bool silent)
+{
+	ifstream fin;
+	fin.open(fn, ios::binary);
+	if (!fin.is_open())
+	{
+		cout << "Cannot open: " << fn << endl;
+		return false;
+	}
+	if (silent)
+		cout << "Load " << fn << endl;
+
+	int r, g, b;
+	float x, y, orirent, scale;
+	SiftKeypoint kpt;
+
+	int npts;
+	fin.read(reinterpret_cast<char *>(&npts), sizeof(int));
+	kpts.reserve(npts); rgb.reserve(npts);  kpts.clear(); rgb.clear();
+	for (int ii = 0; ii < npts; ii++)
+	{
+		fin.read(reinterpret_cast<char *>(&x), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&y), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&orirent), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&scale), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&r), sizeof(int));
+		fin.read(reinterpret_cast<char *>(&g), sizeof(int));
+		fin.read(reinterpret_cast<char *>(&b), sizeof(int));
+		kpt.x = x, kpt.y = y, kpt.o = orirent, kpt.s = scale;
+		kpts.push_back(kpt);
+		rgb.push_back(Point3i(r, g, b));
+	}
+
+	return true;
+}
+bool WriteKPointsRGBBinarySIFTGPU(char *fn, vector<KeyPoint>kpts, vector<Point3i> rgb, bool silent)
+{
+	ofstream fout;
+	fout.open(fn, ios::binary);
+	if (!fout.is_open())
+	{
+		if (silent)
+			cout << "Cannot write: " << fn << endl;
+		return false;
+	}
+
+	int npts = kpts.size();
+	fout.write(reinterpret_cast<char *>(&npts), sizeof(int));
+	for (int j = 0; j < npts; ++j)
+	{
+		fout.write(reinterpret_cast<char *>(&kpts.at(j).pt.x), sizeof(float));
+		fout.write(reinterpret_cast<char *>(&kpts.at(j).pt.y), sizeof(float));
+		fout.write(reinterpret_cast<char *>(&kpts.at(j).angle), sizeof(float));
+		fout.write(reinterpret_cast<char *>(&kpts.at(j).size), sizeof(float));
+		fout.write(reinterpret_cast<char *>(&rgb.at(j).x), sizeof(int));
+		fout.write(reinterpret_cast<char *>(&rgb.at(j).y), sizeof(int));
+		fout.write(reinterpret_cast<char *>(&rgb.at(j).z), sizeof(int));
+	}
+	fout.close();
+
+	return true;
+}
+bool ReadKPointsRGBBinarySIFTGPU(char *fn, vector<KeyPoint> &kpts, vector<Point3i> &rgb, bool silent)
+{
+	ifstream fin;
+	fin.open(fn, ios::binary);
+	if (!fin.is_open())
+	{
+		cout << "Cannot open: " << fn << endl;
+		return false;
+	}
+	if (silent)
+		cout << "Load " << fn << endl;
+
+	int r, g, b;
+	float x, y, orirent, scale;
+	KeyPoint kpt;
+
+	int npts;
+	fin.read(reinterpret_cast<char *>(&npts), sizeof(int));
+	kpts.reserve(npts); rgb.reserve(npts);  kpts.clear(); rgb.clear();
+	for (int ii = 0; ii < npts; ii++)
+	{
+		fin.read(reinterpret_cast<char *>(&x), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&y), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&orirent), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&scale), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&r), sizeof(int));
+		fin.read(reinterpret_cast<char *>(&g), sizeof(int));
+		fin.read(reinterpret_cast<char *>(&b), sizeof(int));
+		kpt.pt.x = x, kpt.pt.y = y, kpt.angle = orirent, kpt.size = scale;
+		kpts.push_back(kpt);
+		rgb.push_back(Point3i(r, g, b));
+	}
+
+	return true;
+}
+
 void ResizeImage(unsigned char *Image, unsigned char *OutImage, int width, int height, int nchannels, double Rfactor, int InterpAlgo, double *InPara)
 {
 	bool createMem = false;
@@ -1404,13 +1773,17 @@ void nonMaximaSuppression(const Mat& src, const int sz, Mat& dst, const Mat mask
 
 	return;
 }
-int LensCorrectionVideoDriver(char *Path, char *VideoName, double *K, double *distortion, int LensType, int nimages, int interpAlgo)
+int LensCorrectionVideoDriver(char *Path, char *VideoName, double *K, double *distortion, int LensType, int nimages, double Imgscale, double Contscale, int interpAlgo)
 {
 	char Fname[200];
-	double Imgscale = 1.0, Contscale = 1.0, iK[9];
+	double iK[9];
 
 	mat_invert(K, iK, 3);
-	//double omega = 0.993183;
+	double omega, DistCtr[2];
+	if (LensType == 1)
+		omega = distortion[0], DistCtr[0] = distortion[1], DistCtr[1] = distortion[2];
+	else if (LensType == 2)
+		omega = distortion[0];
 
 	Mat cvImg;
 	unsigned char *Img = 0;
@@ -1448,10 +1821,10 @@ int LensCorrectionVideoDriver(char *Path, char *VideoName, double *K, double *di
 		if (LensType == 0)
 			LensUndistortion(Img, width, height, nchannels, K, distortion, interpAlgo, Imgscale, Contscale, Para);
 		else if (LensType == 1)
-			printf("This lens model is not supported right now!");// FishEyeUndistortion(Img, cvImg.cols, cvImg.rows, 3, omega, CenterOfDistortionX, CenterOfDistortionY, interpAlgo, Imgscale, 1.0);
+			FishEyeCorrection(Img, cvImg.cols, cvImg.rows, 3, omega, DistCtr[0], DistCtr[1], interpAlgo, Imgscale, Contscale, Para);
 		else if (LensType == 2)
-			printf("This lens model is not supported right now!");// FishEyeUndistortion(Img, cvImg.cols, cvImg.rows, 3, K, iK, omega, interpAlgo, Imgscale, Contscale);
-		if (LensType)
+			FishEyeCorrection(Img, cvImg.cols, cvImg.rows, 3, K, iK, omega, interpAlgo, Imgscale, Contscale, Para);
+		else
 			return 1;
 
 		Mat nImg(Mheight, Mwidth, CV_8UC3);
@@ -1461,6 +1834,71 @@ int LensCorrectionVideoDriver(char *Path, char *VideoName, double *K, double *di
 					nImg.data[ii*nchannels + jj*Mwidth*nchannels + kk] = Img[ii + jj*Mwidth + kk*Mlength];
 
 		sprintf(Fname, "%s/%d.png", Path, Id + 1);
+		imwrite(Fname, nImg);
+	}
+
+	delete[]Img;
+
+	return 0;
+}
+int LensCorrectionImageSequenceDriver(char *Path, double *K, double *distortion, int LensType, int StartFrame, int StopFrame, double Imgscale, double Contscale, int interpAlgo)
+{
+	char Fname[200];
+	double iK[9];
+
+	mat_invert(K, iK, 3);
+	double omega, DistCtr[2];
+	if (LensType == 1)
+		omega = distortion[0], DistCtr[0] = distortion[1], DistCtr[1] = distortion[2];
+	else if (LensType == 2)
+		omega = distortion[0];
+
+	Mat cvImg;
+	unsigned char *Img = 0;
+	double *Para = 0;
+
+	for (int Id = StartFrame; Id <= StopFrame; Id++)
+	{
+		sprintf(Fname, "%s/CorpusDistortted/%d.png", Path, Id);	cvImg = imread(Fname, 1);
+		if (cvImg.empty())
+		{
+			printf("Cannot load %s\n", Fname);
+			continue;
+		}
+
+		int width = cvImg.cols, height = cvImg.rows, nchannels = cvImg.channels();
+		int Mwidth = Imgscale*width, Mheight = Imgscale*height, Mlength = Mwidth*Mheight;
+		if (Id == StartFrame)
+		{
+			Img = new unsigned char[Mlength*nchannels];
+			Para = new double[Mlength*nchannels];
+		}
+
+		for (int kk = 0; kk < nchannels; kk++)
+		{
+			for (int jj = 0; jj < height; jj++)
+				for (int ii = 0; ii < width; ii++)
+					Img[ii + jj*width + kk*width*height] = cvImg.data[ii*nchannels + jj*width*nchannels + kk];
+			if (Para != NULL)
+				Generate_Para_Spline(Img + kk*width*height, Para + kk*width*height, width, height, interpAlgo);
+		}
+
+		if (LensType == 0)
+			LensUndistortion(Img, width, height, nchannels, K, distortion, interpAlgo, Imgscale, Contscale, Para);
+		else if (LensType == 1)
+			FishEyeCorrection(Img, cvImg.cols, cvImg.rows, 3, omega, DistCtr[0], DistCtr[1], interpAlgo, Imgscale, Contscale, Para);
+		else if (LensType == 2)
+			FishEyeCorrection(Img, cvImg.cols, cvImg.rows, 3, K, iK, omega, interpAlgo, Imgscale, Contscale, Para);
+		else
+			return 1;
+
+		Mat nImg(Mheight, Mwidth, CV_8UC3);
+		for (int kk = 0; kk < nchannels; kk++)
+			for (int jj = 0; jj < Mheight; jj++)
+				for (int ii = 0; ii < Mwidth; ii++)
+					nImg.data[ii*nchannels + jj*Mwidth*nchannels + kk] = Img[ii + jj*Mwidth + kk*Mlength];
+
+		sprintf(Fname, "%s/_%d.png", Path, Id);
 		imwrite(Fname, nImg);
 	}
 
@@ -1511,9 +1949,9 @@ int LensCorrectionDriver(char *Path, double *K, double *distortion, int LensType
 		if (LensType == 0)
 			LensUndistortion(Img, width, height, nchannels, K, distortion, interpAlgo, Imgscale, Contscale, Para);
 		else if (LensType == 1)
-			printf("This lens model is not supported right now!");// FishEyeUndistortion(Img, cvImg.cols, cvImg.rows, 3, omega, CenterOfDistortionX, CenterOfDistortionY, interpAlgo, Imgscale, 1.0);
+			printf("This lens model is not supported right now!");// FishEyeCorrection(Img, cvImg.cols, cvImg.rows, 3, omega, CenterOfDistortionX, CenterOfDistortionY, interpAlgo, Imgscale, 1.0);
 		else if (LensType == 2)
-			printf("This lens model is not supported right now!");// FishEyeUndistortion(Img, cvImg.cols, cvImg.rows, 3, K, iK, omega, interpAlgo, Imgscale, Contscale);
+			printf("This lens model is not supported right now!");// FishEyeCorrection(Img, cvImg.cols, cvImg.rows, 3, K, iK, omega, interpAlgo, Imgscale, Contscale);
 		if (LensType)
 			return 1;
 
@@ -1660,7 +2098,7 @@ int ReadIntrinsicResults(char *path, CameraData *AllViewsParas, int nHDs)
 {
 	//Note that visCamualSfm use different lens model than openCV or matlab or yours (inverse model)
 	char Fname[200];
-	int id = 0;
+	int id = 0, lensType;
 	double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1;
 
 	sprintf(Fname, "%s/DevicesIntrinsics.txt", path); FILE *fp = fopen(Fname, "r");
@@ -1669,8 +2107,9 @@ int ReadIntrinsicResults(char *path, CameraData *AllViewsParas, int nHDs)
 		cout << "Cannot load " << Fname << endl;
 		return 1;
 	}
-	while (fscanf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ", &fx, &fy, &skew, &u0, &v0, &r0, &r1, &r2, &t0, &t1, &p0, &p1) != EOF)
+	while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ", &lensType, &fx, &fy, &skew, &u0, &v0, &r0, &r1, &r2, &t0, &t1, &p0, &p1) != EOF)
 	{
+		AllViewsParas[id].LensModel = lensType;
 		AllViewsParas[id].K[0] = fx, AllViewsParas[id].K[1] = skew, AllViewsParas[id].K[2] = u0,
 			AllViewsParas[id].K[3] = 0.0, AllViewsParas[id].K[4] = fy, AllViewsParas[id].K[5] = v0,
 			AllViewsParas[id].K[6] = 0.0, AllViewsParas[id].K[7] = 0.0, AllViewsParas[id].K[8] = 1.0;
@@ -1691,7 +2130,7 @@ int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams)
 {
 	//Note that visCamualSfm use different lens model than openCV or matlab or yours (inverse model)
 	char Fname[200];
-	int id = 0;
+	int id = 0, LensType;
 	double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1;
 
 	sprintf(Fname, "%s/R_DevicesIntrinsics.txt", path); FILE *fp = fopen(Fname, "w+");
@@ -1702,12 +2141,13 @@ int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams)
 	}
 	for (int ii = 0; ii < nCams; ii++)
 	{
+		LensType = AllViewsParas[id].LensModel;
 		fx = AllViewsParas[id].K[0], fy = AllViewsParas[id].K[4], skew = AllViewsParas[id].K[1], u0 = AllViewsParas[id].K[2], v0 = AllViewsParas[id].K[5];
 
 		r0 = AllViewsParas[id].distortion[0], r1 = AllViewsParas[id].distortion[1], r2 = AllViewsParas[id].distortion[2];
 		t0 = AllViewsParas[id].distortion[3], t1 = AllViewsParas[id].distortion[4];
 		p0 = AllViewsParas[id].distortion[5], p1 = AllViewsParas[id].distortion[6];
-		fprintf(fp, "%.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f\n", fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1);
+		fprintf(fp, "%d %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f\n", LensType, fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1);
 	}
 	fclose(fp);
 
@@ -1783,7 +2223,7 @@ void ReadCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>&AvailV
 
 	return;
 }
-void ReadCumulativePoints(char *Path, int nviews, int timeID, vector<int>&cumulativePts)
+int ReadCumulativePoints(char *Path, int nviews, int timeID, vector<int>&cumulativePts)
 {
 	int ii, jj;
 	char Fname[200];
@@ -1795,7 +2235,7 @@ void ReadCumulativePoints(char *Path, int nviews, int timeID, vector<int>&cumula
 	if (fp == NULL)
 	{
 		printf("Cannot load %s. Abort program!\n", Fname);
-		abort();
+		return 1;
 	}
 	for (ii = 0; ii < nviews + 1; ii++)
 	{
@@ -1804,7 +2244,7 @@ void ReadCumulativePoints(char *Path, int nviews, int timeID, vector<int>&cumula
 	}
 	fclose(fp);
 
-	return;
+	return 0;
 }
 void ReadPointCorrespondences(char *Path, int nviews, int timeID, vector<int> *PointCorres, vector<int>&CeresDuplicateAddInMask, int totalPts, bool Merge)
 {
@@ -2405,39 +2845,55 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 		printf("Cannot load %s\n");
 		return false;
 	}
-	
+
 	char Fname[200];
-	double fx, fy, skew, u0, v0, r1, r2, r3, t1, t2, p1, p2, rv[3], T[3];
+	int lensType;
+	double fx, fy, skew, u0, v0, r1, r2, r3, t1, t2, p1, p2, omega, DistCtrX, DistCtrY, rv[3], T[3];
 
 	fscanf(fp, "%d ", &CorpusData.nCamera);
 	CorpusData.camera = new CameraData[CorpusData.nCamera];
 
 	for (int ii = 0; ii < CorpusData.nCamera; ii++)
 	{
-		fscanf(fp, "%s %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ", &Fname, &fx, &fy, &skew, &u0, &v0,
-			&r1, &r2, &r3, &t1, &t2, &p1, &p2,
-			&rv[0], &rv[1], &rv[2], &T[0], &T[1], &T[2]);
-
+		fscanf(fp, "%s %d ", &Fname, &lensType);
 		string filename = Fname;
 		std::size_t pos = filename.find(".ppm");
 		filename.erase(pos, 4);
 		const char * str = filename.c_str();
 		int viewID = atoi(str);
 
+		CorpusData.camera[viewID].LensModel = lensType;
+		if (lensType == RADIAL_TANGENTIAL_PRISM)
+		{
+			fscanf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ", &fx, &fy, &skew, &u0, &v0,
+				&r1, &r2, &r3, &t1, &t2, &p1, &p2,
+				&rv[0], &rv[1], &rv[2], &T[0], &T[1], &T[2]);
+
+			CorpusData.camera[viewID].distortion[0] = r1,
+				CorpusData.camera[viewID].distortion[1] = r2,
+				CorpusData.camera[viewID].distortion[2] = r3,
+				CorpusData.camera[viewID].distortion[3] = t1,
+				CorpusData.camera[viewID].distortion[4] = t2,
+				CorpusData.camera[viewID].distortion[5] = p1,
+				CorpusData.camera[viewID].distortion[6] = p2;
+		}
+		else
+		{
+			fscanf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ", &fx, &fy, &skew, &u0, &v0,
+				&omega, &DistCtrX, &DistCtrY,
+				&rv[0], &rv[1], &rv[2], &T[0], &T[1], &T[2]);
+
+			CorpusData.camera[viewID].distortion[0] = omega,
+				CorpusData.camera[viewID].distortion[1] = DistCtrX,
+				CorpusData.camera[viewID].distortion[2] = DistCtrY;
+		}
+
 		CorpusData.camera[viewID].intrinsic[0] = fx,
 			CorpusData.camera[viewID].intrinsic[1] = fy,
 			CorpusData.camera[viewID].intrinsic[2] = skew,
 			CorpusData.camera[viewID].intrinsic[3] = u0,
 			CorpusData.camera[viewID].intrinsic[4] = v0;
-
-		CorpusData.camera[viewID].distortion[0] = r1,
-			CorpusData.camera[viewID].distortion[1] = r2,
-			CorpusData.camera[viewID].distortion[2] = r3,
-			CorpusData.camera[viewID].distortion[3] = t1,
-			CorpusData.camera[viewID].distortion[4] = t2,
-			CorpusData.camera[viewID].distortion[5] = p1,
-			CorpusData.camera[viewID].distortion[6] = p2;
-
+		
 		for (int jj = 0; jj < 3; jj++)
 		{
 			CorpusData.camera[viewID].rt[jj] = rv[jj];
@@ -3073,6 +3529,89 @@ int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int S
 
 	return 0;
 }
+int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime, bool distortionCorrected)
+{
+	char Fname[200];
+	int videoID, frameID;
+
+	AllVideoInfo.startTime = startTime, AllVideoInfo.stopTime = stopTime, AllVideoInfo.nVideos = nVideoViews;
+	AllVideoInfo.VideoInfo = new CameraData[nVideoViews*(stopTime - startTime + 1)];
+
+	//READ INTRINSIC: START
+	for (int viewID = 0; viewID < nVideoViews; viewID++)
+	{
+		videoID = (stopTime - startTime + 1)*viewID, frameID = 0;
+		sprintf(Fname, "%s/intrinisc_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+		{
+			cout << "Cannot load " << Fname << endl;
+			continue;
+		}
+		double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1;
+		while (fscanf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ", &fx, &fy, &skew, &u0, &v0, &r0, &r1, &r2, &t0, &t1, &p0, &p1) != EOF)
+		{
+			AllVideoInfo.VideoInfo[frameID + videoID].K[0] = fx, AllVideoInfo.VideoInfo[frameID + videoID].K[1] = skew, AllVideoInfo.VideoInfo[frameID + videoID].K[2] = u0,
+				AllVideoInfo.VideoInfo[frameID + videoID].K[3] = 0.0, AllVideoInfo.VideoInfo[frameID + videoID].K[4] = fy, AllVideoInfo.VideoInfo[frameID + videoID].K[5] = v0,
+				AllVideoInfo.VideoInfo[frameID + videoID].K[6] = 0.0, AllVideoInfo.VideoInfo[frameID + videoID].K[7] = 0.0, AllVideoInfo.VideoInfo[frameID + videoID].K[8] = 1.0;
+
+			GetIntrinsicFromK(AllVideoInfo.VideoInfo[frameID + videoID]);
+			//mat_invert(AllViewsParas[frameID].K, AllViewsParas[frameID].iK);
+
+			AllVideoInfo.VideoInfo[frameID + videoID].distortion[0] = r0, AllVideoInfo.VideoInfo[frameID + videoID].distortion[1] = r1, AllVideoInfo.VideoInfo[frameID + videoID].distortion[2] = r2;
+			AllVideoInfo.VideoInfo[frameID + videoID].distortion[3] = t0, AllVideoInfo.VideoInfo[frameID + videoID].distortion[4] = t1;
+			AllVideoInfo.VideoInfo[frameID + videoID].distortion[5] = p0, AllVideoInfo.VideoInfo[frameID + videoID].distortion[6] = p1;
+
+			AllVideoInfo.VideoInfo[frameID + videoID].LensModel = RADIAL_TANGENTIAL_PRISM, AllVideoInfo.VideoInfo[frameID + videoID].threshold = 3.0, AllVideoInfo.VideoInfo[frameID + videoID].ninlierThresh = 40;
+			if (distortionCorrected)
+				for (int jj = 0; jj < 7; jj++)
+					AllVideoInfo.VideoInfo[frameID + videoID].distortion[jj] = 0.0;
+
+			frameID++;
+			if (frameID > stopTime - startTime)
+				break;
+		}
+		fclose(fp);
+	}
+	//END
+
+
+	//READ POSE FROM VIDEO POSE: START
+	for (int viewID = 0; viewID < nVideoViews; viewID++)
+	{
+		videoID = (stopTime - startTime + 1)*viewID;
+		sprintf(Fname, "%s/PinfoGL_%d.txt", Path, viewID);
+		FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+		{
+			printf("Cannot load %s\n", Fname);
+			continue;
+		}
+		double R[9], C[3], t1, t2, t3, t4, t5, t6, t7;
+		while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ",
+			&frameID, &R[0], &R[1], &R[2], &t1, &R[3], &R[4], &R[5], &t2, &R[6], &R[7], &R[8], &t3, &t4, &t5, &t6, &t7, &C[0], &C[1], &C[2]) != EOF)
+		{
+			for (int jj = 0; jj < 9; jj++)
+				AllVideoInfo.VideoInfo[frameID + videoID].R[jj] = R[jj];
+
+			//T = -R*Center;
+			mat_mul(R, C, AllVideoInfo.VideoInfo[frameID + videoID].T, 3, 3, 1);
+			for (int jj = 0; jj < 3; jj++)
+				AllVideoInfo.VideoInfo[frameID + videoID].T[jj] = -AllVideoInfo.VideoInfo[frameID + videoID].T[jj];
+
+			GetrtFromRT(AllVideoInfo.VideoInfo[frameID + videoID].rt,
+				AllVideoInfo.VideoInfo[frameID + videoID].R, AllVideoInfo.VideoInfo[frameID + videoID].T);
+			AssembleP(AllVideoInfo.VideoInfo[frameID + videoID].K, AllVideoInfo.VideoInfo[frameID + videoID].R,
+				AllVideoInfo.VideoInfo[frameID + videoID].T, AllVideoInfo.VideoInfo[frameID + videoID].P);
+
+			frameID++;
+			if (frameID > stopTime - startTime)
+				break;
+		}
+	}
+	//READ FROM VIDEO POSE: END
+
+	return 0;
+}
 
 
 void TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, Point2i POI, int search_area, double thresh, double &zncc)
@@ -3177,17 +3716,17 @@ void TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double
 }
 void LaplacianOfGaussian(double *LOG, int sigma)
 {
-	int n = ceil(sigma * 3), Size = 2*n+1 ;
+	int n = ceil(sigma * 3), Size = 2 * n + 1;
 	//[x, y] = meshgrid(-ceil(sigma * 3) : ceil(sigma * 3));
-//	L = -(1 - (x. ^ 2 + y. ^ 2) / 2 / sigma ^ 2) / pi / sigma^4.*exp(-(x. ^ 2 + y. ^ 2) / 2 / sigma ^ 2);
-	
-	double ii2, jj2, Twosigma2 = 2.0*sigma*sigma, sigma4 = pow(sigma,4);
+	//	L = -(1 - (x. ^ 2 + y. ^ 2) / 2 / sigma ^ 2) / pi / sigma^4.*exp(-(x. ^ 2 + y. ^ 2) / 2 / sigma ^ 2);
+
+	double ii2, jj2, Twosigma2 = 2.0*sigma*sigma, sigma4 = pow(sigma, 4);
 	for (int jj = -n; jj <= n; jj++)
 	{
 		for (int ii = -n; ii <= n; ii++)
 		{
 			ii2 = ii*ii, jj2 = jj*jj;
-			LOG[(ii + n) + (jj + n)*Size] = (ii2 + jj2-Twosigma2) / sigma4*exp(-(ii2 + jj2) / Twosigma2);
+			LOG[(ii + n) + (jj + n)*Size] = (ii2 + jj2 - Twosigma2) / sigma4*exp(-(ii2 + jj2) / Twosigma2);
 		}
 	}
 
@@ -3202,24 +3741,24 @@ void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker,
 	LaplacianOfGaussian(maskSmooth, sigma);
 	/*FILE *fp = fopen("C:/temp/LOG.txt", "r");
 	for (int jj = 0; jj < PatternSize; jj++)
-		for (int ii = 0; ii <PatternSize; ii++)
-			fscanf(fp, "%lf ", &maskSmooth[ii + jj*PatternSize]);
+	for (int ii = 0; ii <PatternSize; ii++)
+	fscanf(fp, "%lf ", &maskSmooth[ii + jj*PatternSize]);
 	fclose(fp);*/
 
 	SaveDataToImage("C:/temp/temp.png", maskSmooth, PatternSize, PatternSize, 1);
 
 	//synthesize_square_mask(maskSmooth, bi_graylevel, PatternSize, 1.0, 0, false);
 	double *Cornerness = new double[width*height];
-	for (ii = 0; ii<width*height; ii++)
+	for (ii = 0; ii < width*height; ii++)
 		Cornerness[ii] = 0.0;
 
 	double zncc;
 	Point2i POI;
-	for (kk = 0; kk<numPatterns; kk++)
+	for (kk = 0; kk < numPatterns; kk++)
 	{
-		for (jj = 3 * hsubset; jj<height - 3 * hsubset; jj += jump)
+		for (jj = 3 * hsubset; jj < height - 3 * hsubset; jj += jump)
 		{
-			for (ii = 3 * hsubset; ii<width - 3 * hsubset; ii += jump)
+			for (ii = 3 * hsubset; ii < width - 3 * hsubset; ii += jump)
 			{
 				POI.x = ii, POI.y = jj;
 				TMatchingSuperCoarse(maskSmooth + kk*PatternLength, PatternSize, hsubset, img, width, height, POI, search_area, thresh, zncc);
@@ -3230,18 +3769,18 @@ void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker,
 
 	//ReadGridBinary("C:/temp/cornerness.dat", Cornerness, width, height);
 	double *Cornerness2 = new double[width*height];
-	for (ii = 0; ii<width*height; ii++)
+	for (ii = 0; ii < width*height; ii++)
 		Cornerness2[ii] = Cornerness[ii];
 	WriteGridBinary("C:/temp/cornerness.dat", Cornerness, width, height);
 
 	//Non-max suppression
 	bool breakflag;
-	for (jj = 3 * hsubset; jj<height - 3 * hsubset; jj += jump)
+	for (jj = 3 * hsubset; jj < height - 3 * hsubset; jj += jump)
 	{
-		for (ii = 3 * hsubset; ii<width - 3 * hsubset; ii += jump)
+		for (ii = 3 * hsubset; ii < width - 3 * hsubset; ii += jump)
 		{
 			breakflag = false;
-			if (Cornerness[ii + jj*width] <thresh)
+			if (Cornerness[ii + jj*width] < thresh)
 			{
 				Cornerness[ii + jj*width] = 0.0;
 				Cornerness2[ii + jj*width] = 0.0;
@@ -3268,9 +3807,9 @@ void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker,
 	WriteGridBinary("C:/temp/NMS.dat", Cornerness2, width, height);
 
 	npts = 0;
-	for (jj = 3 * hsubset; jj<height - 3 * hsubset; jj += jump)
+	for (jj = 3 * hsubset; jj < height - 3 * hsubset; jj += jump)
 	{
-		for (ii = 3 * hsubset; ii<width - 3 * hsubset; ii += jump)
+		for (ii = 3 * hsubset; ii < width - 3 * hsubset; ii += jump)
 		{
 			if (Cornerness2[ii + jj*width] > thresh)
 			{
@@ -3278,7 +3817,7 @@ void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker,
 				Checker[npts].y = jj;
 				npts++;
 			}
-			if (npts >nMaxCorners)
+			if (npts > nMaxCorners)
 				break;
 		}
 	}

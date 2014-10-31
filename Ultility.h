@@ -85,6 +85,14 @@ bool WriteDescriptorBinarySIFTGPU(char *fn, vector<float > descriptors, bool sil
 bool ReadDescriptorBinarySIFTGPU(char *fn, vector<float > &descriptors, bool silent = false);
 Mat ReadDescriptorBinarySIFTGPU(char *fn, bool silent = false);
 
+void GenereteKeyPointsRGB(char *ImgName, char *KName, char *KeyRGBName);
+bool WriteKPointsRGBBinarySIFTGPU(char *fn, vector<SiftKeypoint>kpts, vector<Point3i> rgb, bool silent = false);
+bool ReadKPointsRGBBinarySIFTGPU(char *fn, vector<SiftKeypoint> &kpts, vector<Point3i> &rgb, bool silent = false);
+bool WriteKPointsRGBBinarySIFTGPU(char *fn, vector<KeyPoint>kpts, vector<Point3i> rgb, bool silent = false);
+bool ReadKPointsRGBBinarySIFTGPU(char *fn, vector<KeyPoint> &kpts, vector<Point3i> &rgb, bool silent = false);
+
+int siftgpu(char *Fname1, char *Fname2, const float nndrRatio = 0.8, const double fractionMatchesDisplayed = 0.5);
+
 void dec2bin(int dec, int*bin, int num_bin);
 double nChoosek(int n, int k);
 int MyFtoI(double W);
@@ -467,8 +475,10 @@ template <class myType>void nonMaximaSuppression1D(myType *src, int nsample, int
 }
 void nonMaximaSuppression(const Mat& src, const int sz, Mat& dst, const Mat mask);
 
-int LensCorrectionVideoDriver(char *Path, char *VideoName, double *K, double *distortion, int LensType, int nimages, int interpAlgo);
+int LensCorrectionVideoDriver(char *Path, char *VideoName, double *K, double *distortion, int LensType, int nimages, double Imgscale = 1.0, double Contscale = 1.0, int interpAlgo = 5);
+int LensCorrectionImageSequenceDriver(char *Path, double *K, double *distortion, int LensType, int StartFrame, int StopFrame, double Imgscale = 1.0, double Contscale = 1.0, int interpAlgo = 5);
 int LensCorrectionDriver(char *Path, double *K, double *distortion, int LensType, int nimages, int interpAlgo);
+
 int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, vector<KeyPoint> keypoints1, vector<KeyPoint> keypoints2, vector<int>pair, double density);
 int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, vector<Point2d> keypoints1, vector<Point2d> keypoints2, vector<int>pair, double density);
 int DisplayImageCorrespondencesDriver(char *Path, vector<int>viewsID, int timeID, int nchannels, double density = 0.25);
@@ -477,7 +487,7 @@ int ReadIntrinsicResults(char *path, CameraData *DeviceParas, int nCam);
 int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams);
 void SaveCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>AvailViews, Point3d *All3D, int npts);
 void ReadCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>&AvailViews, Point3d *All3D, int npts);
-void ReadCumulativePoints(char *Path, int nviews, int timeID, vector<int>&cumulativePts);
+int ReadCumulativePoints(char *Path, int nviews, int timeID, vector<int>&cumulativePts);
 void ReadPointCorrespondences(char *Path, int nviews, int timeID, vector<int> *PointCorres, vector<int>&mask, int totalPts, bool Merge =false);
 void ReadPointCorrespondences(char *Path, int nviews, int timeID, vector<int> *PointCorres, int totalPts, bool Merge);
 void GenerateMergePointCorrespondences(vector<int> *MergePointCorres, vector<int> *PointCorres, int totalPts);
@@ -514,6 +524,7 @@ int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool outputtext = false);
 int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool inputtext = false, bool notReadDescriptor = false);
 bool loadIndividualNVMforpose(char *Path, CameraData *CameraInfo, vector<int>availViews, int timeIDstart, int timeIDstop, int nviews, bool sharedIntrinsics);
 int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel = RADIAL_TANGENTIAL_PRISM, bool distortionCorrected = true);
+int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime, bool distortionCorrected = true);
 
 void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker, int &npts, double sigma, int search_area, int NMS_BW, double thresh);
 

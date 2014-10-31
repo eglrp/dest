@@ -142,14 +142,14 @@ int ShowSyncMem()
 	delete[]BlackImage;
 	return 0;
 }
-int ShowSyncLoad(char *DataPATH)
+int ShowSyncLoad(char *DataPATH, int writeSyncedFrames = 0)
 {
 	//bad frames: 1510 1741 1765 1899
 	char Fname[2000];
-	const int playBackSpeed = 1, nsequences =5, refSeq = 1;
-	int seqName[nsequences] = {0, 1, 2, 3, 4 };
+	const int playBackSpeed = 1, nsequences = 4, refSeq = 1;
+	int seqName[nsequences] = { 1, 2, 3, 4 }; //{ 2, 7 };
 
-	int WBlock = 1920, HBlock = 1088, nBlockX = 3, nchannels = 3, MaxFrames = 5500;
+	int WBlock = 1920, HBlock = 1080, nBlockX = 2, nchannels = 3, MaxFrames = 5500;
 
 	//Make sure to use 59.94 instead of 60 
 	Sequence mySeq[nsequences];
@@ -174,26 +174,28 @@ int ShowSyncLoad(char *DataPATH)
 	mySeq[6].InitSeq(47.95, 79.56);
 	mySeq[7].InitSeq(47.95, 90.74);
 	mySeq[8].InitSeq(47.95, 89.62);*/
+	/*mySeq[0].InitSeq(47.95, 110.19 - 90.74);
+	mySeq[1].InitSeq(47.95, 90.74 - 90.74);*/
 
 	//clock with srinivas
 	//mySeq[0].InitSeq(29.97, 18.08);
 	//mySeq[1].InitSeq(29.97, 0);
 
 	//Juggling
-	mySeq[0].InitSeq(29.97, 70.57);
-	mySeq[1].InitSeq(29.97, 0);
-	mySeq[2].InitSeq(29.97, 70.57+383.24);
-	mySeq[3].InitSeq(29.97, 70.57+167.79);
-	mySeq[4].InitSeq(29.97, 70.57+367.67);
+	mySeq[0].InitSeq(29.97, 0);
+	mySeq[1].InitSeq(29.97, 70.57 + 383.24);
+	mySeq[2].InitSeq(29.97, 70.57 + 167.79);
+	mySeq[3].InitSeq(29.97, 70.57 + 367.67);
+
+	int allFramesOn = 0;
+	if (mySeq[0].TimeAlignPara[0] == 47.95)
+		allFramesOn = 150;
 
 	//Read video sequences
 	int width = 0, height = 0;
 	nBlockX = nsequences < nBlockX ? nsequences : nBlockX;
 	for (int ii = 0; ii < nsequences; ii++)
-	{
-		//sprintf(Fname, "%s/%d/s2.mp4", DataPATH, seqName[ii], seqName[ii]);
 		width += WBlock, height += HBlock;
-	}
 
 	//Initialize display canvas
 	int nBlockY = (1.0*nsequences / nBlockX > nsequences / nBlockX) ? nsequences / nBlockX + 1 : nsequences / nBlockX;
@@ -210,7 +212,7 @@ int ShowSyncLoad(char *DataPATH)
 	//Create display window
 	int oFrameID[nsequences + 1], FrameID[nsequences + 1];
 	for (int ii = 0; ii < nsequences + 1; ii++)
-		oFrameID[ii] = 0, FrameID[ii] = 0;
+		oFrameID[ii] = allFramesOn, FrameID[ii] = allFramesOn;
 	cvNamedWindow("VideoSequences", CV_WINDOW_NORMAL);
 	cvCreateTrackbar("Global frame", "VideoSequences", &FrameID[0], MaxFrames - 1, NULL);
 	for (int ii = 0; ii < nsequences; ii++)
@@ -227,6 +229,7 @@ int ShowSyncLoad(char *DataPATH)
 	for (int ii = 0; ii < nsequences; ii++)
 		GlobalSlider[ii] = true;
 
+	int SaveFrameCount = 0;
 	while (waitKey(17) != 27)
 	{
 		noUpdate = 0;
@@ -267,11 +270,163 @@ int ShowSyncLoad(char *DataPATH)
 			{
 				oFrameID[ii + 1] = FrameID[ii + 1];
 				cvSetTrackbarPos(Fname, "VideoSequences", oFrameID[ii + 1]);
-				sprintf(Fname, "%s/%d/%d.png", DataPATH, seqName[ii], setSeqFrame);
+				sprintf(Fname, "%s/RawImages/%d/%d.png", DataPATH, seqName[ii], setSeqFrame);
 				if (GrabImage(Fname, SubImage, swidth, sheight, nchannels))
 					Set_Sub_Mat(SubImage, BigImg, nchannels*swidth, sheight, nchannels*width, nchannels*BlockXID*WBlock, BlockYID*HBlock);
 				else
 					Set_Sub_Mat(BlackImage, BigImg, nchannels*WBlock, HBlock, nchannels*width, nchannels*BlockXID*WBlock, BlockYID*HBlock);
+
+				if (writeSyncedFrames == 1)
+				{
+					sprintf(Fname, "%s/%d/%d.png", DataPATH, seqName[ii], SaveFrameCount / nsequences);
+					SaveDataToImage(Fname, SubImage, swidth, sheight, nchannels);
+					SaveFrameCount++;
+				}
+			}
+		}
+		oFrameID[0] = FrameID[0];
+		if (noUpdate != nsequences)
+			ShowDataToImage("VideoSequences", BigImg, width, height, nchannels, cvImg);
+		if (autoplay)
+		{
+			cvSetTrackbarPos("Global frame", "VideoSequences", FrameID[0]);
+			FrameID[0] += playBackSpeed;
+		}
+	}
+
+	cvReleaseImage(&cvImg);
+	delete[]BigImg;
+	delete[]BlackImage;
+	delete[]SubImage;
+
+	return 0;
+}
+int ShowSyncLoad2(char *DataPATH, int writeSyncedFrames = 0)
+{
+	//bad frames: 1510 1741 1765 1899
+	char Fname[2000];
+	const int playBackSpeed = 1, nsequences = 2, refSeq = 1;
+	int seqName[nsequences] = { 2, 7 };
+
+	int WBlock = 1920, HBlock = 1080, nBlockX = 2, nchannels = 3, MaxFrames = 5500;
+
+	//Make sure to use 59.94 instead of 60 
+	Sequence mySeq[nsequences];
+	/*mySeq[0].InitSeq(47.95, 4.761);
+	mySeq[1].InitSeq(47.95, - 8.3183);
+	mySeq[2].InitSeq(47.95,  4.761+0.80816);
+	mySeq[3].InitSeq(47.95,  0.0);*/
+
+	/*//My wedding sequences: 1 3 5 7
+	mySeq[0].InitSeq(100.0,   333.3126);
+	mySeq[1].InitSeq(59.94, 0);
+	mySeq[2].InitSeq(59.94,  660.8185);
+	mySeq[3].InitSeq(59.94,  700.2928);*/
+
+	// soccer sequences: 
+	mySeq[0].InitSeq(47.95, 110.19 - 90.74);
+	mySeq[1].InitSeq(47.95, 90.74 - 90.74);
+
+	//clock with srinivas
+	//mySeq[0].InitSeq(29.97, 18.08);
+	//mySeq[1].InitSeq(29.97, 0);
+
+
+	int allFramesOn = 0;
+	if (mySeq[0].TimeAlignPara[0] == 47.95)
+		allFramesOn = 150;
+
+	//Read video sequences
+	int width = 0, height = 0;
+	nBlockX = nsequences < nBlockX ? nsequences : nBlockX;
+	for (int ii = 0; ii < nsequences; ii++)
+		width += WBlock, height += HBlock;
+
+	//Initialize display canvas
+	int nBlockY = (1.0*nsequences / nBlockX > nsequences / nBlockX) ? nsequences / nBlockX + 1 : nsequences / nBlockX;
+	width = WBlock*nBlockX, height = HBlock*nBlockY;
+	char *BigImg = new char[width*height*nchannels];
+	char *BlackImage = new char[WBlock*HBlock*nchannels], *SubImage = new char[WBlock*HBlock*nchannels];
+	IplImage *cvImg = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, nchannels);
+
+	for (int ii = 0; ii < width*height*nchannels; ii++)
+		BigImg[ii] = (char)0;
+	for (int ii = 0; ii < WBlock*HBlock*nchannels; ii++)
+		BlackImage[ii] = (char)0;
+
+	//Create display window
+	int oFrameID[nsequences + 1], FrameID[nsequences + 1];
+	for (int ii = 0; ii < nsequences + 1; ii++)
+		oFrameID[ii] = allFramesOn, FrameID[ii] = allFramesOn;
+	cvNamedWindow("VideoSequences", CV_WINDOW_NORMAL);
+	cvCreateTrackbar("Global frame", "VideoSequences", &FrameID[0], MaxFrames - 1, NULL);
+	for (int ii = 0; ii < nsequences; ii++)
+	{
+		sprintf(Fname, "Seq %d", ii + 1);
+		cvCreateTrackbar(Fname, "VideoSequences", &FrameID[ii + 1], MaxFrames - 1, NULL);
+		cvSetTrackbarPos(Fname, "VideoSequences", 0);
+	}
+	char* nameb1 = "Play/Stop";
+	createButton(nameb1, AutomaticPlay, nameb1, CV_CHECKBOX, 1);
+
+	int BlockXID, BlockYID, setframeID, setSeqFrame, same, noUpdate, swidth, sheight;
+	bool GlobalSlider[nsequences]; //True: global slider, false: local slider
+	for (int ii = 0; ii < nsequences; ii++)
+		GlobalSlider[ii] = true;
+
+	int SaveFrameCount = 0;
+	while (waitKey(17) != 27)
+	{
+		noUpdate = 0;
+		for (int ii = 0; ii < nsequences; ii++)
+		{
+			BlockXID = ii%nBlockX, BlockYID = ii / nBlockX;
+
+			same = 0;
+			if (GlobalSlider[ii])
+				setframeID = FrameID[0]; //global frame
+			else
+				setframeID = FrameID[ii + 1];
+
+			if (oFrameID[0] != FrameID[0])
+				FrameID[ii + 1] = FrameID[0], GlobalSlider[ii] = true;
+			else
+				same += 1;
+
+			if (oFrameID[ii + 1] != FrameID[ii + 1]) //but if local slider moves
+				setframeID = FrameID[ii + 1], GlobalSlider[ii] = false;
+			else
+				same += 1;
+
+			sprintf(Fname, "Seq %d", ii + 1);
+			setSeqFrame = (int)(mySeq[ii].TimeAlignPara[0] / mySeq[refSeq].TimeAlignPara[0] * (1.0*setframeID - mySeq[ii].TimeAlignPara[1]) + 0.5); //setframeID-SeqFrameOffset[ii];
+			printf("Sequence %d frame %d\n", ii + 1, setSeqFrame);
+			if (same == 2)
+			{
+				noUpdate++;
+				continue;
+			}
+			if (setSeqFrame <= 0)
+			{
+				cvSetTrackbarPos(Fname, "VideoSequences", (int)(mySeq[ii].TimeAlignPara[1] + 0.5));
+				Set_Sub_Mat(BlackImage, BigImg, nchannels*WBlock, HBlock, nchannels*width, nchannels*BlockXID*WBlock, BlockYID*HBlock);
+			}
+			else
+			{
+				oFrameID[ii + 1] = FrameID[ii + 1];
+				cvSetTrackbarPos(Fname, "VideoSequences", oFrameID[ii + 1]);
+				sprintf(Fname, "%s/RawImages/%d/%d.png", DataPATH, seqName[ii], setSeqFrame);
+				if (GrabImage(Fname, SubImage, swidth, sheight, nchannels))
+					Set_Sub_Mat(SubImage, BigImg, nchannels*swidth, sheight, nchannels*width, nchannels*BlockXID*WBlock, BlockYID*HBlock);
+				else
+					Set_Sub_Mat(BlackImage, BigImg, nchannels*WBlock, HBlock, nchannels*width, nchannels*BlockXID*WBlock, BlockYID*HBlock);
+
+				if (writeSyncedFrames == 1)
+				{
+					sprintf(Fname, "%s/%d/%d.png", DataPATH, seqName[ii], SaveFrameCount / nsequences);
+					SaveDataToImage(Fname, SubImage, swidth, sheight, nchannels);
+					SaveFrameCount++;
+				}
 			}
 		}
 		oFrameID[0] = FrameID[0];
@@ -356,7 +511,7 @@ int ShowSyncLoadDTW(char *DataPATH)
 
 			oFrameID[ii + 1] = setframeID;
 
-			sprintf(Fname, "%s/%d/%d.png", DataPATH, seqName[ii], setSeqFrame);
+			sprintf(Fname, "%s/RawImages/%d/%d.png", DataPATH, seqName[ii], setSeqFrame);
 			if (GrabImage(Fname, SubImage, swidth, sheight, nchannels))
 				Set_Sub_Mat(SubImage, BigImg, nchannels*swidth, sheight, nchannels*width, nchannels*BlockXID*WBlock, BlockYID*HBlock);
 			else
@@ -486,14 +641,104 @@ int TestPnP(char *Path, int nCams, int selectedCams)
 
 	return 0;
 }
+void VisualizeCleanMatches(char *Path, int view1, int view2, int timeID, double fractionMatchesDisplayed = 0.5)
+{
+	char Fname[200];
+	sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, view1, view2);
+
+	vector<Point2i> PairWiseMatchID; PairWiseMatchID.reserve(10000);
+	int id1, id2, npts;
+	FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		return;
+	}
+	fscanf(fp, "%d ", &npts);
+	PairWiseMatchID.reserve(npts);
+	while (fscanf(fp, "%d %d ", &id1, &id2) != EOF)
+		PairWiseMatchID.push_back(Point2i(id1, id2));
+	fclose(fp);
+
+	if (timeID < 0)
+		sprintf(Fname, "%s/K%d.dat", Path, view1);
+	else
+		sprintf(Fname, "%s/%d/K%d.dat", Path, view1, timeID);
+
+	bool readsucces = false;
+	vector<KeyPoint> keypoints1; keypoints1.reserve(MAXSIFTPTS);
+	readsucces = ReadKPointsBinarySIFTGPU(Fname, keypoints1);
+	if (!readsucces)
+	{
+		printf("%s does not have SIFT points. Please precompute it!\n", Fname);
+		return;
+	}
+
+	if (timeID < 0)
+		sprintf(Fname, "%s/K%d.dat", Path, view2);
+	else
+		sprintf(Fname, "%s/%d/K%d.dat", Path, view2, timeID);
+	vector<KeyPoint> keypoints2; keypoints2.reserve(MAXSIFTPTS);
+	readsucces = ReadKPointsBinarySIFTGPU(Fname, keypoints2);
+	if (!readsucces)
+	{
+		printf("%s does not have SIFT points. Please precompute it!\n", Fname);
+		return;
+	}
+
+	vector<int> CorresID;
+	for (int i = 0; i < PairWiseMatchID.size(); ++i)
+		CorresID.push_back(PairWiseMatchID[i].x), CorresID.push_back(PairWiseMatchID[i].y);
+
+	int nchannels = 3;
+	if (timeID < 0)
+		sprintf(Fname, "%s/%d.png", Path, view1);
+	else
+		sprintf(Fname, "%s/%d/%d.png", Path, view1, timeID);
+	IplImage *Img1 = cvLoadImage(Fname, nchannels == 3 ? 1 : 0);
+	if (Img1->imageData == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		return;
+	}
+	if (timeID < 0)
+		sprintf(Fname, "%s/%d.png", Path, view2);
+	else
+		sprintf(Fname, "%s/%d/%d.png", Path, view2, timeID);
+	IplImage *Img2 = cvLoadImage(Fname, nchannels == 3 ? 1 : 0);
+	if (Img2->imageData == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		return;
+	}
+
+	IplImage* correspond = cvCreateImage(cvSize(Img1->width + Img2->width, Img1->height), 8, nchannels);
+	cvSetImageROI(correspond, cvRect(0, 0, Img1->width, Img1->height));
+	cvCopy(Img1, correspond);
+	cvSetImageROI(correspond, cvRect(Img1->width, 0, correspond->width, correspond->height));
+	cvCopy(Img2, correspond);
+	cvResetImageROI(correspond);
+	DisplayImageCorrespondence(correspond, Img1->width, 0, keypoints1, keypoints2, CorresID, fractionMatchesDisplayed);
+
+	return;
+}
 int main(int argc, char* argv[])
 {
-	char Path[] = "D:/Juggling", Fname[200], Fname2[200];
-	//ShowSyncLoad2(Path);
-	//return 0;
+	char Path[] = "D:/Disney", Fname[200], Fname2[200];
+	/*double K[] = { 5.6899782975011715e+002, 0, 6.3491168470047603e+002, 0, 5.7154638026417649e+002, 4.8530525211848123e+002, 0, 0, 1 };
+	double Distortion[] = { 1.6037658238481549e-003, 6.3388270804725789e+002, 4.8009018607311287e+002 };
+	int startFrame = 0, stopFrame = 15;
 
-	int mode = atoi(argv[1]);
+	LensCorrectionImageSequenceDriver("D:/Disney", K, Distortion, 1, startFrame, stopFrame, 1.0, 1.0, 5);
+	
+	//vector<int> availViews;	availViews.push_back(1);
+	//ExtractSiftGPUfromExtractedFrames("D:/Disney", availViews, startFrame, stopFrame);
+	return 0;*/
 
+	//if (argc == 1)
+	//	visualizationDriver(Path, 1, 0, 198, true, false, true);
+
+	int mode = 3;// atoi(argv[1]);
 	if (mode == 0)
 	{
 		int computeSync = atoi(argv[2]);
@@ -515,7 +760,10 @@ int main(int argc, char* argv[])
 				printf("Succeed\n");
 		}
 		else
-			ShowSyncLoad(Path);
+		{
+			int writeSyncedImages = atoi(argv[3]);
+			ShowSyncLoad(Path, writeSyncedImages);
+		}
 		return 0;
 	}
 	else if (mode == 1)
@@ -528,11 +776,13 @@ int main(int argc, char* argv[])
 	else if (mode == 2)
 	{
 		//Undistort and compute sift for all extracted frames
-		int nviews = 10, nframes = 500;
-		CameraData *AllViewsInfo = new CameraData[nviews];
+		int nviews = 1, nframes = 1400;
+		/*CameraData *AllViewsInfo = new CameraData[nviews];
 		if (ReadIntrinsicResults(Path, AllViewsInfo, nviews) != 0)
-			return 1;
-		vector<int> availViews; availViews.push_back(9);
+		return 1;*/
+		vector<int> availViews;
+		for (int ii = 1; ii <= nviews; ii++)
+			availViews.push_back(ii);
 		/*for (int ii = 9; ii < nviews; ii++)
 		{
 		AllViewsInfo[ii].LensModel = RADIAL_TANGENTIAL_PRISM;
@@ -541,14 +791,17 @@ int main(int argc, char* argv[])
 		LensCorrectionVideoDriver(Fname, Fname2, AllViewsInfo[ii].K, AllViewsInfo[ii].distortion, 0, nframes, 5); //e.g. D1.png -->1.png
 		availViews.push_back(ii);
 		}*/
-		ExtractSiftGPUfromExtractedFrames(Path, availViews, 1, nframes);
+		ExtractSiftGPUfromExtractedFrames(Path, availViews, 0, nframes);
 	}
 	else if (mode == 3)
 	{
-		bool intrinsicsCalibrated = false;
-		int nSviews =atoi(argv[3]),
-			NPplus = atoi(argv[4]);
-		//GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nSviews, -1, 0.6, 1, 1, 1, 0);
+		int nSviews = 39,//atoi(argv[3]),
+			NPplus = 5,//atoi(argv[4]),
+			OutlierRemoval = 1;// atoi(argv[5]);
+
+		bool distortionCorrected = false, intrinsicsCalibrated = false;
+		int nCams = 1, CamUsedToScan = 0;
+		//GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nSviews, -1, 0.6, distortionCorrected, OutlierRemoval, nCams, CamUsedToScan);
 
 		/*double start = omp_get_wtime();
 		for (int jj = 0; jj < nSviews - 1; jj++)
@@ -558,8 +811,8 @@ int main(int argc, char* argv[])
 		printf("Finished pruning matches ... in %.2fs\n", omp_get_wtime() - start);
 
 		GenerateMatchingTable(Path, nSviews, -1);*/
-		BuildCorpus(Path, 1, 0, 1920, 1080, intrinsicsCalibrated, NPplus);
-		visualizationDriver(Path, 1, -1, -1);
+		BuildCorpus(Path, 1, 0, 1280, 960, intrinsicsCalibrated, distortionCorrected, NPplus);
+		visualizationDriver(Path, 1, -1, -1, true, false, false);
 	}
 	else if (mode == 4)
 	{
@@ -568,32 +821,97 @@ int main(int argc, char* argv[])
 			seletectedCam = atoi(argv[4]),
 			runMatching = atoi(argv[5]);
 
-		FILE*fp = fopen("C:/temp/intrinsic.txt", "w+");	fclose(fp);
+		sprintf(Fname, "%s/intrinisc_%d.txt", Path, seletectedCam);
+		FILE*fp = fopen(Fname, "w+");	fclose(fp);
 
 		int nCams = 5;
-		LocalizeCameraFromCorpusDriver(Path, StartTime, StopTime, runMatching, nCams, seletectedCam, false);
-		if (runMatching == 0)
-			visualizationDriver(Path, nCams, StartTime, StopTime);
+		if (runMatching > 0)
+			LocalizeCameraFromCorpusDriver(Path, StartTime, StopTime, runMatching, nCams, seletectedCam, false);
+		if (runMatching == -1)
+			visualizationDriver(Path, nCams, StartTime, StopTime, true, true, false);
 	}
 	else if (mode == 5)
 	{
-		GenerateCorpusVisualWords("C:/temp/BOW", 24);
-		ComputeWordsHistogram("C:/temp/BOW", 3);
+		int StartTime = atoi(argv[2]),
+			StopTime = atoi(argv[3]),
+			nviews = atoi(argv[4]);
+		double reprojectionThreshold = 5;
+		int OutlierRemoval = 2;//fmat test
+		bool distortionCorrected = true;
+
+		//for (int timeID = StartTime; timeID <= StopTime; timeID++)
+		//	GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nviews, timeID, 0.6, distortionCorrected, OutlierRemoval, 1, 0);
+
+		/*for (int timeID = StartTime; timeID <= StopTime; timeID++)
+		{
+		for (int jj = 0; jj < nviews - 1; jj++)
+		{
+		#pragma omp parallel for
+		for (int ii = jj + 1; ii < nviews; ii++)
+		{
+		if (OutlierRemoval == 1)
+		EssentialMatOutliersRemove(Path, timeID, jj, ii, nviews, -1, 40, distortionCorrected, false);
+		if (OutlierRemoval == 2)
+		FundamentalMatOutliersRemove(Path, timeID, jj, ii, 40, distortionCorrected, false);
+		}
+		}
+		GenerateMatchingTable(Path, nviews, timeID);
+		}*/
+
+		distortionCorrected = false;
+		Build3DFromSyncedImages(Path, nviews, StartTime, StopTime, distortionCorrected, reprojectionThreshold);
+		return 0;
 	}
 	else if (mode == 6)
 	{
 		//google::InitGoogleLogging("SfM");
 		//IncrementalBundleAdjustment(Path, nviews, -1, 20000);
-		int ScannedCorpusCam = 6, nVideoCams = 10,
-			startTime = 1, stopTime = 500,
-			LensModel = RADIAL_TANGENTIAL_PRISM, distortionCorrected = true;
-		int selectedCams[] = { 3, 5 }, seletectedTime[2] = { 20, 75 }, ChooseCorpusView1 = -1, ChooseCorpusView2 = -1;
+		int nVideoCams = 5,
+			startTime = 0, stopTime = 199,
+			LensModel = RADIAL_TANGENTIAL_PRISM;
+		bool distortionCorrected = true;
+		int selectedCams[] = { 1, 2 }, selectedTime[2] = { 0, 0 }, ChooseCorpusView1 = -1, ChooseCorpusView2 = -1;
 
-		CorpusandVideo CorpusandVideoInfo;
-		ReadCorpusAndVideoData(Path, CorpusandVideoInfo, ScannedCorpusCam, nVideoCams, startTime, stopTime, LensModel, distortionCorrected);
+		VideoData AllVideoInfo;
+		ReadVideoData(Path, AllVideoInfo, nVideoCams, startTime, stopTime, distortionCorrected);
 
 		double Fmat[9];
-		computeFmatfromKRT(CorpusandVideoInfo, selectedCams, seletectedTime, ChooseCorpusView1, ChooseCorpusView2, Fmat);
+		int seletectedIDs[2] = { selectedCams[0] * (stopTime - startTime + 1) + selectedTime[0], selectedCams[1] * (stopTime - startTime + 1) + selectedTime[1] };
+		computeFmatfromKRT(AllVideoInfo.VideoInfo, 5, seletectedIDs, Fmat);
+		return 0;
+	}
+	else if (mode == 7)
+	{
+		GenerateCorpusVisualWords("C:/temp/BOW", 24);
+		ComputeWordsHistogram("C:/temp/BOW", 3);
+	}
+	else
+	{
+		//
+		//siftgpu("D:/1_0.png", "D:/2_0.png", 0.5, 0.5);
+		//VisualizeCleanMatches(Path, 1, 2, 0, 0.01);
+		int submode = atoi(argv[2]);
+		if (submode == -1)
+			ShowSyncLoad2("C:/Data/GoPro", 0);
+		else if (submode == 0)
+			ShowSyncLoad(Path, 0);
+		else if (submode == 1)
+			visualizationDriver(Path, 5, 0, 199, true, true, false);
+		else if (submode == 2)
+			visualizationDriver(Path, 1, 0, 198, true, false, true);
+
+		/*char ImgName[200], Kname[200], KRGBName[200];
+		for (int ii = 1; ii < 5; ii++)
+		{
+		for (int jj = 0; jj < 199; jj++)
+		{
+		sprintf(ImgName, "%s/%d/%d.png", Path, ii, jj);
+		sprintf(Kname, "%s/%d/K%d.dat", Path, ii, jj);
+		sprintf(KRGBName, "%s/%d/KRGB%d.dat", Path, ii, jj);
+		GenereteKeyPointsRGB(ImgName, Kname, KRGBName);
+		printf("Wrote %s\n", KRGBName);
+		}
+		}*/
 		return 0;
 	}
 

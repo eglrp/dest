@@ -33,32 +33,33 @@ using namespace cv;
 
 
 
-void FishEyeDistortionPoint(Point2d *Points, double omega, double DistCtrX, double DistCtrY, int npts);
+void FishEyeDistortionPoint(Point2d *Points, double omega, double DistCtrX, double DistCtrY, int npts= 1);
 void FishEyeCorrectionPoint(Point2d *Points, double omega, double DistCtrX, double DistCtrY, int npts = 1); /////////////////////////////calib_new.txt
 void FishEyeCorrection(unsigned char *Img, int width, int height, int nchannels, double omega, double DistCtrX, double DistCtrY, int intepAlgo, double ImgMag, double Contscale, double *Para = NULL);
 
 void FishEyeCorrectionPoint(Point2d *Points, double *K, double* invK, double omega, int npts = 1); /////////////////////////////calib.txt
-void FishEyeDistortionPoint(Point2d *Points, double *K, double* invK, double omega, int npts);
+void FishEyeDistortionPoint(Point2d *Points, double *K, double* invK, double omega, int npts = 1);
 void FishEyeCorrection(unsigned char *Img, int width, int height, int nchannels, double *K, double* invK, double omega, int intepAlgo, double ImgMag, double Contscale, double *Para = NULL);
 
-void LensDistortionPoint(Point2d *img_point, double *camera, double *distortion, int npts = 1);
+void LensDistortionPoint(Point2d *img_point, double *K, double *distortion, int npts = 1);
+void LensDistortionPoint(vector<Point2d> &img_point, double *K, double *distortion);
 void LensCorrectionPoint(Point2d *uv, double *K, double *distortion, int npts = 1); 
-void LensCorrectionPoint(vector<Point2d> &uv, double *camera, double *distortion);
+void LensCorrectionPoint(vector<Point2d> &uv, double *K, double *distortion);
 void LensUndistortion(unsigned char *Img, int width, int height, int nchannels, double *K, double *distortion, int intepAlgo, double ImgMag, double Contscale, double *Para = NULL);
 
 void computeFmatfromKRT(CameraData *CameraInfo, int nvews, int *selectedIDs, double *Fmat);
 void computeFmatfromKRT(CorpusandVideo &CorpusandVideoInfo, int *selectedCams, int *seletectedTime, int ChooseCorpusView1, int ChooseCorpusView2, double *Fmat);
 
-int USAC_FindFundamentalMatrix(ConfigParamsFund cfg, vector<Point2d> pts1, vector<Point2d>pts2, double *Fmat, vector<int>&Inlier);
+int USAC_FindFundamentalMatrix(ConfigParamsFund cfg, vector<Point2d> pts1, vector<Point2d>pts2, double *Fmat, vector<int>&InlierIndicator, int &ninliers);
 int USAC_FindFundamentalDriver(char *Path, int id1, int id2, int timeID);
-int USAC_FindHomography(ConfigParamsHomog cfg, vector<Point2d> pts1, vector<Point2d>pts2, double *Hmat, vector<int>&Inlier);
+int USAC_FindHomography(ConfigParamsHomog cfg, vector<Point2d> pts1, vector<Point2d>pts2, double *Hmat, vector<int>&InlierIndicator, int &ninliers);
 int USAC_FindHomographyDriver(char *Path, int id1, int id2, int timeID);
 
 int GeneratePointsCorrespondenceMatrix(char *Path, int nviews, int timeID);
 void GenerateViewCorrespondenceMatrix(char *Path, int nviews, int timeID);
 int ExtractSiftGPUfromExtractedFrames(char *Path, vector<int> nviews, int startF, int stopF);
-int GeneratePointsCorrespondenceMatrix_SiftGPU1(char *Path, int nviews, int timeID, float nndrRatio = 0.8, bool distortionCorrected = true, int OulierRemoveTestMethod = 1, int nCams = 10, int cameraToScan = 1);
-int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int timeID, float nndrRatio = 0.8, bool distortionCorrected = true, int OulierRemoveTestMethod = 1, int nCams = 10, int cameraToScan = 1);
+int GeneratePointsCorrespondenceMatrix_SiftGPU1(char *Path, int nviews, int timeID, float nndrRatio = 0.8, int distortionCorrected = 1, int OulierRemoveTestMethod = 1, int nCams = 10, int cameraToScan = 1);
+int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int timeID, float nndrRatio = 0.8, int distortionCorrected = 1, int OulierRemoveTestMethod = 1, int nCams = 10, int cameraToScan = 1);
 void GenerateMatchingTable(char *Path, int nviews, int timeID);
 void BestPairFinder(char *Path, int nviews, int timeID, int &viewPair);
 int NextViewFinder(char *Path, int nviews, int timeID, int currentView, int &maxPoints, vector<int> usedPairs);
@@ -87,12 +88,12 @@ int AddNewViewReconstruction(char *Path, CameraData *AllViewsParas, int nviews, 
 int IncrementalBA(char *Path, int nviews, int timeID, CameraData *AllViewsParas, vector<int> AvailViews, vector<int> Selected3DIndex, Point3d *All3D, vector<Point2d> *selected2D, vector<int>*nSelectedViews, int nSelectedPts, int totalPts, bool fixSkew, bool fixIntrinsic, bool fixDistortion, bool debug);
 void IncrementalBundleAdjustment(char *Path, int nviews, int timeID, int maxKeypoints);
 
-int BuildCorpus(char *Path, int nCameras, int CameraToScan, int width, int height, bool IntrinsicCalibrated, bool distortionCorrected, int NDplus = 5);
-int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime, bool distortionCorrected, double Reprojectionthreshold);
+int BuildCorpus(char *Path, int nCameras, int CameraToScan, int width, int height, bool IntrinsicCalibrated, int distortionCorrected, int NDplus = 5);
+int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime, int distortionCorrected, double Reprojectionthreshold);
 int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d> uvAll3D, vector<bool> &Good, bool fixIntrinsic, bool fixDistortion, bool debug);
 
-int MatchCameraToCorpus(char *Path, Corpus &corpusData, int cameraID, int timeID, vector<int> CorpusViewToMatch, const float nndrRatio = 0.6f, const int ninlierThresh = 40);
+int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int cameraID, int timeID, int distortionCorrected, vector<int> CorpusViewToMatch, const float nndrRatio = 0.6f, const int ninlierThresh = 40);
 int EstimateCameraPoseFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraParas, int cameraID, bool fixedIntrinsc, bool fixedDistortion, int timeID);
-int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, bool RunMatching, int nCams, int selectedCams, bool distortionCorrected);
+int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, bool RunMatching, int nCams, int selectedCams, int distortionCorrected, int LensType);
 
 #endif

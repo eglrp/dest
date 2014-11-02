@@ -544,7 +544,7 @@ int TestPnP(char *Path, int nCams, int selectedCams)
 	int nviews = corpusData.nCamera;
 
 	CameraData *cameraInfo = new CameraData[nCams];
-	if (ReadIntrinsicResults(Path, cameraInfo, nCams) != 0)
+	if (ReadIntrinsicResults(Path, cameraInfo) != 0)
 		return 1;
 	if (selectedCams != -1)
 	{
@@ -730,7 +730,7 @@ int main(int argc, char* argv[])
 	int startFrame = 0, stopFrame = 15;
 
 	LensCorrectionImageSequenceDriver("D:/Disney", K, Distortion, 1, startFrame, stopFrame, 1.0, 1.0, 5);
-	
+
 	//vector<int> availViews;	availViews.push_back(1);
 	//ExtractSiftGPUfromExtractedFrames("D:/Disney", availViews, startFrame, stopFrame);
 	return 0;*/
@@ -738,7 +738,13 @@ int main(int argc, char* argv[])
 	//if (argc == 1)
 	//	visualizationDriver(Path, 1, 0, 198, true, false, true);
 
-	int mode = 3;// atoi(argv[1]);
+	/*Mat img = imread("D:/Disney/0/1.png", 0);
+	Mat equalizedImg;
+	equalizeHist(img, equalizedImg);
+	imwrite("C:/temp/equalize.png", equalizedImg);
+	return 0;*/
+
+	int mode = atoi(argv[1]);
 	if (mode == 0)
 	{
 		int computeSync = atoi(argv[2]);
@@ -768,40 +774,32 @@ int main(int argc, char* argv[])
 	}
 	else if (mode == 1)
 	{
-		char *Fname = argv[1], *Fname2 = argv[2];
+		char *Fname = argv[2], *Fname2 = argv[3];
 		int nNonBlurIma = 0;
 		PickStaticImagesFromVideo(Fname, Fname2, 20, 15, 30, 50, nNonBlurIma, true);
 		BlurDetectionDriver(Fname, nNonBlurIma, 1920, 1080, 0.1);
 	}
 	else if (mode == 2)
 	{
-		//Undistort and compute sift for all extracted frames
-		int nviews = 1, nframes = 1400;
-		/*CameraData *AllViewsInfo = new CameraData[nviews];
-		if (ReadIntrinsicResults(Path, AllViewsInfo, nviews) != 0)
-		return 1;*/
+		int nviews = 1,//atoi(argv[2]),
+			nframes = 10;// atoi(argv[3]);
+
 		vector<int> availViews;
-		for (int ii = 1; ii <= nviews; ii++)
+		for (int ii = 0; ii < nviews; ii++)
 			availViews.push_back(ii);
-		/*for (int ii = 9; ii < nviews; ii++)
-		{
-		AllViewsInfo[ii].LensModel = RADIAL_TANGENTIAL_PRISM;
-		sprintf(Fname, "%s/%d", Path, ii);
-		sprintf(Fname2, "%s/%d/s2.mp4", Path, ii);
-		LensCorrectionVideoDriver(Fname, Fname2, AllViewsInfo[ii].K, AllViewsInfo[ii].distortion, 0, nframes, 5); //e.g. D1.png -->1.png
-		availViews.push_back(ii);
-		}*/
+
 		ExtractSiftGPUfromExtractedFrames(Path, availViews, 0, nframes);
 	}
 	else if (mode == 3)
 	{
-		int nSviews = 39,//atoi(argv[3]),
-			NPplus = 5,//atoi(argv[4]),
-			OutlierRemoval = 1;// atoi(argv[5]);
+		int nSviews = atoi(argv[2]),
+			NPplus = atoi(argv[3]),
+			distortionCorrected = atoi(argv[4]),
+			OutlierRemoval = atoi(argv[5]);
 
-		bool distortionCorrected = false, intrinsicsCalibrated = false;
+		int   intrinsicsCalibrated = false;
 		int nCams = 1, CamUsedToScan = 0;
-		//GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nSviews, -1, 0.6, distortionCorrected, OutlierRemoval, nCams, CamUsedToScan);
+		GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nSviews, -1, 0.6, distortionCorrected, OutlierRemoval, nCams, CamUsedToScan);
 
 		/*double start = omp_get_wtime();
 		for (int jj = 0; jj < nSviews - 1; jj++)
@@ -819,14 +817,15 @@ int main(int argc, char* argv[])
 		int StartTime = atoi(argv[2]),
 			StopTime = atoi(argv[3]),
 			seletectedCam = atoi(argv[4]),
-			runMatching = atoi(argv[5]);
+			runMatching = atoi(argv[5]),
+			distortionCorrected = atoi(argv[6]);
 
 		sprintf(Fname, "%s/intrinisc_%d.txt", Path, seletectedCam);
 		FILE*fp = fopen(Fname, "w+");	fclose(fp);
 
-		int nCams = 5;
+		int nCams = 1, LensType = FISHEYE;
 		if (runMatching > 0)
-			LocalizeCameraFromCorpusDriver(Path, StartTime, StopTime, runMatching, nCams, seletectedCam, false);
+			LocalizeCameraFromCorpusDriver(Path, StartTime, StopTime, runMatching, nCams, seletectedCam, distortionCorrected, LensType);
 		if (runMatching == -1)
 			visualizationDriver(Path, nCams, StartTime, StopTime, true, true, false);
 	}
@@ -837,7 +836,7 @@ int main(int argc, char* argv[])
 			nviews = atoi(argv[4]);
 		double reprojectionThreshold = 5;
 		int OutlierRemoval = 2;//fmat test
-		bool distortionCorrected = true;
+		int distortionCorrected = 1;
 
 		//for (int timeID = StartTime; timeID <= StopTime; timeID++)
 		//	GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nviews, timeID, 0.6, distortionCorrected, OutlierRemoval, 1, 0);

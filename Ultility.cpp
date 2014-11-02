@@ -1184,6 +1184,54 @@ void GenereteKeyPointsRGB(char *ImgName, char *KName, char *KeyRGBName)
 
 	delete[]Img;
 }
+bool WriteRGBBinarySIFTGPU(char *fn, vector<Point3i> rgb, bool silent)
+{
+	ofstream fout;
+	fout.open(fn, ios::binary);
+	if (!fout.is_open())
+	{
+		if (silent)
+			cout << "Cannot write: " << fn << endl;
+		return false;
+	}
+
+	int npts = rgb.size();
+	fout.write(reinterpret_cast<char *>(&npts), sizeof(int));
+	for (int j = 0; j < npts; ++j)
+	{
+		fout.write(reinterpret_cast<char *>(&rgb.at(j).x), sizeof(int));
+		fout.write(reinterpret_cast<char *>(&rgb.at(j).y), sizeof(int));
+		fout.write(reinterpret_cast<char *>(&rgb.at(j).z), sizeof(int));
+	}
+	fout.close();
+
+	return true;
+}
+bool ReadRGBBinarySIFTGPU(char *fn, vector<Point3i> &rgb, bool silent)
+{
+	ifstream fin;
+	fin.open(fn, ios::binary);
+	if (!fin.is_open())
+	{
+		cout << "Cannot open: " << fn << endl;
+		return false;
+	}
+	if (silent)
+		cout << "Load " << fn << endl;
+
+	int r, g, b, npts;
+	fin.read(reinterpret_cast<char *>(&npts), sizeof(int));
+	rgb.reserve(npts); rgb.clear();
+	for (int ii = 0; ii < npts; ii++)
+	{
+		fin.read(reinterpret_cast<char *>(&r), sizeof(int));
+		fin.read(reinterpret_cast<char *>(&g), sizeof(int));
+		fin.read(reinterpret_cast<char *>(&b), sizeof(int));
+		rgb.push_back(Point3i(r, g, b));
+	}
+
+	return true;
+}
 bool WriteKPointsRGBBinarySIFTGPU(char *fn, vector<SiftKeypoint>kpts, vector<Point3i> rgb, bool silent)
 {
 	ofstream fout;
@@ -1859,7 +1907,7 @@ int LensCorrectionImageSequenceDriver(char *Path, double *K, double *distortion,
 
 	for (int Id = StartFrame; Id <= StopFrame; Id++)
 	{
-		sprintf(Fname, "%s/CorpusDistortted/%d.png", Path, Id);	cvImg = imread(Fname, 1);
+		sprintf(Fname, "%s/0/%d.png", Path, Id);	cvImg = imread(Fname, 1);
 		if (cvImg.empty())
 		{
 			printf("Cannot load %s\n", Fname);
@@ -1898,7 +1946,7 @@ int LensCorrectionImageSequenceDriver(char *Path, double *K, double *distortion,
 				for (int ii = 0; ii < Mwidth; ii++)
 					nImg.data[ii*nchannels + jj*Mwidth*nchannels + kk] = Img[ii + jj*Mwidth + kk*Mlength];
 
-		sprintf(Fname, "%s/_%d.png", Path, Id);
+		sprintf(Fname, "%s/0/_%d.png", Path, Id);
 		imwrite(Fname, nImg);
 	}
 
@@ -2008,7 +2056,7 @@ int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, v
 	cvNamedWindow("Correspondence", CV_WINDOW_NORMAL);
 	cvShowImage("Correspondence", correspond);
 	cvWaitKey(-1);
-
+	printf("Images closed\n");
 	return 0;
 }
 int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, vector<Point2d> keypoints1, vector<Point2d> keypoints2, vector<int>pair, double density)
@@ -2049,7 +2097,7 @@ int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, v
 	cvNamedWindow("Correspondence", CV_WINDOW_NORMAL);
 	cvShowImage("Correspondence", correspond);
 	cvWaitKey(-1);
-
+	printf("Images closed\n");
 	return 0;
 }
 int DisplayImageCorrespondencesDriver(char *Path, vector<int>AvailViews, int timeID, int nchannels, double density)
@@ -2094,12 +2142,12 @@ int DisplayImageCorrespondencesDriver(char *Path, vector<int>AvailViews, int tim
 	return 0;
 }
 
-int ReadIntrinsicResults(char *path, CameraData *AllViewsParas, int nHDs)
+int ReadIntrinsicResults(char *path, CameraData *AllViewsParas)
 {
 	//Note that visCamualSfm use different lens model than openCV or matlab or yours (inverse model)
 	char Fname[200];
 	int id = 0, lensType;
-	double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1;
+	double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1, omega, DistCtrX, DistCtrY;
 
 	sprintf(Fname, "%s/DevicesIntrinsics.txt", path); FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
@@ -2107,7 +2155,7 @@ int ReadIntrinsicResults(char *path, CameraData *AllViewsParas, int nHDs)
 		cout << "Cannot load " << Fname << endl;
 		return 1;
 	}
-	while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ", &lensType, &fx, &fy, &skew, &u0, &v0, &r0, &r1, &r2, &t0, &t1, &p0, &p1) != EOF)
+	while (fscanf(fp, "%d %lf %lf %lf %lf %lf ", &lensType, &fx, &fy, &skew, &u0, &v0) != EOF)
 	{
 		AllViewsParas[id].LensModel = lensType;
 		AllViewsParas[id].K[0] = fx, AllViewsParas[id].K[1] = skew, AllViewsParas[id].K[2] = u0,
@@ -2116,10 +2164,20 @@ int ReadIntrinsicResults(char *path, CameraData *AllViewsParas, int nHDs)
 
 		GetIntrinsicFromK(AllViewsParas[id]);
 		//mat_invert(AllViewsParas[id].K, AllViewsParas[id].iK);
-
-		AllViewsParas[id].distortion[0] = r0, AllViewsParas[id].distortion[1] = r1, AllViewsParas[id].distortion[2] = r2;
-		AllViewsParas[id].distortion[3] = t0, AllViewsParas[id].distortion[4] = t1;
-		AllViewsParas[id].distortion[5] = p0, AllViewsParas[id].distortion[6] = p1;
+		if (lensType == RADIAL_TANGENTIAL_PRISM)
+		{
+			fscanf(fp, " %lf %lf %lf %lf %lf %lf %lf ", &r0, &r1, &r2, &t0, &t1, &p0, &p1);
+			AllViewsParas[id].distortion[0] = r0, AllViewsParas[id].distortion[1] = r1, AllViewsParas[id].distortion[2] = r2;
+			AllViewsParas[id].distortion[3] = t0, AllViewsParas[id].distortion[4] = t1;
+			AllViewsParas[id].distortion[5] = p0, AllViewsParas[id].distortion[6] = p1;
+		}
+		else
+		{
+			fscanf(fp, " %lf %lf %lf ", &omega, &DistCtrX, &DistCtrY);
+			AllViewsParas[id].distortion[0] = omega, AllViewsParas[id].distortion[1] = DistCtrX, AllViewsParas[id].distortion[2] = DistCtrY;
+			AllViewsParas[id].distortion[3] = 0, AllViewsParas[id].distortion[4] = 0;
+			AllViewsParas[id].distortion[5] = 0, AllViewsParas[id].distortion[6] = 0;
+		}
 		id++;
 	}
 	fclose(fp);
@@ -2131,7 +2189,7 @@ int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams)
 	//Note that visCamualSfm use different lens model than openCV or matlab or yours (inverse model)
 	char Fname[200];
 	int id = 0, LensType;
-	double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1;
+	double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1, omega, DistCtrX, DistCtrY;
 
 	sprintf(Fname, "%s/R_DevicesIntrinsics.txt", path); FILE *fp = fopen(Fname, "w+");
 	if (fp == NULL)
@@ -2144,10 +2202,18 @@ int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams)
 		LensType = AllViewsParas[id].LensModel;
 		fx = AllViewsParas[id].K[0], fy = AllViewsParas[id].K[4], skew = AllViewsParas[id].K[1], u0 = AllViewsParas[id].K[2], v0 = AllViewsParas[id].K[5];
 
-		r0 = AllViewsParas[id].distortion[0], r1 = AllViewsParas[id].distortion[1], r2 = AllViewsParas[id].distortion[2];
-		t0 = AllViewsParas[id].distortion[3], t1 = AllViewsParas[id].distortion[4];
-		p0 = AllViewsParas[id].distortion[5], p1 = AllViewsParas[id].distortion[6];
-		fprintf(fp, "%d %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f\n", LensType, fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1);
+		if (LensType == RADIAL_TANGENTIAL_PRISM)
+		{
+			r0 = AllViewsParas[id].distortion[0], r1 = AllViewsParas[id].distortion[1], r2 = AllViewsParas[id].distortion[2];
+			t0 = AllViewsParas[id].distortion[3], t1 = AllViewsParas[id].distortion[4];
+			p0 = AllViewsParas[id].distortion[5], p1 = AllViewsParas[id].distortion[6];
+			fprintf(fp, "%d %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f\n", LensType, fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1);
+		}
+		else
+		{
+			omega = AllViewsParas[id].distortion[0], DistCtrX = AllViewsParas[id].distortion[1], DistCtrY = AllViewsParas[id].distortion[2];
+			fprintf(fp, "%d %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f %.8f\n", LensType, fx, fy, skew, omega, DistCtrX, DistCtrY);
+		}
 	}
 	fclose(fp);
 
@@ -2886,6 +2952,8 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 			CorpusData.camera[viewID].distortion[0] = omega,
 				CorpusData.camera[viewID].distortion[1] = DistCtrX,
 				CorpusData.camera[viewID].distortion[2] = DistCtrY;
+			for (int jj = 3; jj < 7; jj++)
+				CorpusData.camera[viewID].distortion[jj] = 0;
 		}
 
 		CorpusData.camera[viewID].intrinsic[0] = fx,
@@ -2893,7 +2961,7 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 			CorpusData.camera[viewID].intrinsic[2] = skew,
 			CorpusData.camera[viewID].intrinsic[3] = u0,
 			CorpusData.camera[viewID].intrinsic[4] = v0;
-		
+
 		for (int jj = 0; jj < 3; jj++)
 		{
 			CorpusData.camera[viewID].rt[jj] = rv[jj];
@@ -2986,6 +3054,25 @@ int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary)
 			fprintf(fp, "%.4f %.4f\n", CorpusData.uvAllViews.at(ii).at(jj).x, CorpusData.uvAllViews.at(ii).at(jj).y);
 		fclose(fp);
 	}
+
+	sprintf(Fname, "%s/Corpus_Intrinsics.txt", Path); fp = fopen(Fname, "w+");
+	for (int viewID = 0; viewID < CorpusData.nCamera; viewID++)
+	{
+		fprintf(fp, "%d ", CorpusData.camera[viewID].LensModel);
+		for (int ii = 0; ii < 5; ii++)
+			fprintf(fp, "%.8f ", CorpusData.camera[viewID].intrinsic[ii]);
+
+		if (CorpusData.camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
+			for (int ii = 0; ii < 7; ii++)
+				fprintf(fp, "%.8f ", CorpusData.camera[viewID].distortion[ii]);
+		else
+		{
+			for (int ii = 0; ii < 3; ii++)
+				fprintf(fp, "%.8f ", CorpusData.camera[viewID].distortion[ii]);
+		}
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
 
 	if (notbinary)
 	{
@@ -3143,6 +3230,31 @@ int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool notReadD
 		fclose(fp);
 		CorpusData.uvAllViews.push_back(uvVector);
 	}
+
+	sprintf(Fname, "%s/Corpus_Intrinsics.txt", Path); fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		return 1;
+	}
+	CorpusData.camera = new CameraData[nCameras];
+	for (viewID = 0; viewID < nCameras; viewID++)
+	{
+		fscanf(fp, "%d ", &CorpusData.camera[viewID].LensModel);
+		for (int ii = 0; ii < 5; ii++)
+			fscanf(fp, "%lf ", &CorpusData.camera[viewID].intrinsic[ii]);
+
+		if (CorpusData.camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
+			for (int ii = 0; ii < 7; ii++)
+				fscanf(fp, "%lf ", &CorpusData.camera[viewID].distortion[ii]);
+		else
+		{
+			for (int ii = 0; ii < 3; ii++)
+				fscanf(fp, "%lf ", &CorpusData.camera[viewID].distortion[ii]);
+		}
+		GetKFromIntrinsic(CorpusData.camera[viewID]);
+	}
+	fclose(fp);
 
 	if (notReadDescriptor)
 		return 0;
@@ -3415,18 +3527,18 @@ int ComputeWordsHistogram(char *Path, int nimages)
 	}
 	return 0;
 }
-int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel, bool distortionCorrected)
+int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel, int distortionCorrected)
 {
 	char Fname[200];
 
 	//READ INTRINSIC: START
 	CameraData *IntrinsicInfo = new CameraData[nVideoViews];
-	if (ReadIntrinsicResults(Path, IntrinsicInfo, nVideoViews) != 0)
+	if (ReadIntrinsicResults(Path, IntrinsicInfo) != 0)
 		return 1;
 	for (int ii = 0; ii < nVideoViews; ii++)
 	{
 		IntrinsicInfo[ii].LensModel = LensModel, IntrinsicInfo[ii].threshold = 3.0, IntrinsicInfo[ii].ninlierThresh = 40;
-		if (distortionCorrected)
+		if (distortionCorrected == 1)
 			for (int jj = 0; jj < 7; jj++)
 				IntrinsicInfo[ii].distortion[jj] = 0.0;
 	}
@@ -3529,7 +3641,7 @@ int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int S
 
 	return 0;
 }
-int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime, bool distortionCorrected)
+int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime, int distortionCorrected)
 {
 	char Fname[200];
 	int videoID, frameID;
@@ -3562,7 +3674,7 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 			AllVideoInfo.VideoInfo[frameID + videoID].distortion[5] = p0, AllVideoInfo.VideoInfo[frameID + videoID].distortion[6] = p1;
 
 			AllVideoInfo.VideoInfo[frameID + videoID].LensModel = RADIAL_TANGENTIAL_PRISM, AllVideoInfo.VideoInfo[frameID + videoID].threshold = 3.0, AllVideoInfo.VideoInfo[frameID + videoID].ninlierThresh = 40;
-			if (distortionCorrected)
+			if (distortionCorrected == 1)
 				for (int jj = 0; jj < 7; jj++)
 					AllVideoInfo.VideoInfo[frameID + videoID].distortion[jj] = 0.0;
 

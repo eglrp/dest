@@ -86,6 +86,8 @@ bool ReadDescriptorBinarySIFTGPU(char *fn, vector<float > &descriptors, bool sil
 Mat ReadDescriptorBinarySIFTGPU(char *fn, bool silent = false);
 
 void GenereteKeyPointsRGB(char *ImgName, char *KName, char *KeyRGBName);
+bool WriteRGBBinarySIFTGPU(char *fn, vector<Point3i> rgb, bool silent = false);
+bool ReadRGBBinarySIFTGPU(char *fn, vector<Point3i> &rgb, bool silent = false);
 bool WriteKPointsRGBBinarySIFTGPU(char *fn, vector<SiftKeypoint>kpts, vector<Point3i> rgb, bool silent = false);
 bool ReadKPointsRGBBinarySIFTGPU(char *fn, vector<SiftKeypoint> &kpts, vector<Point3i> &rgb, bool silent = false);
 bool WriteKPointsRGBBinarySIFTGPU(char *fn, vector<KeyPoint>kpts, vector<Point3i> rgb, bool silent = false);
@@ -483,7 +485,7 @@ int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, v
 int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, vector<Point2d> keypoints1, vector<Point2d> keypoints2, vector<int>pair, double density);
 int DisplayImageCorrespondencesDriver(char *Path, vector<int>viewsID, int timeID, int nchannels, double density = 0.25);
 
-int ReadIntrinsicResults(char *path, CameraData *DeviceParas, int nCam);
+int ReadIntrinsicResults(char *path, CameraData *DeviceParas);
 int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams);
 void SaveCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>AvailViews, Point3d *All3D, int npts);
 void ReadCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>&AvailViews, Point3d *All3D, int npts);
@@ -523,8 +525,8 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool outputtext = false);
 int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool inputtext = false, bool notReadDescriptor = false);
 bool loadIndividualNVMforpose(char *Path, CameraData *CameraInfo, vector<int>availViews, int timeIDstart, int timeIDstop, int nviews, bool sharedIntrinsics);
-int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel = RADIAL_TANGENTIAL_PRISM, bool distortionCorrected = true);
-int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime, bool distortionCorrected = true);
+int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel = RADIAL_TANGENTIAL_PRISM, int distortionCorrected = 1);
+int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime, int distortionCorrected = 1);
 
 void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker, int &npts, double sigma, int search_area, int NMS_BW, double thresh);
 

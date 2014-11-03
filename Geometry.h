@@ -33,7 +33,7 @@ using namespace cv;
 
 
 
-void FishEyeDistortionPoint(Point2d *Points, double omega, double DistCtrX, double DistCtrY, int npts= 1);
+void FishEyeDistortionPoint(Point2d *Points, double omega, double DistCtrX, double DistCtrY, int npts = 1);
 void FishEyeCorrectionPoint(Point2d *Points, double omega, double DistCtrX, double DistCtrY, int npts = 1); /////////////////////////////calib_new.txt
 void FishEyeCorrection(unsigned char *Img, int width, int height, int nchannels, double omega, double DistCtrX, double DistCtrY, int intepAlgo, double ImgMag, double Contscale, double *Para = NULL);
 
@@ -43,7 +43,7 @@ void FishEyeCorrection(unsigned char *Img, int width, int height, int nchannels,
 
 void LensDistortionPoint(Point2d *img_point, double *K, double *distortion, int npts = 1);
 void LensDistortionPoint(vector<Point2d> &img_point, double *K, double *distortion);
-void LensCorrectionPoint(Point2d *uv, double *K, double *distortion, int npts = 1); 
+void LensCorrectionPoint(Point2d *uv, double *K, double *distortion, int npts = 1);
 void LensCorrectionPoint(vector<Point2d> &uv, double *K, double *distortion);
 void LensUndistortion(unsigned char *Img, int width, int height, int nchannels, double *K, double *distortion, int intepAlgo, double ImgMag, double Contscale, double *Para = NULL);
 
@@ -69,8 +69,8 @@ int GetPoint3D2DPairCorrespondence(char *Path, int nviews, int timeID, vector<in
 int GetPoint3D2DAllCorrespondence(char *Path, int nviews, int timeID, vector<int> cumulativePts, Point3d *ThreeD, vector<int> AvailViews, vector<int>&Selected3DIndex, vector<Point2d> *selected2D, vector<int>*nselectedviews, int &nselectedPts);
 
 Mat findEssentialMat(InputArray points1, InputArray points2, Mat K1, Mat K2, int method = CV_RANSAC, double prob = 0.999, double threshold = 1, int maxIters = 100, OutputArray mask = noArray());
-void decomposeEssentialMat( const Mat & E, Mat & R1, Mat & R2, Mat & t ); 
-int recoverPose( const Mat & E, InputArray points1, InputArray points2, Mat & R, Mat & t,  Mat K1, Mat K2, InputOutputArray mask = noArray()); 
+void decomposeEssentialMat(const Mat & E, Mat & R1, Mat & R2, Mat & t);
+int recoverPose(const Mat & E, InputArray points1, InputArray points2, Mat & R, Mat & t, Mat K1, Mat K2, InputOutputArray mask = noArray());
 int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCams, int cameraToScan = -1, int ninlierThresh = 40, bool distortionCorrected = true, bool needDuplicateRemove = false);
 int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int ninlierThresh = 40, bool distortionCorrected = true, bool needDuplicateRemove = false, int nCams = 1, int cameraToScan = -1);
 
@@ -80,7 +80,7 @@ void TwoViewTriangulationQualityCheck(Point2d *pts1, Point2d *pts2, Point3d *WC,
 void NviewTriangulation(Point2d *pts, double *P, Point3d *WC, int nview, int npts, double *Cov, double *A, double *B);
 void NviewTriangulationRANSAC(Point2d *pts, double *P, Point3d *WC, bool *PassedTri, vector<int> *Inliers, int nview, int npts, int MaxRanSacIter, double inlierPercent, double threshold, double *A = NULL, double *B = NULL, double *tP = NULL);
 void NviewTriangulationRANSAC(vector<Point2d> *pts, double *P, Point3d *WC, int nview, int npts, int MaxRanSacIter, double inlierPercent, double threshold, double *A = NULL, double *B = NULL);
-int MultiViewQualityCheck(Point2d *Pts, double *Pmat, double *K, double *distortion, bool *PassedPoints, int nviews, int npts, double thresh, Point2d *apts, Point2d *bkapts, int *DeviceMask, double *tK, double *tdistortion, double *tP, double *A, double *B);
+void MultiViewQualityCheck(Point2d *Pts, double *Pmat, int LensType, double *K, double *distortion, bool *PassedPoints, int nviews, int npts, double thresh, Point3d *aWC, Point2d *apts = 0, Point2d *bkapts = 0, int *DeviceMask = 0, double *tK = 0, double *tdistortion = 0, double *tP = 0, double *A = 0, double *B = 0);
 
 int TwoCameraReconstruction(char *Path, CameraData *AllViewsParas, int nviews, int timeID, vector<int> cumulativePts, vector<int> AvailViews, Point3d *ThreeD);
 void DetermineDevicePose(double *K, double *distortion, int LensModel, double *R, double *T, Point2d *pts, Point3d *ThreeD, int npts, int distortionCorrected, double thresh, int &ninliers);

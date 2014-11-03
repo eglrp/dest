@@ -26,6 +26,7 @@ struct CameraData
 	double threshold, ninlierThresh;
 	std::string filename;
 	int nviews;
+	bool notCalibrated;
 };
 
 struct SurfDesc

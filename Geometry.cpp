@@ -440,8 +440,6 @@ void CvEMEstimator::getCoeffMat(double *e, double *A)
 // Input should be a vector of n 2D points or a Nx2 matrix
 Mat findEssentialMat(InputArray _points1, InputArray _points2, Mat K1, Mat K2, int method, double prob, double threshold, int maxIters, OutputArray _mask)
 {
-	srand((unsigned int)time(NULL));
-
 	Mat points1, points2;
 	_points1.getMat().copyTo(points1);
 	_points2.getMat().copyTo(points2);
@@ -851,8 +849,6 @@ int EMatTest()
 
 int USAC_FindFundamentalMatrix(ConfigParamsFund cfg, vector<Point2d> pts1, vector<Point2d>pts2, double *Fmat, vector<int>&InlierIndicator, int &ninlers)
 {
-	srand((unsigned int)time(NULL));
-
 	FundMatrixEstimator* fund = new FundMatrixEstimator;
 	fund->initParamsUSAC(cfg);
 
@@ -1011,8 +1007,6 @@ int USAC_FindFundamentalDriver(char *Path, int id1, int id2, int timeID)
 }
 int USAC_FindHomography(ConfigParamsHomog cfg, vector<Point2d> pts1, vector<Point2d>pts2, double *Hmat, vector<int>&InlierIndicator, int &ninlers)
 {
-	srand((unsigned int)time(NULL));
-
 	HomogEstimator* homog = new HomogEstimator;
 	homog->initParamsUSAC(cfg);
 
@@ -1663,18 +1657,6 @@ int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCa
 	for (int ii = 0; ii < Inliers.cols; ii++)
 		if (Inliers.at<bool>(ii))
 			ninliers++;
-
-	/*fp = fopen("C:/temp/corres.txt", "w+");
-	for (int ii = 0; ii < npts; ii++)
-	fprintf(fp, "%.2f %.2f %.2f %.2f\n", pts1[ii].x, pts1[ii].y, pts2[ii].x, pts2[ii].y);
-	fclose(fp);
-	fp = fopen("C:/temp/inliers.txt", "w+");
-	for (int ii = 0; ii < Inliers.cols; ii++)
-	{
-	if (Inliers.at<bool>(ii))
-	//fprintf(fp, "%d\n", ii);
-	}
-	//fclose(fp);*/
 
 	if (ninliers < camera[0].ninlierThresh)
 	{
@@ -3301,6 +3283,24 @@ int GetPoint3D2DAllCorrespondence(char *Path, int nviews, int timeID, vector<int
 	return 0;
 }
 
+void FisheyeProjectandDistort(Point3d WC, Point2d *pts, double *P, double *distortion, int nviews)
+{
+	int ii;
+	double num1, num2, denum;
+
+	for (ii = 0; ii < nviews; ii++)
+	{
+		num1 = P[ii * 12 + 0] * WC.x + P[ii * 12 + 1] * WC.y + P[ii * 12 + 2] * WC.z + P[ii * 12 + 3];
+		num2 = P[ii * 12 + 4] * WC.x + P[ii * 12 + 5] * WC.y + P[ii * 12 + 6] * WC.z + P[ii * 12 + 7];
+		denum = P[ii * 12 + 8] * WC.x + P[ii * 12 + 9] * WC.y + P[ii * 12 + 10] * WC.z + P[ii * 12 + 11];
+
+		pts[ii].x = num1 / denum, pts[ii].y = num2 / denum;
+		if (distortion != NULL)
+			FishEyeDistortionPoint(&pts[ii], distortion[7 * ii], distortion[7 * ii + 1], distortion[7 * ii + 2]);
+	}
+
+	return;
+}
 void ProjectandDistort(Point3d WC, Point2d *pts, double *P, double *camera, double *distortion, int nviews)
 {
 	int ii;
@@ -3314,7 +3314,7 @@ void ProjectandDistort(Point3d WC, Point2d *pts, double *P, double *camera, doub
 
 		pts[ii].x = num1 / denum, pts[ii].y = num2 / denum;
 		if (camera != NULL)
-			LensDistortionPoint(&pts[ii], camera + ii * 9, distortion + ii * 13);
+			LensDistortionPoint(&pts[ii], camera + ii * 9, distortion + ii * 7);
 	}
 
 	return;
@@ -3396,7 +3396,6 @@ void TwoViewTriangulationQualityCheck(Point2d *pts1, Point2d *pts2, Point3d *WC,
 }
 void NviewTriangulation(Point2d *pts, double *P, Point3d *WC, int nview, int npts, double *Cov, double *A, double *B)
 {
-	srand((unsigned int)time(NULL));
 	int ii, jj, kk;
 	bool MenCreated = false;
 	if (A == NULL)
@@ -3498,7 +3497,6 @@ void NviewTriangulation(Point2d *pts, double *P, Point3d *WC, int nview, int npt
 }
 void NviewTriangulationRANSAC(Point2d *pts, double *P, Point3d *WC, bool *PassedTri, vector<int> *Inliers, int nview, int npts, int MaxRanSacIter, double inlierPercent, double threshold, double *A, double *B, double *tP)
 {
-	srand((unsigned int)time(NULL));
 	int ii, jj, kk, ll, goodCount, bestCount;
 	double u, v;
 	Point2d _pt;
@@ -3700,7 +3698,7 @@ void NviewTriangulationRANSAC(vector<Point2d> *pts, double *P, Point3d *WC, int 
 		delete[]A, delete[]B;
 	return;
 }
-int MultiViewQualityCheck(Point2d *Pts, double *Pmat, double *K, double *distortion, bool *PassedPoints, int nviews, int npts, double thresh, Point2d *apts, Point2d *bkapts, int *DeviceMask, double *tK, double *tdistortion, double *tP, double *A, double *B)
+void MultiViewQualityCheck(Point2d *Pts, double *Pmat, int LensType, double *K, double *distortion, bool *PassedPoints, int nviews, int npts, double thresh, Point3d *aWC, Point2d *apts, Point2d *bkapts, int *DeviceMask, double *tK, double *tdistortion, double *tP, double *A, double *B)
 {
 	//Pts: [pts1; pts2; ...; ptsN]: (npts X nviews) matrix
 	int ii, jj, kk, devCount;
@@ -3712,7 +3710,7 @@ int MultiViewQualityCheck(Point2d *Pts, double *Pmat, double *K, double *distort
 	{
 		createMem = true;
 		apts = new Point2d[nviews], bkapts = new Point2d[nviews], DeviceMask = new int[nviews];
-		tK = new double[9 * nviews], tdistortion = new double[13 * nviews], tP = new double[12 * nviews];
+		tK = new double[9 * nviews], tdistortion = new double[7 * nviews], tP = new double[12 * nviews];
 	}
 
 	for (ii = 0; ii < npts; ii++)
@@ -3727,20 +3725,31 @@ int MultiViewQualityCheck(Point2d *Pts, double *Pmat, double *K, double *distort
 			{
 				bkapts[devCount].x = Pts[jj + ii*nviews].x, bkapts[devCount].y = Pts[jj + ii*nviews].y;
 				apts[devCount].x = bkapts[devCount].x, apts[devCount].y = bkapts[devCount].y;
-				LensCorrectionPoint(&apts[devCount], K + 9 * jj, distortion + 13 * jj);
+				if (LensType == RADIAL_TANGENTIAL_PRISM)
+					LensCorrectionPoint(&apts[devCount], K + 9 * jj, distortion + 7 * jj);
+				else
+					FishEyeCorrectionPoint(&apts[devCount], distortion[7 * jj], distortion[7 * jj + 1], distortion[7 * jj + 2]);
 
 				for (kk = 0; kk < 12; kk++)
 					tP[12 * devCount + kk] = Pmat[12 * jj + kk];
 				for (kk = 0; kk < 9; kk++)
 					tK[9 * devCount + kk] = K[9 * jj + kk];
-				for (kk = 0; kk < 13; kk++)
-					tdistortion[13 * devCount + kk] = distortion[13 * jj + kk];
+				if (LensType == RADIAL_TANGENTIAL_PRISM)
+					for (kk = 0; kk < 7; kk++)
+						tdistortion[7 * devCount + kk] = distortion[7 * jj + kk];
+				else
+					for (kk = 0; kk < 3; kk++)
+						tdistortion[7 * devCount + kk] = distortion[7 * jj + kk];
 				devCount++;
 			}
 		}
 
 		NviewTriangulation(apts, tP, &WC, devCount, 1, NULL, A, B);
-		ProjectandDistort(WC, apts, tP, tK, tdistortion, devCount);
+		aWC[ii] = WC;
+		if (LensType == RADIAL_TANGENTIAL_PRISM)
+			ProjectandDistort(WC, apts, tP, tK, tdistortion, devCount);
+		else
+			FisheyeProjectandDistort(WC, apts, tP, tdistortion, devCount);
 
 		error = 0.0;
 		for (jj = 0; jj < devCount; jj++)
@@ -3758,7 +3767,7 @@ int MultiViewQualityCheck(Point2d *Pts, double *Pmat, double *K, double *distort
 		delete[]tK, delete[]tdistortion, delete[]tP;
 	}
 
-	return 0;
+	return;
 }
 void NviewTriangulationRANSACDriver(CameraData *AllViewsInfo, vector<int>Selected3DIndex, vector<int> *nSelectedViews, vector<Point2d> *Selected2D, int nviews)
 {
@@ -3769,7 +3778,6 @@ void NviewTriangulationRANSACDriver(CameraData *AllViewsInfo, vector<int>Selecte
 	int *BestViewID = new int[nviews * 2];
 	bool *passedTri = new bool[nviews * 2];
 
-	srand((unsigned int)time(NULL));
 	Point3d t3D;
 	for (int ii = 0; ii < Selected3DIndex.size(); ii++)
 	{
@@ -5671,10 +5679,6 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 		return 1;
 	}
 
-	//Mat imgGray, equalizedImg;
-	//cvtColor(img, imgGray, CV_BGR2GRAY);
-	////equalizeHist(imgGray, equalizedImg);
-
 	double start = omp_get_wtime();
 	if (timeID < 0)
 		sprintf(Fname, "%s/%d/K.dat", Path, cameraID);
@@ -5693,18 +5697,11 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 		exit(1);
 	}
 
-	/*{
-		sprintf(Fname, "%s/pts1.txt", Path); FILE *fp = fopen(Fname, "w+");
-		for (int ii = 0; ii < keypoints1.size(); ii++)
-		fprintf(fp, "%.2f %.2f \n", keypoints1[ii].pt.x, keypoints1[ii].pt.y);
-		fclose(fp);
-		}*/
-
 	//remove distortion if needed
 	if (distortionCorrected == 0)
 	{
 		Point2d pt;
-		if (camera[cameraID].LensModel == RADIAL_TANGENTIAL_PRISM)
+		if (camera[cameraID].LensModel == RADIAL_TANGENTIAL_PRISM && camera[cameraID].notCalibrated == false)
 		{
 			for (int ii = 0; ii < keypoints1.size(); ii++)
 			{
@@ -5713,7 +5710,7 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 				keypoints1[ii].pt.x = pt.x, keypoints1[ii].pt.y = pt.y;
 			}
 		}
-		else
+		else if (camera[cameraID].LensModel == FISHEYE &&camera[cameraID].notCalibrated == false)
 		{
 			for (int ii = 0; ii < keypoints1.size(); ii++)
 			{
@@ -5749,6 +5746,9 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 		cfg.sprt.tM = 200.0, cfg.sprt.mS = 2.38, cfg.sprt.delta = 0.05, cfg.sprt.epsilon = 0.15;
 	if (USELOSAC)
 		cfg.losac.innerSampleSize = 15, cfg.losac.innerRansacRepetitions = 5, cfg.losac.thresholdMultiplier = 2.0, cfg.losac.numStepsIterative = 4;
+
+	if (distortionCorrected == 0 && camera[cameraID].distortion != NULL) // allow for more error if the image is not corrected and distortion parameters are unknown
+		cfg.common.inlierThreshold *= 1.5;
 
 	//Match extracted features with Corpus
 	const bool useBFMatcher = false;
@@ -5900,17 +5900,17 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 			{
 				_key1 = key1; _key2 = key2;
 				Point2d pt;
-				if (camera[cameraID].LensModel == RADIAL_TANGENTIAL_PRISM)
+				if (camera[cameraID].LensModel == RADIAL_TANGENTIAL_PRISM && camera[cameraID].notCalibrated == false)
 					LensDistortionPoint(_key1, camera[cameraID].K, camera[cameraID].distortion);
-				else
+				else  if (camera[cameraID].LensModel == FISHEYE && camera[cameraID].notCalibrated == false)
 				{
 					for (int ii = 0; ii < key1.size(); ii++)
 						FishEyeDistortionPoint(&_key1[ii], camera[cameraID].distortion[0], camera[cameraID].distortion[1], camera[cameraID].distortion[2]);
 				}
 
-				if (corpusData.camera[camera2ID].LensModel == RADIAL_TANGENTIAL_PRISM)
+				if (corpusData.camera[camera2ID].LensModel == RADIAL_TANGENTIAL_PRISM && corpusData.camera[camera2ID].notCalibrated == false)
 					LensDistortionPoint(_key2, corpusData.camera[camera2ID].K, corpusData.camera[camera2ID].distortion);
-				else
+				else if (corpusData.camera[camera2ID].LensModel == FISHEYE && corpusData.camera[camera2ID].notCalibrated == false)
 				{
 					for (int ii = 0; ii < key2.size(); ii++)
 						FishEyeDistortionPoint(&_key2[ii], corpusData.camera[camera2ID].distortion[0], corpusData.camera[camera2ID].distortion[1], corpusData.camera[camera2ID].distortion[2]);
@@ -6084,11 +6084,12 @@ int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, bool
 		for (int ii = 0; ii < nCams; ii++)
 		{
 			int width = 1920, height = 1080;
-			double focal = 0.95*max(width, height);
+			double focal = 1.08*max(width, height);
 			AllCamsInfo[ii].intrinsic[0] = focal, AllCamsInfo[ii].intrinsic[1] = focal, AllCamsInfo[ii].intrinsic[2] = 0,
 				AllCamsInfo[ii].intrinsic[3] = width / 2, AllCamsInfo[ii].intrinsic[4] = height / 2;
 			GetKFromIntrinsic(AllCamsInfo[ii]);
 
+			AllCamsInfo[ii].notCalibrated = true;
 			AllCamsInfo[ii].LensModel = LensType, AllCamsInfo[ii].threshold = 3.0, AllCamsInfo[ii].ninlierThresh = ninlierThresh;
 			for (int jj = 0; jj < 7; jj++)
 				AllCamsInfo[ii].distortion[jj] = 0.0;
@@ -6096,7 +6097,7 @@ int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, bool
 	}
 	else
 		for (int ii = 0; ii < nCams; ii++)
-			AllCamsInfo[ii].threshold = 3.0, AllCamsInfo[ii].ninlierThresh = 40;
+			 AllCamsInfo[ii].threshold = 3.0, AllCamsInfo[ii].ninlierThresh = 40;
 
 	double start = omp_get_wtime();
 	char Fname[200];

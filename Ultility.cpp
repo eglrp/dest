@@ -1907,7 +1907,7 @@ int LensCorrectionImageSequenceDriver(char *Path, double *K, double *distortion,
 
 	for (int Id = StartFrame; Id <= StopFrame; Id++)
 	{
-		sprintf(Fname, "%s/0/%d.png", Path, Id);	cvImg = imread(Fname, 1);
+		sprintf(Fname, "%s/%d.png", Path, Id);	cvImg = imread(Fname, 1);
 		if (cvImg.empty())
 		{
 			printf("Cannot load %s\n", Fname);
@@ -1946,7 +1946,7 @@ int LensCorrectionImageSequenceDriver(char *Path, double *K, double *distortion,
 				for (int ii = 0; ii < Mwidth; ii++)
 					nImg.data[ii*nchannels + jj*Mwidth*nchannels + kk] = Img[ii + jj*Mwidth + kk*Mlength];
 
-		sprintf(Fname, "%s/0/_%d.png", Path, Id);
+		sprintf(Fname, "%s/_%d.png", Path, Id);
 		imwrite(Fname, nImg);
 	}
 
@@ -2657,6 +2657,91 @@ void AssembleP(double *K, double *R, double *T, double *P)
 	Set_Sub_Mat(T, RT, 1, 3, 4, 3, 0);
 	mat_mul(K, RT, P, 3, 3, 4);
 	return;
+}
+
+int clickCount = 0;
+Point2i ClickPos[3];
+void ClickLocation(int event, int x, int y, int flags, void* userdata)
+{
+	if (event == EVENT_LBUTTONDOWN)
+	{
+		cout << "Right button of the mouse is clicked - position (" << x << ", " << y << ")" << endl;
+		ClickPos[clickCount].x = x, ClickPos[clickCount].y = y;
+		clickCount++;
+	}
+	if (clickCount > 3)
+		waitKey(-27);
+}
+double DistanceOfTwoPointsSfM(char *Path, int id1, int id2, int id3)
+{
+	printf("Reading Corpus and camera info");
+	char Fname[200];
+
+	Corpus corpusData;
+	sprintf(Fname, "%s/BA_Camera_AllParams_after.txt", Path);
+	if (!loadBundleAdjustedNVMResults(Fname, corpusData))
+		return 1;
+
+	int nviews = corpusData.nCamera;
+	for (int ii = 0; ii < nviews; ii++)
+	{
+		corpusData.camera[ii].threshold = 1.5, corpusData.camera[ii].ninlierThresh = 50, corpusData.camera[ii];
+		GetrtFromRT(corpusData.camera[ii].rt, corpusData.camera[ii].R, corpusData.camera[ii].T);
+		GetIntrinsicFromK(corpusData.camera[ii]);
+		AssembleP(corpusData.camera[ii].K, corpusData.camera[ii].R, corpusData.camera[ii].T, corpusData.camera[ii].P);
+	}
+	printf("...Done\n");
+
+
+	namedWindow("Image", CV_WINDOW_NORMAL);
+	setMouseCallback("Image", ClickLocation, NULL);
+	printf("Left button to click, ESC  to stop\n");
+
+	clickCount = 0;
+	sprintf(Fname, "%s/%d.png", Path, id1);
+	Mat img = imread(Fname, 1);
+	if (img.empty())
+		printf("Cannot load %s\n", Fname);
+	imshow("Image", img);
+	waitKey(0);
+	Point2d pos1[2] = { Point2d(ClickPos[0].x, ClickPos[0].y), Point2d(ClickPos[1].x, ClickPos[1].y)};
+
+	clickCount = 0;
+	sprintf(Fname, "%s/%d.png", Path, id2);
+	img = imread(Fname, 1);
+	if (img.empty())
+		printf("Cannot load %s\n", Fname);
+	imshow("Image", img);
+	waitKey(0);
+	Point2d pos2[2] = { Point2d(ClickPos[0].x, ClickPos[0].y), Point2d(ClickPos[1].x, ClickPos[1].y) };
+
+	clickCount = 0;
+	sprintf(Fname, "%s/%d.png", Path, id3);
+	img = imread(Fname, 1);
+	if (img.empty())
+		printf("Cannot load %s\n", Fname);
+	imshow("Image", img);
+	waitKey(0);
+	Point2d pos3[2] = { Point2d(ClickPos[0].x, ClickPos[0].y), Point2d(ClickPos[1].x, ClickPos[1].y) };
+
+	Point3d WC[2];
+	Point2d allPts[2 * 3] = { pos1[0], pos2[0], pos3[0], pos1[1], pos2[1], pos3[1] };
+	bool passedPoints[3];
+	int allId[3] = { id1, id2, id3 };
+	double allP[12 * 3], allK[9*3], allDistortion[7*3];
+	for (int ii = 0; ii < 3; ii++)
+	{
+		for (int jj = 0; jj < 12; jj++)
+			allP[12 * ii + jj] = corpusData.camera[allId[ii]].P[jj];
+		for (int jj = 0; jj < 9; jj++)
+			allK[9 * ii + jj] = corpusData.camera[allId[ii]].K[jj];
+		for (int jj = 0; jj < 7; jj++)
+			allDistortion[7 * ii + jj] = corpusData.camera[allId[ii]].distortion[jj];
+	}
+
+	MultiViewQualityCheck(allPts, allP, corpusData.camera[0].LensModel, allK, allDistortion, passedPoints, 3, 2, 3.0, WC);
+
+	return sqrt(pow(WC[0].x - WC[1].x, 2) + pow(WC[0].y - WC[1].y, 2) + pow(WC[0].z - WC[1].z, 2));
 }
 
 void CopyCamereInfo(CameraData Src, CameraData &Dst)

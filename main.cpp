@@ -724,27 +724,17 @@ void VisualizeCleanMatches(char *Path, int view1, int view2, int timeID, double 
 }
 int main(int argc, char* argv[])
 {
-	char Path[] = "D:/Disney", Fname[200], Fname2[200];
+	char Path[] = "D:/Juggling2", Fname[200], Fname2[200];
 	/*double K[] = { 5.6899782975011715e+002, 0, 6.3491168470047603e+002, 0, 5.7154638026417649e+002, 4.8530525211848123e+002, 0, 0, 1 };
 	double Distortion[] = { 1.6037658238481549e-003, 6.3388270804725789e+002, 4.8009018607311287e+002 };
-	int startFrame = 0, stopFrame = 15;
+	int startFrame = 0, stopFrame = 38;
 
-	LensCorrectionImageSequenceDriver("D:/Disney", K, Distortion, 1, startFrame, stopFrame, 1.0, 1.0, 5);
-
-	//vector<int> availViews;	availViews.push_back(1);
-	//ExtractSiftGPUfromExtractedFrames("D:/Disney", availViews, startFrame, stopFrame);
-	return 0;*/
-
-	//if (argc == 1)
-	//	visualizationDriver(Path, 1, 0, 198, true, false, true);
-
-	/*Mat img = imread("D:/Disney/0/1.png", 0);
-	Mat equalizedImg;
-	equalizeHist(img, equalizedImg);
-	imwrite("C:/temp/equalize.png", equalizedImg);
+	LensCorrectionImageSequenceDriver("E:/Disney", K, Distortion, 1, startFrame, stopFrame, 1.0, 1.0, 5);
 	return 0;*/
 
 	int mode = atoi(argv[1]);
+
+	srand((unsigned int)time(NULL));
 	if (mode == 0)
 	{
 		int computeSync = atoi(argv[2]);
@@ -826,7 +816,7 @@ int main(int argc, char* argv[])
 		sprintf(Fname, "%s/intrinisc_%d.txt", Path, seletectedCam);
 		FILE*fp = fopen(Fname, "w+");	fclose(fp);
 
-		int nCams = 1, LensType = FISHEYE;
+		int nCams = 5, LensType = RADIAL_TANGENTIAL_PRISM;// FISHEYE;
 		if (runMatching >= 0)
 			LocalizeCameraFromCorpusDriver(Path, StartTime, StopTime, runMatching, nCams, seletectedCam, distortionCorrected, LensType);
 		if (runMatching != 1)
@@ -841,8 +831,8 @@ int main(int argc, char* argv[])
 		int OutlierRemoval = 2;//fmat test
 		int distortionCorrected = 1;
 
-		//for (int timeID = StartTime; timeID <= StopTime; timeID++)
-		//	GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nviews, timeID, 0.6, distortionCorrected, OutlierRemoval, 1, 0);
+		for (int timeID = StartTime; timeID <= StopTime; timeID++)
+			GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nviews, timeID, 0.6, distortionCorrected, OutlierRemoval, 1, 0);
 
 		/*for (int timeID = StartTime; timeID <= StopTime; timeID++)
 		{
@@ -860,7 +850,7 @@ int main(int argc, char* argv[])
 		GenerateMatchingTable(Path, nviews, timeID);
 		}*/
 
-		distortionCorrected = false;
+		distortionCorrected = 0;
 		Build3DFromSyncedImages(Path, nviews, StartTime, StopTime, distortionCorrected, reprojectionThreshold);
 		return 0;
 	}

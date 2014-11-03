@@ -516,6 +516,9 @@ void DesembleRT(double *R, double *T, double *RT);
 void AssembleP(double *K, double *R, double *T, double *P);
 void CopyCamereInfo(CameraData Src, CameraData &Dst);
 
+
+double DistanceOfTwoPointsSfM(char *Path, int id1, int id2, int id3);
+
 void BlurDetectionDriver(char *Path, int nimages, int width, int height, float blurThresh);
 
 int BAVisualSfMDriver(char *Path, char *nvmName, char *camInfo, char *IntrinsicInfo = NULL, bool lensconversion = 1, int sharedIntrinsics = 0);

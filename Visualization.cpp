@@ -88,7 +88,7 @@ void RenderObjects()
 		for (int j = 0; j < nviews; j++)
 		{
 			float CameraColor[3] = { 1, 0, 0 };// 1.0*rand() / RAND_MAX, 1.0*rand() / RAND_MAX, 1.0*rand() / RAND_MAX
-			if (g_vis.glCameraPoseInfo[j].size() > 1)
+			if (g_vis.glCameraPoseInfo[j].size() > 0)
 			{
 				/*glPushMatrix();
 				glBegin(GL_LINE_STRIP);

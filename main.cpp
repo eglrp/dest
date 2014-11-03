@@ -781,25 +781,28 @@ int main(int argc, char* argv[])
 	}
 	else if (mode == 2)
 	{
-		int nviews = 1,//atoi(argv[2]),
-			nframes = 10;// atoi(argv[3]);
+		int nviews = atoi(argv[2]),
+			startF = atoi(argv[3]),
+			stopF = atoi(argv[4]),
+			HistogrameEqual = atoi(argv[5]);
 
 		vector<int> availViews;
 		for (int ii = 0; ii < nviews; ii++)
 			availViews.push_back(ii);
 
-		ExtractSiftGPUfromExtractedFrames(Path, availViews, 0, nframes);
+		ExtractSiftGPUfromExtractedFrames(Path, availViews, startF, stopF, HistogrameEqual);
 	}
 	else if (mode == 3)
 	{
 		int nSviews = atoi(argv[2]),
 			NPplus = atoi(argv[3]),
 			distortionCorrected = atoi(argv[4]),
-			OutlierRemoval = atoi(argv[5]);
+			OutlierRemoval = atoi(argv[5]),
+			HistogramEqual = atoi(argv[6]);
 
 		int   intrinsicsCalibrated = false;
 		int nCams = 1, CamUsedToScan = 0;
-		GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nSviews, -1, 0.6, distortionCorrected, OutlierRemoval, nCams, CamUsedToScan);
+		GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nSviews, -1, HistogramEqual, 0.6, distortionCorrected, OutlierRemoval, nCams, CamUsedToScan);
 
 		/*double start = omp_get_wtime();
 		for (int jj = 0; jj < nSviews - 1; jj++)
@@ -824,9 +827,9 @@ int main(int argc, char* argv[])
 		FILE*fp = fopen(Fname, "w+");	fclose(fp);
 
 		int nCams = 1, LensType = FISHEYE;
-		if (runMatching > 0)
+		if (runMatching >= 0)
 			LocalizeCameraFromCorpusDriver(Path, StartTime, StopTime, runMatching, nCams, seletectedCam, distortionCorrected, LensType);
-		if (runMatching == -1)
+		if (runMatching != 1)
 			visualizationDriver(Path, nCams, StartTime, StopTime, true, true, false);
 	}
 	else if (mode == 5)

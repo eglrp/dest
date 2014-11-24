@@ -20,13 +20,13 @@ using namespace std;
 
 struct CameraData
 {
-	double K[9], distortion[7], R[9], T[3], rt[6], P[12], intrinsic[5];
-	float Rgl[16], camCenter[3];
+	double K[9], distortion[7], R[9], T[3], rt[6], P[12], intrinsic[5], invK[9], invR[9];
+	double Rgl[16], camCenter[3];
 	int LensModel;
 	double threshold, ninlierThresh;
 	std::string filename;
-	int nviews;
-	bool notCalibrated;
+	int nviews, width, height;
+	bool notCalibrated;	
 };
 
 struct SurfDesc
@@ -73,12 +73,32 @@ struct CamInfo
 	float camCenter[3];
 	GLfloat Rgl[16];
 };
+struct Trajectory2D
+{
+	int timeID, nViews;
+	vector<int>viewIDs;
+	vector<Point2d> uv;
+};
+struct TrajectoryData
+{
+	vector<Point3d> *cpThreeD;
+	vector<Point3d> *fThreeD;
+	vector<Point3d> *cpNormal;
+	vector<Point3d> *fNormal;
+	vector<Point2d> *cpTwoD;
+	vector<Point2d> *fTwoD;
+	vector<vector<int>> *cpVis;
+	vector<vector<int>> *fVis;
+	int nTrajectories, nViews;
+	vector<Trajectory2D> *trajectoryUnit;
+};
 
 struct VisualizationManager
 {
 	Point3d g_trajactoryCenter;
 	vector<Point3d> PointPosition;
 	vector<Point3f> PointColor;
+	vector<Point3d>PointNormal;
 	vector<CamInfo> glCameraInfo;
 	vector<CamInfo> *glCameraPoseInfo;
 };

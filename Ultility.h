@@ -19,6 +19,7 @@
 #include <opencv2/nonfree/nonfree.hpp>
 #include "SiftGPU\src\SiftGPU\SiftGPU.h"
 #include "DataStructure.h"
+#include "ImagePro.h"
 
 using namespace cv;
 using namespace std;
@@ -113,6 +114,7 @@ double norm_dot_product(double *x, double *y, int dim = 3);
 void cross_product(double *x, double *y, double *xy);
 void ZNCC1D(float *A, const int dimA, float *B, const int dimB, float *Result, float *nB = NULL);
 void ZNCC1D(double *A, int Asize, double *B, int Bsize, double *Result);
+double ComputeZNCCPatch(double *RefPatch, double *TarPatch, int hsubset, int nchannels, double *T = NULL);
 
 void mat_invert(double* mat, double* imat, int dims = 3);
 void mat_invert(float* mat, float* imat, int dims = 3);
@@ -479,7 +481,7 @@ void nonMaximaSuppression(const Mat& src, const int sz, Mat& dst, const Mat mask
 
 int LensCorrectionVideoDriver(char *Path, char *VideoName, double *K, double *distortion, int LensType, int nimages, double Imgscale = 1.0, double Contscale = 1.0, int interpAlgo = 5);
 int LensCorrectionImageSequenceDriver(char *Path, double *K, double *distortion, int LensType, int StartFrame, int StopFrame, double Imgscale = 1.0, double Contscale = 1.0, int interpAlgo = 5);
-int LensCorrectionDriver(char *Path, double *K, double *distortion, int LensType, int nimages, int interpAlgo);
+int LensCorrectionDriver(char *Path, double *K, double *distortion, int LensType, int startID, int stopID, double Imgscale = 1.0, double Contscale = 1.0, int interpAlgo=5);
 
 int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, vector<KeyPoint> keypoints1, vector<KeyPoint> keypoints2, vector<int>pair, double density);
 int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, vector<Point2d> keypoints1, vector<Point2d> keypoints2, vector<int>pair, double density);
@@ -524,16 +526,30 @@ void BlurDetectionDriver(char *Path, int nimages, int width, int height, float b
 int BAVisualSfMDriver(char *Path, char *nvmName, char *camInfo, char *IntrinsicInfo = NULL, bool lensconversion = 1, int sharedIntrinsics = 0);
 bool loadNVMLite(const string filepath, Corpus &CorpusData, int sharedIntrinsics);
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
+bool rewriteBundleAdjustedNVMResults(char *Path, char *BAfileName, Corpus &CorpusData);
 
 int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool outputtext = false);
 int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool inputtext = false, bool notReadDescriptor = false);
 bool loadIndividualNVMforpose(char *Path, CameraData *CameraInfo, vector<int>availViews, int timeIDstart, int timeIDstop, int nviews, bool sharedIntrinsics);
 int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel = RADIAL_TANGENTIAL_PRISM, int distortionCorrected = 1);
-int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime, int distortionCorrected = 1);
+int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime);
 
 void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker, int &npts, double sigma, int search_area, int NMS_BW, double thresh);
 
 int GenerateCorpusVisualWords(char *Path, int nimages);
 int ComputeWordsHistogram(char *Path, int nimages);
 
+int ReadDomeVGACalibFile(char *Path, CameraData *AllCamInfo);
+bool LoadTrackData(char* filePath, int CurrentFrame, TrajectoryData &TrajectoryInfo, bool loadVis);
+void Write3DMemAtThatTime(char *Path, TrajectoryData &TrajectoryInfo, CameraData *AllCamInfo, int refFrame, int curFrame);
+void Genrate2DTrajectory(char *Path, int CurrentFrame, TrajectoryData InfoTraj, CameraData *AllCamInfo, vector<int> trajectoriesUsed, double angleThreshold);
+int Load2DTrajectory(char *Path, TrajectoryData &inoTraj, int ntrajectories);
+int GetImagePatchIntensity(char *Path, TrajectoryData inoTraj, int nTraj,int minFrame, int maxFrame, int *cameraPair, int* range);
+int ComputeErrorIntensity(char *Path, vector<int> SyncOff, int *pair);
+
+void ExportCalibDatatoHanFormat(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime);
+
+void GetRCGL(CameraData &camInfo);
+void CopyCamereInfo(CameraData Src, CameraData &Dst);
+void GenerateViewAll_3D_2DInliers(char *Path, int viewID, int startID, int stopID, int n3Dcorpus);
 #endif

@@ -32,12 +32,12 @@ void MouseMotion(int x, int y);
 void ReshapeGL(int width, int height);
 
 void visualization();
-int visualizationDriver(char *Path, int nViews, int StartTime, int StopTime, bool Color, bool Pose, bool ThreeD);
+int visualizationDriver(char *Path, int nViews, int StartTime, int StopTime, bool Color, bool Normal, bool Pose, bool ThreeD);
 
 void SaveCurrentSfmGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, Point3d *All3D, Point3i *AllColor, int npts);
 void SaveCurrentSfmGL2(char *path, CameraData *AllViewParas, vector<int>AvailViews, vector<Point3d>All3D, vector<Point3i>AllColor);
-void ReadCurrentSfmGL(char *path, bool isColor);
-void ReadCurrent3DGL(char *path, bool isColor, int timeID);
+void ReadCurrentSfmGL(char *path, bool hasColor, bool hasNormal);
+void ReadCurrent3DGL(char *path, bool hasColor, bool hasNormal, int timeID);
 
 void SaveCurrenPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID);
 void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime = 0);

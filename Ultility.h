@@ -112,6 +112,8 @@ double VarianceArray(vector<double>&data, double mean = NULL);
 void normalize(double *x, int dim = 3);
 double norm_dot_product(double *x, double *y, int dim = 3);
 void cross_product(double *x, double *y, double *xy);
+void conv(float *A, int lenA, float *B, int lenB, float *C);
+void conv(double *A, int lenA, double *B, int lenB, double *C);
 void ZNCC1D(float *A, const int dimA, float *B, const int dimB, float *Result, float *nB = NULL);
 void ZNCC1D(double *A, int Asize, double *B, int Bsize, double *Result);
 double ComputeZNCCPatch(double *RefPatch, double *TarPatch, int hsubset, int nchannels, double *T = NULL);
@@ -512,9 +514,13 @@ void GetrtFromRT(CameraData *AllViewsParas, int nviews);
 void GetrtFromRT(double *rt, double *R, double *T);
 void GetRTFromrt(CameraData *AllViewsParas, vector<int> AvailViews);
 void GetRTFromrt(CameraData *AllViewsParas, int nviews);
+
+void GetRTFromrt(CameraData &camera);
 void GetRTFromrt(double *rt, double *R, double *T);
 void AssembleRT(double *R, double *T, double *RT);
 void DesembleRT(double *R, double *T, double *RT);
+
+void AssembleP(CameraData &camera);
 void AssembleP(double *K, double *R, double *T, double *P);
 void CopyCamereInfo(CameraData Src, CameraData &Dst);
 
@@ -542,11 +548,13 @@ int ComputeWordsHistogram(char *Path, int nimages);
 int ReadDomeVGACalibFile(char *Path, CameraData *AllCamInfo);
 bool LoadTrackData(char* filePath, int CurrentFrame, TrajectoryData &TrajectoryInfo, bool loadVis);
 void Write3DMemAtThatTime(char *Path, TrajectoryData &TrajectoryInfo, CameraData *AllCamInfo, int refFrame, int curFrame);
-void Genrate2DTrajectory(char *Path, int CurrentFrame, TrajectoryData InfoTraj, CameraData *AllCamInfo, vector<int> trajectoriesUsed, double angleThreshold);
+void Genrate2DTrajectory(char *Path, int CurrentFrame, TrajectoryData InfoTraj, CameraData *AllCamInfo, vector<int> trajectoriesUsed);
 int Load2DTrajectory(char *Path, TrajectoryData &inoTraj, int ntrajectories);
-int GetImagePatchIntensity(char *Path, TrajectoryData inoTraj, int nTraj,int minFrame, int maxFrame, int *cameraPair, int* range);
-int ComputeErrorIntensity(char *Path, vector<int> SyncOff, int *pair);
+int Compute3DTrajectoryErrorColorVar(char *Path, vector<int> SyncOff, int *pair);
+int Compute3DTrajectoryErrorZNCC(char *Path, TrajectoryData inoTraj, int nTraj, int minFrame, int maxFrame, int *cameraPair, int* range);
+int Compute3DTrajectoryError2DTracking(char *Path, TrajectoryData infoTraj, int nTraj, int minFrame, int maxFrame, int SelectedViewID, int *range);
 
+int ImportCalibDatafromHanFormat(char *Path, VideoData &AllVideoInfo, int nVGAPanels, int nVGACamsPerPanel, int nHDs);
 void ExportCalibDatatoHanFormat(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime);
 
 void GetRCGL(CameraData &camInfo);

@@ -27,6 +27,115 @@ using namespace cv;
 #endif*/
 
 bool autoplay = false;
+int MousePosX, MousePosY;
+static void onMouse(int event, int x, int y, int, void*)
+{
+	if (event == EVENT_LBUTTONDBLCLK)
+	{
+		MousePosX = x, MousePosY = y;
+		printf("Selected: %d %d\n", x, y);
+	}
+}
+int TriangulatePointsFromCalibratedCameras(char *Path, int nCams, int distortionCorrected, int maxPts, double threshold = 2.0)
+{
+	char Fname[200];
+	Corpus corpusData;
+	sprintf(Fname, "%s/BA_Camera_AllParams_after.txt", Path);
+	if (!loadBundleAdjustedNVMResults(Fname, corpusData))
+		return 1;
+
+	int nviews = corpusData.nCamera;
+	for (int ii = 0; ii < nviews; ii++)
+	{
+		corpusData.camera[ii].threshold = threshold, corpusData.camera[ii].ninlierThresh = 50, corpusData.camera[ii];
+		GetrtFromRT(corpusData.camera[ii].rt, corpusData.camera[ii].R, corpusData.camera[ii].T);
+		GetIntrinsicFromK(corpusData.camera[ii]);
+		AssembleP(corpusData.camera[ii].K, corpusData.camera[ii].R, corpusData.camera[ii].T, corpusData.camera[ii].P);
+		if (distortionCorrected == 1)
+			for (int jj = 0; jj < 7; jj++)
+				corpusData.camera[ii].distortion[jj] = 0.0;
+	}
+	printf("...Done\n");
+
+	sprintf(Fname, "%s/ImageList.txt", Path);
+	FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		return 1;
+	}
+	int imgID;
+	vector<int> ImageIDList;
+	while (fscanf(fp, "%d ", &imgID) != EOF)
+		ImageIDList.push_back(imgID);
+	fclose(fp);
+
+	int n3D = 1, nviewsPerPt, viewID, ptsCount = 0;
+	double x, y, z, u, v;
+	vector<Point3d> t3D;
+	vector<Point2d> uv;
+	vector<int> viewIDAll3D;
+	vector<Point2d>uvAll3D;
+
+	sprintf(Fname, "%s/Points.txt", Path);
+	ofstream ofs(Fname);
+	if (ofs.fail())
+		cerr << "Cannot write " << Fname << endl;
+	for (int npts = 0; npts < maxPts; npts++)
+	{
+		t3D.clear(), uv.clear(), viewIDAll3D.clear(), uvAll3D.clear();
+		for (int ii = 0; ii < ImageIDList.size(); ii++)
+		{
+			sprintf(Fname, "%s/%d.png", Path, ImageIDList[ii]);
+			cvNamedWindow("Image", CV_WINDOW_NORMAL); setMouseCallback("Image", onMouse);
+			Mat Img = imread(Fname);
+			if (Img.empty())
+			{
+				printf("Cannot load %s\n", Fname);
+				return 1;
+			}
+			imshow("Image", Img);
+			waitKey(0);
+			viewIDAll3D.push_back(ImageIDList[ii]);
+			uvAll3D.push_back(Point2d(MousePosX, MousePosY));
+			ofs << MousePosX << " " << MousePosY << endl;
+		}
+
+		//Test if 3D is correct
+		ptsCount = uvAll3D.size();
+		Point3d xyz;
+		double *A = new double[6 * ptsCount];
+		double *B = new double[2 * ptsCount];
+		double *tPs = new double[12 * ptsCount];
+		bool *passed = new bool[ptsCount];
+		double *Ps = new double[12 * ptsCount];
+		Point2d *match2Dpts = new Point2d[ptsCount];
+
+		vector<int>Inliers[1];  Inliers[0].reserve(ptsCount * 2);
+		double ProThresh = 0.99, PercentInlier = 0.25;
+		int goodNDplus = 0, iterMax = (int)(log(1.0 - ProThresh) / log(1.0 - pow(PercentInlier, 2)) + 0.5); //log(1-eps) / log(1 - (inlier%)^min_pts_requires)
+		int nviewsi = viewIDAll3D.size();
+		Inliers[0].clear();
+		for (int ii = 0; ii < nviewsi; ii++)
+		{
+			viewID = viewIDAll3D.at(ii);
+			for (int kk = 0; kk < 12; kk++)
+				Ps[12 * ii + kk] = corpusData.camera[viewID].P[kk];
+
+			match2Dpts[ii] = uvAll3D.at(ii);
+			LensCorrectionPoint(&match2Dpts[ii], corpusData.camera[viewID].K, corpusData.camera[viewID].distortion);
+		}
+
+		double error = NviewTriangulationRANSAC(match2Dpts, Ps, &xyz, passed, Inliers, nviewsi, 1, iterMax, PercentInlier, corpusData.camera[0].threshold, A, B, tPs);
+		if (passed[0])
+		{
+			printf("3D: %f %f %f Error: %f\n", xyz.x, xyz.y, xyz.z, error);
+			ofs << xyz.x << " " << xyz.x << " " << xyz.z << endl;
+		}
+	}
+	ofs.close();
+	return 0;
+}
 void AutomaticPlay(int state, void* userdata)
 {
 	autoplay = !autoplay;
@@ -648,10 +757,111 @@ int TestPnP(char *Path, int nCams, int selectedCams)
 
 	return 0;
 }
+int TriangulatePointsFromCalibratedCameras2(char *Path, int nCams, int selectedCams, int distortionCorrected, double threshold = 2.0)
+{
+	char Fname[200];
+	Corpus corpusData;
+	sprintf(Fname, "%s/BA_Camera_AllParams_after.txt", Path);
+	if (!loadBundleAdjustedNVMResults(Fname, corpusData))
+		return 1;
+
+	int nviews = corpusData.nCamera;
+	for (int ii = 0; ii < nviews; ii++)
+	{
+		corpusData.camera[ii].threshold = threshold, corpusData.camera[ii].ninlierThresh = 50, corpusData.camera[ii];
+		GetrtFromRT(corpusData.camera[ii].rt, corpusData.camera[ii].R, corpusData.camera[ii].T);
+		GetIntrinsicFromK(corpusData.camera[ii]);
+		AssembleP(corpusData.camera[ii].K, corpusData.camera[ii].R, corpusData.camera[ii].T, corpusData.camera[ii].P);
+		if (distortionCorrected == 1)
+			for (int jj = 0; jj < 7; jj++)
+				corpusData.camera[ii].distortion[jj] = 0.0;
+	}
+	printf("...Done\n");
+	FILE *fp = fopen("C:/temp/PInfo.txt", "w+");
+	for (int ii = 0; ii < nviews; ii++)
+	{
+		fprintf(fp, "%d ", ii);
+		for (int jj = 0; jj < 12; jj++)
+			fprintf(fp, "%.8f ", corpusData.camera[ii].P[jj]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+	fp = fopen("C:/temp/KInfo.txt", "w+");
+	for (int ii = 0; ii < nviews; ii++)
+	{
+		fprintf(fp, "%d ", ii);
+		for (int jj = 0; jj < 9; jj++)
+			fprintf(fp, "%.8f ", corpusData.camera[ii].K[jj]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+	fp = fopen("C:/temp/DistortionInfo.txt", "w+");
+	for (int ii = 0; ii < nviews; ii++)
+	{
+		fprintf(fp, "%d ", ii);
+		for (int jj = 0; jj < 7; jj++)
+			fprintf(fp, "%.8f ", corpusData.camera[ii].distortion[jj]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	int n3D = 1, nviewsPerPt, viewID, ptsCount = 0;;
+	double x, y, z, u, v;
+	vector<Point3d> t3D;
+	vector<Point2d> uv;
+	vector<int> viewIDAll3D;
+	vector<Point2d>uvAll3D;
+
+	while (true)
+	{
+		t3D.clear(), uv.clear(), viewIDAll3D.clear(), uvAll3D.clear();
+		FILE *fp = fopen("C:/temp/3D2D.txt", "r");
+		while (fscanf(fp, "%d %lf %lf ", &viewID, &u, &v) != EOF)
+		{
+			viewIDAll3D.push_back(viewID);
+			uvAll3D.push_back(Point2d(u, v));
+		}
+		fclose(fp);
+
+		//Test if 3D is correct
+		ptsCount = uvAll3D.size();
+		Point3d xyz;
+		double *A = new double[6 * ptsCount];
+		double *B = new double[2 * ptsCount];
+		double *tPs = new double[12 * ptsCount];
+		bool *passed = new bool[ptsCount];
+		double *Ps = new double[12 * ptsCount];
+		Point2d *match2Dpts = new Point2d[ptsCount];
+
+		vector<int>Inliers[1];  Inliers[0].reserve(ptsCount * 2);
+		double ProThresh = 0.99, PercentInlier = 0.25;
+		int goodNDplus = 0, iterMax = (int)(log(1.0 - ProThresh) / log(1.0 - pow(PercentInlier, 2)) + 0.5); //log(1-eps) / log(1 - (inlier%)^min_pts_requires)
+		int nviewsi = viewIDAll3D.size();
+		Inliers[0].clear();
+		for (int ii = 0; ii < nviewsi; ii++)
+		{
+			viewID = viewIDAll3D.at(ii);
+			for (int kk = 0; kk < 12; kk++)
+				Ps[12 * ii + kk] = corpusData.camera[viewID].P[kk];
+
+			match2Dpts[ii] = uvAll3D.at(ii);
+			LensCorrectionPoint(&match2Dpts[ii], corpusData.camera[viewID].K, corpusData.camera[viewID].distortion);
+		}
+
+		NviewTriangulationRANSAC(match2Dpts, Ps, &xyz, passed, Inliers, nviewsi, 1, iterMax, PercentInlier, corpusData.camera[0].threshold, A, B, tPs);
+		if (passed[0])
+			printf("%f %f %f\n", xyz.x, xyz.y, xyz.z);
+	}
+
+	return 0;
+}
 void VisualizeCleanMatches(char *Path, int view1, int view2, int timeID, double fractionMatchesDisplayed = 0.5)
 {
 	char Fname[200];
-	sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, view1, view2);
+	if (timeID < 0)
+		sprintf(Fname, "%s/M_%d_%d.dat", Path, view1, view2);
+	else
+		sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, view1, view2);
 
 	vector<Point2i> PairWiseMatchID; PairWiseMatchID.reserve(10000);
 	int id1, id2, npts;
@@ -729,38 +939,90 @@ void VisualizeCleanMatches(char *Path, int view1, int view2, int timeID, double 
 
 	return;
 }
+void Test(char *Path)
+{
+	char Fname[200];
+
+	int nVGAPanels = 20, nVGACamsPerPanel = 24, nHDs = 30;
+	int nVideoViews = nHDs + nVGACamsPerPanel*nVGAPanels;
+
+	VideoData AllVideoData;
+	AllVideoData.VideoInfo = new CameraData[nVideoViews];
+	ImportCalibDatafromHanFormat(Path, AllVideoData, nVGAPanels, nVGACamsPerPanel, nHDs);
+
+	int frameID = 100;
+	Point2d pt2D;
+	Point3d pt3D = Point3d(-466.77, 403.49, 1080.26);
+	for (int viewID = 0; viewID < nHDs; viewID++)//HD
+	{
+		sprintf(Fname, "%s/In/%08d/%08d_%02d_%02d.png", Path, frameID, frameID, 0, viewID);
+		Mat img = imread(Fname, 1);
+		if (img.empty())
+		{
+			printf("Cannot load %s\n", Fname);
+			continue;
+		}
+
+		ProjectandDistort(pt3D, &pt2D, AllVideoData.VideoInfo[viewID].P);
+		circle(img, Point((int)pt2D.x, (int)pt2D.y), 3, Scalar(0, 255, 0));
+		sprintf(Fname, "%s/%08d_%02d_%02d.png", Path, frameID, 0, viewID);
+		imwrite(Fname, img);
+	}
+
+	for (int panelID = 0; panelID < 3; panelID++)
+	{
+		for (int camID = 0; camID < 24; camID += 3)
+		{
+			int viewID = camID + panelID * 24 + nHDs;
+			sprintf(Fname, "%s/In/%08d/%08d_%02d_%02d.png", Path, frameID, frameID, panelID+1, camID+1);
+			Mat img = imread(Fname, 1);
+			if (img.empty())
+			{
+				printf("Cannot load %s\n", Fname);
+				continue;
+			}
+
+			ProjectandDistort(pt3D, &pt2D, AllVideoData.VideoInfo[viewID].P);
+			circle(img, Point((int)pt2D.x, (int)pt2D.y), 3, Scalar(0, 255, 0));
+			sprintf(Fname, "%s/%08d_%02d_%02d.png", Path, frameID, panelID+1, camID+1);
+			imwrite(Fname, img);
+		}
+	}
+
+	return;
+}
 
 int main(int argc, char* argv[])
 {
+	//char Path[] = "D:/DomeSync", Fname[200], Fname2[200];
+	char Path[] = "C:/Data/CellPhone", Fname[200], Fname2[200];
 
-	char Path[] = "E:/Data/GoPro", Fname[200], Fname2[200];
-
+	//Test(Path);
+	//return 0;
 	/*VideoData AllVideoData;
 	ReadVideoData(Path, AllVideoData, 10, 0, 290);
 	ExportCalibDatatoHanFormat(Path, AllVideoData, 10, 0, 290);
 	return 0;*/
 
-	if (argc == 1)
+	/*if (argc == 1)
 	{
-		visualizationDriver(Path, 10, 0, 290, true, false, true, false);
-		return 0;
-	}
+	visualizationDriver(Path, 1, 200, 1000, true, false, true, false);
+	return 0;
+	}*/
+
 	int mode = atoi(argv[1]);
 
 	srand((unsigned int)time(NULL));
 	if (mode == 0)
 	{
-		visualizationDriver(Path, 480, 0, 0, true, true, true, true);
-		return 0;
-
-		int computeSync = 0;// atoi(argv[2]);
+		int computeSync = 1;// atoi(argv[2]);
 		if (computeSync == 1)
 		{
-			int srcID1 = atoi(argv[3]),
-				srcID2 = atoi(argv[4]);
-			double fps1 = atof(argv[5]),
-				fps2 = atof(argv[6]),
-				minZNCC = atof(argv[7]);
+			int srcID1 = 9,// atoi(argv[3]),
+				srcID2 = 10;// atoi(argv[4]);
+			double fps1 = 59.94,//atof(argv[5]),
+				fps2 = 29.97,// atof(argv[6]),
+				minZNCC = 0.3;// atof(argv[7]);
 
 			int minSegLength = 3e6;
 			double offset = 0.0;
@@ -780,12 +1042,12 @@ int main(int argc, char* argv[])
 	}
 	else if (mode == 1)
 	{
-		char *Fname = argv[2],
+		char *Path = argv[2],
 			*Fname2 = argv[3];
 		int SaveFrameDif = atoi(argv[4]);//20;
 		int nNonBlurIma = 0;
-		PickStaticImagesFromVideo(Fname, Fname2, SaveFrameDif, 15, .3, 50, nNonBlurIma, true);
-		BlurDetectionDriver(Fname, nNonBlurIma, 1920, 1080, 0.1);
+		PickStaticImagesFromVideo(Path, Fname2, SaveFrameDif, 15, .3, 50, nNonBlurIma, true);
+		BlurDetectionDriver(Path, nNonBlurIma, 1920, 1080, 0.1);
 	}
 	else if (mode == 2)
 	{
@@ -795,7 +1057,7 @@ int main(int argc, char* argv[])
 			HistogrameEqual = atoi(argv[5]);
 
 		vector<int> availViews;
-		for (int ii = 0; ii < nviews; ii++)
+		for (int ii = 1; ii < nviews; ii++)
 			availViews.push_back(ii);
 
 		ExtractSiftGPUfromExtractedFrames(Path, availViews, startF, stopF, HistogrameEqual);
@@ -811,16 +1073,17 @@ int main(int argc, char* argv[])
 		if (runMatching == 1)
 		{
 			int HistogramEqual = atoi(argv[6]),
-				OulierRemoveTestMethod = atoi(argv[7]);
-			double ratioThresh = atof(argv[8]);
+				OulierRemoveTestMethod = atoi(argv[7]),
+				LensType = atoi(argv[8]);
+			double ratioThresh = atof(argv[9]);
 
-			int nCams = 1, cameraToScan = 0;
-			Corpus corpusData;
-			sprintf(Fname, "%s/BA_Camera_AllParams_after.txt", Path);
-			if (!rewriteBundleAdjustedNVMResults(Path, Fname, corpusData))
-				GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nviews, -1, HistogramEqual, ratioThresh, distortionCorrected, OulierRemoveTestMethod, nCams, cameraToScan);
+			int nCams = nviews, cameraToScan = -1;
+			if (OulierRemoveTestMethod == 2)
+				nCams = atoi(argv[10]), cameraToScan = atoi(argv[11]);
 
-			int timeID = -1, ninlierThesh = 50, LensType = -1;
+			GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nviews, -1, HistogramEqual, ratioThresh);
+
+			int timeID = -1, ninlierThesh = 50;
 #pragma omp parallel
 			{
 #pragma omp for nowait
@@ -839,7 +1102,7 @@ int main(int argc, char* argv[])
 		}
 		else
 		{
-			BuildCorpus(Path, 1, 0, distortionCorrected, NPplus);
+			BuildCorpus(Path, -1, distortionCorrected, NPplus);
 			visualizationDriver(Path, 1, -1, -1, true, false, false, false);
 		}
 		return 0;
@@ -849,11 +1112,11 @@ int main(int argc, char* argv[])
 		int StartTime = atoi(argv[2]),
 			StopTime = atoi(argv[3]),
 			seletectedCam = atoi(argv[4]),
-			runMatching = atoi(argv[5]),
-			distortionCorrected = atoi(argv[6]), //must set to 1 when runMatching != 1;
-			sharedIntriniscOptim = atoi(argv[7]);
-		int nCams = 10,
-			LensType = RADIAL_TANGENTIAL_PRISM;// RADIAL_TANGENTIAL_PRISM;// FISHEYE;
+			nCams = atoi(argv[5]),
+			runMatching = atoi(argv[6]),
+			distortionCorrected = atoi(argv[7]), //must set to 1 when runMatching != 1;
+			sharedIntriniscOptim = atoi(argv[8]),
+			LensType = atoi(argv[9]);// RADIAL_TANGENTIAL_PRISM;// FISHEYE;
 
 		sprintf(Fname, "%s/intrinsic_%d.txt", Path, seletectedCam);
 		FILE*fp = fopen(Fname, "w+");	fclose(fp);
@@ -880,7 +1143,7 @@ int main(int argc, char* argv[])
 		{
 			for (int timeID = StartTime; timeID <= StopTime; timeID++)
 			{
-				GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nviews, timeID, HistogrameEqual, 0.6, LensType, distortionCorrected, OulierRemoveTestMethod, nviews, 0);
+				GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nviews, timeID, HistogrameEqual, 0.6);
 #pragma omp parallel 
 				{
 #pragma omp for nowait
@@ -926,9 +1189,8 @@ int main(int argc, char* argv[])
 		GenerateCorpusVisualWords("C:/temp/BOW", 24);
 		ComputeWordsHistogram("C:/temp/BOW", 3);
 	}
-	else
+	else if (mode == 8)
 	{
-		//
 		//siftgpu("D:/1_0.png", "D:/2_0.png", 0.5, 0.5);
 		//VisualizeCleanMatches(Path, 1, 2, 0, 0.01);
 		/*int submode = atoi(argv[2]);
@@ -953,27 +1215,28 @@ int main(int argc, char* argv[])
 		printf("Wrote %s\n", RGBName);
 		}
 		}*/
-		/*double K[] = { 5.6899782975011715e+002, 0, 6.3491168470047603e+002, 0, 5.7154638026417649e+002, 4.8530525211848123e+002, 0, 0, 1 };
-		double Distortion[] = { 1.6037658238481549e-003, 6.3388270804725789e+002, 4.8009018607311287e+002 };
-		int startFrame = 0, stopFrame = 38;
+		double K[] = { 5.9894787542305494e+002, 0.0000000000000000e+000, 6.2486606812417028e+002,
+			0, 5.9623146393896582e+002, 3.6152639154296548e+002,
+			0, 0, 1 };
 
-		LensCorrectionImageSequenceDriver("E:/Disney", K, Distortion, 1, startFrame, stopFrame, 1.0, 1.0, 5);
-		return 0;*/
+		double Distortion[] = { 1.6472154585326839e-003, 6.2420964417695950e+002, 3.6077115979767234e+002 };
+		int startFrame = 0, stopFrame = 10;
+
+		LensCorrectionImageSequenceDriver("D:/Disney", K, Distortion, FISHEYE, startFrame, stopFrame, 1.5, 1.0, 5);
+		return 0;
 
 		TrajectoryData InfoTraj;
-		/*CameraData CameraInfo[480];
+		CameraData CameraInfo[480];
 		ReadDomeVGACalibFile(Path, CameraInfo);
 		LoadTrackData(Path, 100, InfoTraj, true);
 		//Write3DMemAtThatTime(Path, InfoTraj, CameraInfo, 100, 101);
-		//return 0;
 
 		vector<int> TrajectUsed;
 		for (int ii = 0; ii < InfoTraj.nTrajectories; ii++)
-		TrajectUsed.push_back(ii);
-		double angleThreshold = 05;
-		Genrate2DTrajectory(Path, 100, InfoTraj, CameraInfo, TrajectUsed, angleThreshold);
-		return 0;*/
-		int ntraj = 3409;
+			TrajectUsed.push_back(ii);
+		Genrate2DTrajectory(Path, 100, InfoTraj, CameraInfo, TrajectUsed);
+
+		int ntraj = 239;
 		Load2DTrajectory(Path, InfoTraj, ntraj);
 
 		int minFrame = 60, maxFrame = 209;
@@ -982,16 +1245,22 @@ int main(int argc, char* argv[])
 			for (int jj = 1; jj <= 23; jj++)
 			{
 				int cameraPair[] = { kk * 24, kk * 24 + jj }, temporalOffsetRange[] = { -6, 6 };
-				GetImagePatchIntensity(Path, InfoTraj, ntraj, minFrame, maxFrame, cameraPair, temporalOffsetRange);
-
-				//vector<int> syncOff;
-				//for (int ii = temporalOffsetRange[0]; ii <= temporalOffsetRange[1]; ii++)
-				//	syncOff.push_back(ii);
-				//ComputeErrorIntensity(Path, syncOff, cameraPair);
+				Compute3DTrajectoryErrorZNCC(Path, InfoTraj, ntraj, minFrame, maxFrame, cameraPair, temporalOffsetRange);
 			}
+			/*for (int jj = 0; jj <= 23; jj++)
+			{
+			int temporalOffsetRange[] = { -6, 6 };
+			Compute3DTrajectoryError2DTracking(Path, InfoTraj, ntraj, minFrame, maxFrame, kk * 24 + jj, temporalOffsetRange);
+			}*/
 		}
 		return 0;
 
+	}
+	else if (mode == 9)
+	{
+		printf("Input the Path name and number of points per image\n");
+		TriangulatePointsFromCalibratedCameras(argv[1], 54, 0, atoi(argv[2]), 2.0);
+		return 0;
 	}
 
 	return 0;

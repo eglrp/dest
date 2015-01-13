@@ -13,7 +13,7 @@ static bool g_bButton1Down = false;
 static GLfloat g_ratio;
 static GLfloat g_fViewDistance = 200 * VIEWING_DISTANCE_MIN;
 static GLfloat g_nearPlane = 1.0, g_farPlane = 30000;
-float g_coordAxisLength = 10;
+float g_coordAxisLength = 3.f;
 static int g_Width = 1280, g_Height = 1024;
 static int g_xClick = 0, g_yClick = 0;
 static int g_mouseYRotate = 0, g_mouseXRotate = 0;
@@ -29,14 +29,14 @@ static float g_lightBright[4] = { 1, 1, 1, 1 };  // Position of light
 const GLfloat Red[3] = { 1, 0, 0 }, Green[3] = { 0, 1, 0 }, Blue[3] = { 0, 0, 1 };
 GLfloat PointsCentroid[3], ViewingLoc[3];
 float InitLocFromCentroid[3];
-GLfloat Scale = 0.25f, CameraSize = 10.0f, pointSize = 0.5f, normalSize = 20.f, arrowThickness = .1f;
+GLfloat Scale = 0.25f, CameraSize = .1f, pointSize = 0.1f, normalSize = 3.f, arrowThickness = .1f;
 vector<int> PickedPoints;
 vector<int> PickCams;
 VisualizationManager g_vis;
 
 int nviews = 10, timeID = 0, otimeID = 0, maxTime, minTime;
 bool drawPose = false, hasColor = false, hasNormal = false;
-bool drawNormal = false, ThreeDRecon = false;
+bool drawCamTrajectory = false, drawNormal = false, ThreeDRecon = false;
 static bool ReCenterNeeded = false;
 
 void Draw_Axes(void)
@@ -48,13 +48,13 @@ void Draw_Axes(void)
 	glBegin(GL_LINES);
 	glColor3f(1, 0, 0); // X axis is red.
 	glVertex3f(0, 0, 0);
-	glVertex3f(g_coordAxisLength, 0, 0);
+	glVertex3f(g_coordAxisLength*Scale, 0, 0);
 	glColor3f(0, 1, 0); // Y axis is green.
 	glVertex3f(0, 0, 0);
-	glVertex3f(0, g_coordAxisLength, 0);
+	glVertex3f(0, g_coordAxisLength*Scale, 0);
 	glColor3f(0, 0, 1); // z axis is blue.
 	glVertex3f(0, 0, 0);
-	glVertex3f(0, 0, g_coordAxisLength);
+	glVertex3f(0, 0, g_coordAxisLength*Scale);
 	glEnd();
 
 	glPopMatrix();
@@ -215,15 +215,18 @@ void RenderObjects()
 			if (g_vis.glCameraPoseInfo[j].size() > 0)
 			{
 				//Draw camere trajectory
-				glPushMatrix();
-				glBegin(GL_LINE_STRIP);
-				for (unsigned int i = 0; i < g_vis.glCameraPoseInfo[j].size(); ++i)
+				if (drawCamTrajectory)
 				{
-					float* centerPt = g_vis.glCameraPoseInfo[j].at(i).camCenter;
-					glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
-					glColor3f(CameraColor[0], CameraColor[1], CameraColor[2]);
+					glPushMatrix();
+					glBegin(GL_LINE_STRIP);
+					for (unsigned int i = 0; i < g_vis.glCameraPoseInfo[j].size(); ++i)
+					{
+						float* centerPt = g_vis.glCameraPoseInfo[j].at(i).camCenter;
+						glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+						glColor3f(CameraColor[0], CameraColor[1], CameraColor[2]);
+					}
+					glEnd();
 				}
-				glEnd();
 
 				for (unsigned int i = 0; i < g_vis.glCameraPoseInfo[j].size(); ++i)
 				{
@@ -344,10 +347,18 @@ void Keyboard(unsigned char key, int x, int y)
 	case 27:             // ESCAPE key
 		exit(0);
 		break;
-	case '+':
-		pointSize += 0.1;
-		printf("plotSize %f\n", pointSize);
+	case 'c':
+		printf("Current cameraSize: %f. Please enter the new size: ", CameraSize);
+		cin >> CameraSize;
+		printf("New cameraSize: %f\n", CameraSize);
 		break;
+	case 'p':
+		printf("Current pointSize: %f. Please enter the new size: ", pointSize);
+		cin >> pointSize;
+		printf("New pointSize: %f\n", pointSize);
+		break;
+	case 't':
+		drawCamTrajectory = !drawCamTrajectory;
 	case 'n':
 		break;
 	case 'b':
@@ -631,6 +642,11 @@ void ReadCurrentSfmGL(char *path, bool hasColor, bool hasNormal)
 		}
 		fclose(fp);
 	}
+	else
+	{
+		printf("Cannot load %s\n", Fname);
+		abort();
+	}
 
 	g_vis.PointPosition.clear(); g_vis.PointPosition.reserve(10e5);
 	if (hasColor)
@@ -638,6 +654,11 @@ void ReadCurrentSfmGL(char *path, bool hasColor, bool hasNormal)
 
 	Point3i iColor; Point3f fColor; Point3f t3d;
 	sprintf(Fname, "%s/3dGL.xyz", path); fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		abort();
+	}
 	while (fscanf(fp, "%f %f %f ", &t3d.x, &t3d.y, &t3d.z) != EOF)
 	{
 		if (hasColor)

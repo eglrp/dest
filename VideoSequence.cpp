@@ -111,16 +111,16 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 	nSpliting = nSpliting == 0 ? 1 : nSpliting;
 
 	//Take gradient of signals: somehow, this seems to be robust
-	float *Grad1 = new float[Seq1.nsamples + 1], *Grad2 = new float[Seq2.nsamples + 1];
-	Grad1[0] = Seq1.Audio[0], Grad2[0] = Seq2.Audio[0];
-	Grad1[Seq1.nsamples] = Seq1.Audio[Seq1.nsamples - 1], Grad2[Seq2.nsamples] = Seq2.Audio[Seq2.nsamples - 1];
-
-#pragma omp parallel for
-	for (ii = 0; ii < Seq1.nsamples - 1; ii++)
-		Grad1[ii + 1] = abs(Seq1.Audio[ii + 1] - Seq1.Audio[ii]);
-#pragma omp parallel for
-	for (ii = 0; ii < Seq2.nsamples - 1; ii++)
-		Grad2[ii + 1] = abs(Seq2.Audio[ii + 1] - Seq2.Audio[ii]);
+	int filterSize = 6;
+	float GaussianDfilter[] = { -0.0219, -0.0764, -0.0638, 0.0638, 0.0764, 0.0219 };
+	float *Grad1 = new float[Seq1.nsamples + filterSize - 1], *Grad2 = new float[Seq2.nsamples + filterSize - 1];
+	conv(Seq1.Audio, Seq1.nsamples, GaussianDfilter, filterSize, Grad1);
+	conv(Seq2.Audio, Seq2.nsamples, GaussianDfilter, filterSize, Grad2);
+	
+	for (int ii = 0; ii < Seq1.nsamples + filterSize - 1; ii++)
+		Grad1[ii] = abs(Grad1[ii]);
+	for (int ii = 0; ii < Seq2.nsamples + filterSize - 1; ii++)
+		Grad2[ii] = abs(Grad2[ii]);
 
 	int ns3, ns4;
 	double fps3, fps4;
@@ -130,13 +130,13 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 	if (Seq1.nsamples <= Seq2.nsamples)
 	{
 		fps3 = fps1, fps4 = fps2;
-		ns3 = Seq1.nsamples + 1;
+		ns3 = Seq1.nsamples + filterSize - 1;
 		Seq3 = new float[ns3];
 #pragma omp parallel for
 		for (int i = 0; i < ns3; i++)
 			Seq3[i] = Grad1[i];
 
-		ns4 = Seq2.nsamples + 1;
+		ns4 = Seq2.nsamples + filterSize - 1;
 		Seq4 = new float[ns4];
 #pragma omp parallel for
 		for (int i = 0; i < ns4; i++)
@@ -146,20 +146,20 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 	{
 		Switch = true;
 		fps3 = fps2, fps4 = fps1;
-		ns3 = Seq2.nsamples + 1;
+		ns3 = Seq2.nsamples + filterSize - 1;
 		Seq3 = new float[ns3];
 #pragma omp parallel for
 		for (int i = 0; i < ns3; i++)
 			Seq3[i] = Grad2[i];
 
-		ns4 = Seq1.nsamples + 1;
+		ns4 = Seq1.nsamples + filterSize - 1;
 		Seq4 = new float[ns4];
 #pragma omp parallel for
 		for (int i = 0; i < ns4; i++)
 			Seq4[i] = Grad1[i];
 	}
 
-	const int hbandwidth = sampleRate / 100;
+	const int hbandwidth = sampleRate / 60; //usually 30fps, so this give 0.5 frame accuracy
 	int nsamplesSubSeq, nMaxLoc;
 	bool *Goodness = new bool[nSpliting];
 	int *soffset = new int[nSpliting];
@@ -183,6 +183,7 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 		//Correlate the subsequence with the smaller sequence
 		ZNCC1D(SubSeq, nsamplesSubSeq, Seq3, ns3, res);
 
+		float a = res[jj], b = Seq3[jj], c = SubSeq[jj];
 		//Quality check: how many peaks, are they close?
 		nonMaximaSuppression1D(res, ns3 + nsamplesSubSeq - 1, MaxLocID, nMaxLoc, hbandwidth);
 		for (jj = 0; jj < ns3 + nsamplesSubSeq - 1; jj++)
@@ -197,14 +198,14 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 		minMaxLoc(zncc, &minVal, &maxVal, &minLoc, &maxLoc, Mat());
 		MaxCorr[ii] = maxVal;
 		soffset[ii] = maxLoc.x - nsamplesSubSeq + 1 - MinSample*ii;
-		foffset[ii] = 1.0*(soffset[ii]) / sampleRate*fps4;
+		foffset[ii] = 1.0*(soffset[ii]) / sampleRate*fps3;
 
 		zncc.at<float>(maxLoc.x) = 0.0;
 		minMaxLoc(zncc, &minVal, &maxVal2, &minLoc, &maxLoc2, Mat());
 		if (maxVal2 / maxVal>0.5 || abs(maxLoc2.x - maxLoc.x) < hbandwidth * 2 + 1)
 		{
 			Goodness[ii] = false;
-			printf("Caution! Distance to the 2nd best peak (%.4f /%.4f): %d or %.2fs\n", maxVal, maxVal2, abs(maxLoc2.x - maxLoc.x), 1.0*abs(maxLoc2.x - maxLoc.x) / sampleRate*fps4);
+			printf("Caution! Distance to the 2nd best peak (%.4f /%.4f): %d or %.2fs\n", maxVal, maxVal2, abs(maxLoc2.x - maxLoc.x), 1.0*abs(maxLoc2.x - maxLoc.x) / sampleRate*fps3);
 		}
 		else
 			Goodness[ii] = true;
@@ -242,7 +243,7 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 	else
 	{
 		int fsoffset = soffset[index[nSpliting - 1]];
-		finalfoffset = 1.0*fsoffset / sampleRate*fps4;
+		finalfoffset = 1.0*fsoffset / sampleRate*fps3;
 		printf("Final offset: %d samples or %.2f frames with ZNCC score %.4f\n", fsoffset, finalfoffset, MaxCorr[nSpliting - 1]);
 
 		delete[]index, delete[]Goodness;

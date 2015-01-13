@@ -1940,3 +1940,1100 @@ int IsBlurred(const unsigned char* const luminance, const int width, const int h
 	extent = (extent1 + extent2 + extent3 + extent4) / 4;
 	return blur < blurThresh;
 }
+
+double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd)
+{
+	int i, j, k, m, ii, jj, iii, jjj, iii2, jjj2;
+	double II, JJ, iii_n, jjj_n, gx, gy, DIC_Coeff, DIC_Coeff_min, t_1, t_2, t_3, t_4, t_5, t_6, m_F, m_G, t_f, t_ff, t_g, S[6];
+	double conv_crit_1 = pow(10.0, -Convergence_Criteria - 2);
+	double conv_crit_2 = conv_crit_1*0.1;
+	int NN[] = { 6, 12 }, P_Jump_Incr[] = { 1, 1 };
+	int nn = NN[advanced_tech], _iter = 0, Iter_Max = 50;
+	int p_jump, p_jump_0 = 1, p_jump_incr = P_Jump_Incr[advanced_tech];
+
+	double AA[144], BB[12], CC[12];
+
+	bool createMem = false;
+	if (Znssd_reqd == NULL)
+	{
+		createMem = true;
+		Znssd_reqd = new double[6 * (2 * hsubset + 1)*(2 * hsubset + 1)];
+	}
+
+	int Pattern_cen_x = pattern_size / 2;
+	int Pattern_cen_y = pattern_size / 2;
+
+	double p[12], p_best[12];
+	for (i = 0; i < 12; i++)
+		p[i] = 0.0;
+
+	nn = NN[advanced_tech];
+	int pixel_increment_in_subset[] = { 1, 2, 2, 3 };
+
+	bool printout = false;
+	FILE *fp1 = 0, *fp2 = 0;
+
+	/// Iteration: Begin
+	bool Break_Flag = false;
+	DIC_Coeff_min = 4.0;
+	for (p_jump = p_jump_0; p_jump > 0; p_jump -= p_jump_incr)
+	{
+		for (k = 0; k < Iter_Max; k++)
+		{
+			m = -1;
+			t_1 = 0.0, t_2 = 0.0;
+			for (iii = 0; iii < 144; iii++)
+				AA[iii] = 0.0;
+			for (iii = 0; iii < 12; iii++)
+				BB[iii] = 0.0;
+
+			if (printout)
+				fp1 = fopen("C:/temp/src.txt", "w+"), fp2 = fopen("C:/temp/tar.txt", "w+");
+
+			for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+			{
+				for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+				{
+					ii = Pattern_cen_x + iii, jj = Pattern_cen_y + jjj;
+
+					if (ii<0 || ii>(width - 1) || jj<0 || jj>(height - 1))
+						continue;
+
+					iii2 = iii*iii, jjj2 = jjj*jjj;
+					if (advanced_tech == 0)
+						II = POI.x + iii + p[0] + p[2] * iii + p[3] * jjj, JJ = POI.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+					else if (advanced_tech == 1)
+					{
+						II = POI.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * iii2*0.5 + p[7] * jjj2*0.5 + p[8] * iii*jjj;
+						JJ = POI.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[9] * iii2*0.5 + p[10] * jjj2*0.5 + p[11] * iii*jjj;
+					}
+
+					if (II<0.0 || II>(double)(width - 1) - (1e-10) || JJ<0.0 || JJ>(double)(height - 1) - (1e-10))
+						continue;
+
+					Get_Value_Spline(Para, width, height, II, JJ, S, 0, InterpAlgo);
+					m_F = Pattern[ii + jj*pattern_size];
+					m_G = S[0], gx = S[1], gy = S[2];
+					m++;
+
+					Znssd_reqd[6 * m + 0] = m_F, Znssd_reqd[6 * m + 1] = m_G;
+					Znssd_reqd[6 * m + 2] = gx, Znssd_reqd[6 * m + 3] = gy;
+					Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
+					t_1 += m_F, t_2 += m_G;
+
+					if (printout)
+						fprintf(fp1, "%e ", m_F), fprintf(fp2, "%e ", m_G);
+				}
+				if (printout)
+					fprintf(fp1, "\n"), fprintf(fp2, "\n");
+			}
+			if (printout)
+				fclose(fp1), fclose(fp2);
+
+			if (k == 0)
+			{
+				t_f = t_1 / (m + 1);
+				t_1 = 0.0;
+				for (iii = 0; iii <= m; iii++)
+				{
+					t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+					t_1 += t_4*t_4;
+				}
+				t_ff = sqrt(t_1);
+			}
+
+			t_g = t_2 / (m + 1);
+			t_2 = 0.0;
+			for (iii = 0; iii <= m; iii++)
+			{
+				t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+				t_2 += t_5*t_5;
+			}
+			t_2 = sqrt(t_2);
+
+			DIC_Coeff = 0.0;
+			for (iii = 0; iii <= m; iii++)
+			{
+				t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+				t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+				t_6 = t_5 / t_2 - t_4 / t_ff;
+				t_3 = t_6 / t_2;
+				gx = Znssd_reqd[6 * iii + 2], gy = Znssd_reqd[6 * iii + 3];
+				iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
+				CC[0] = gx, CC[1] = gy;
+				CC[2] = gx*iii_n, CC[3] = gx*jjj_n;
+				CC[4] = gy*iii_n, CC[5] = gy*jjj_n;
+				if (advanced_tech == 1)
+				{
+					CC[6] = gx*iii_n*iii_n*0.5, CC[7] = gx*jjj_n*jjj_n*0.5, CC[8] = gx*iii_n*jjj_n;
+					CC[9] = gy*iii_n*iii_n*0.5, CC[10] = gy*jjj_n*jjj_n*0.5, CC[11] = gy*iii_n*jjj_n;
+				}
+				for (j = 0; j < nn; j++)
+				{
+					BB[j] += t_3*CC[j];
+					for (i = 0; i < nn; i++)
+						AA[j*nn + i] += CC[i] * CC[j] / (t_2*t_2);
+				}
+
+				DIC_Coeff += t_6*t_6;
+			}
+
+			QR_Solution_Double(AA, BB, nn, nn);
+			for (iii = 0; iii < nn; iii++)
+				p[iii] -= BB[iii];
+
+			if (!IsNumber(p[0]) || abs(p[0]) > hsubset || abs(p[1]) > hsubset)
+			{
+				if (createMem)
+					delete[]Znssd_reqd;
+				return false;
+			}
+
+			if (DIC_Coeff < DIC_Coeff_min)	// If the iteration does not converge, this can be helpful
+			{
+				DIC_Coeff_min = DIC_Coeff;
+				for (iii = 0; iii < nn; iii++)
+					p_best[iii] = p[iii];
+			}
+
+			if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+			{
+				for (iii = 2; iii < nn; iii++)
+				{
+					if (fabs(BB[iii]) > conv_crit_2)
+						break;
+				}
+				if (iii == nn)
+					Break_Flag = true;
+			}
+
+			if (Break_Flag)
+				break;
+		}
+		// In case the iteration converges to "wrong" points, always use the data that lead to the least-square value.
+		for (iii = 0; iii < nn; iii++)
+			p[iii] = p_best[iii];
+	}
+	/// Iteration: End
+
+	if (createMem)
+		delete[]Znssd_reqd;
+	if (abs(p[0]) > hsubset || abs(p[1]) > hsubset || p[0] != p[0] || p[1] != p[1] || DIC_Coeff_min > 1.0 - ZNCCthresh)
+		return false;
+
+	POI.x += p[0], POI.y += p[1];
+
+	return 1.0 - DIC_Coeff_min;
+}
+double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch, double *ShapePara, double *oPara, double *Timg, double *T, double *Znssd_reqd)
+{
+	//Also a fine ImgRef matching,.... some differences in the input as compared to TMatchingFine though
+	// NOTE: initial guess is of the form of the homography
+
+	int i, j, k, m, ii, kk, iii, jjj, iii_n, jjj_n, iii2, jjj2, ij;
+	double II, JJ, a, b, gx, gy, DIC_Coeff, DIC_Coeff_min, t_1, t_2, t_3, t_4, t_5, t_6, t_f, t_ff, t_g, m_F, m_G, S[6];
+	double conv_crit_1 = pow(10.0, -Convergence_Criteria - 2);
+	double conv_crit_2 = conv_crit_1*0.01;
+	int NN[] = { 8, 14, 6, 12 };
+	int nn = NN[advanced_tech - 1], nExtraParas = advanced_tech > 2 ? 0 : 2, _iter = 0;
+	int p_jump, p_jump_0 = 1, p_jump_incr = 1;
+	int TimgS = 2 * hsubset + 1, Tlength = TimgS*TimgS, RefLength = widthRef*heightRef, TarLength = widthTar*heightTar;
+
+	double 	AA[196 * 196], BB[14], CC[14], p[14], ip[14], p_best[14];
+	if (ShapePara == NULL)
+	{
+		for (ii = 0; ii < nn; ii++)
+			p[ii] = (ii == nn - nExtraParas ? 1.0 : 0.0);
+	}
+	else
+	{
+		if (advanced_tech == 1) //These are basically taylor approximation of the denumerator
+		{
+			p[0] = ShapePara[2] - PT.x, p[1] = ShapePara[5] - PT.y;
+			p[2] = ShapePara[0] - ShapePara[2] * ShapePara[6] - 1.0;
+			p[3] = ShapePara[1] - ShapePara[2] * ShapePara[7];
+			p[4] = ShapePara[3] - ShapePara[5] * ShapePara[6];
+			p[5] = ShapePara[4] - ShapePara[5] * ShapePara[7] - 1.0;
+			p[6] = 1.0, p[7] = 0.0;
+		}
+		else
+		{
+			p[0] = ShapePara[2] - PT.x, p[1] = ShapePara[5] - PT.y;
+			p[2] = ShapePara[0] - ShapePara[2] * ShapePara[6] - 1.0;
+			p[3] = ShapePara[1] - ShapePara[2] * ShapePara[7];
+			p[4] = ShapePara[3] - ShapePara[5] * ShapePara[6];
+			p[5] = ShapePara[4] - ShapePara[5] * ShapePara[7] - 1.0;
+			p[6] = -0.5*ShapePara[0] * ShapePara[6];
+			p[7] = -0.5*ShapePara[1] * ShapePara[7];
+			p[8] = -(ShapePara[0] * ShapePara[7] + ShapePara[1] * ShapePara[6]);
+			p[9] = -0.5*ShapePara[3] * ShapePara[6];
+			p[10] = -0.5*ShapePara[4] * ShapePara[7];
+			p[11] = -(ShapePara[3] * ShapePara[7] + ShapePara[4] * ShapePara[6]);
+			p[12] = 1.0, p[13] = 0.0;
+		}
+	}
+	for (i = 0; i < nn; i++)
+		ip[i] = p[i];
+
+	bool createMem = false;
+	if (Timg == NULL)
+	{
+		Timg = new double[Tlength*nchannels];
+		T = new double[2 * Tlength*nchannels];
+		Znssd_reqd = new double[6 * Tlength];
+		createMem = true;
+	}
+
+	for (jjj = -hsubset; jjj <= hsubset; jjj++)
+	{
+		for (iii = -hsubset; iii <= hsubset; iii++)
+		{
+			II = PR.x + iii, JJ = PR.y + jjj;
+			for (kk = 0; kk < nchannels; kk++)
+			{
+				Get_Value_Spline(RefPara + kk*RefLength, widthRef, heightRef, II, JJ, S, -1, InterpAlgo);
+				Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength] = S[0];
+			}
+		}
+	}
+
+	bool printout = false; FILE *fp = 0;
+	if (printout)
+	{
+		fp = fopen("C:/temp/src.txt", "w+");
+		for (jjj = -hsubset; jjj <= hsubset; jjj++)
+		{
+			for (iii = -hsubset; iii <= hsubset; iii++)
+				for (kk = 0; kk < nchannels; kk++)
+					fprintf(fp, "%.2f ", Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength]);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+
+	if (greedySearch)
+	{
+		/// Let's start with only translation and only match the at the highest level of the pyramid
+		double zncc, znccMin;
+		for (p_jump = p_jump_0; p_jump > 0; p_jump -= (advanced_tech == 0 ? 1 : 2))
+		{
+			znccMin = 1e10;
+			for (k = 0; k < Iter_Max; k++)
+			{
+				t_1 = 0.0;
+				t_2 = 0.0;
+				for (i = 0; i < 4; i++)
+					AA[i] = 0.0;
+				for (i = 0; i < 2; i++)
+					BB[i] = 0.0;
+
+				for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+				{
+					for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+					{
+						II = PT.x + iii + p[0], JJ = PT.y + jjj + p[1];
+						if (II<0.0 || II>(double)(widthTar - 2) || JJ<0.0 || JJ>(double)(heightTar - 2))
+							continue;
+
+						for (kk = 0; kk < nchannels; kk++)
+						{
+							Get_Value_Spline(TarPara + kk*TarLength, widthTar, heightTar, II, JJ, S, 0, InterpAlgo);
+
+							m_F = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
+							m_G = S[0];
+
+							t_3 = m_G - m_F;
+							CC[0] = S[1], CC[1] = S[2];
+
+							for (i = 0; i < 2; i++)
+								BB[i] += t_3*CC[i];
+
+							for (j = 0; j < 2; j++)
+								for (i = 0; i < 2; i++)
+									AA[j * 2 + i] += CC[i] * CC[j];
+
+							t_1 += t_3*t_3, t_2 += m_F*m_F;
+						}
+					}
+				}
+				zncc = t_1 / t_2;
+
+				QR_Solution_Double(AA, BB, 2, 2);
+				for (i = 0; i < 2; i++)
+					p[i] -= BB[i];
+
+				if (abs(p[0]) > 0.005*widthTar || abs(p[1]) > 0.005*widthTar || !IsFiniteNumber(p[0]))
+				{
+					if (createMem)
+					{
+						delete[]Timg;
+						delete[]T;
+					}
+					return 0.0;
+				}
+
+				if (zncc < znccMin)	// If the iteration does not converge, this can be helpful
+				{
+					znccMin = zncc;
+					p_best[0] = p[0], p_best[1] = p[1];
+				}
+
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+					break;
+			}
+		}
+		p[0] = p_best[0], p[1] = p_best[1];
+	}
+
+	/// DIC Iteration: Begin
+	bool Break_Flag;
+	DIC_Coeff_min = 1e10;
+	for (p_jump = p_jump_0; p_jump > 0; p_jump -= p_jump_incr)
+	{
+		Break_Flag = false;
+		for (k = 0; k < Iter_Max; k++)
+		{
+			m = -1, t_1 = 0.0, t_2 = 0.0;
+			for (iii = 0; iii < nn*nn; iii++)
+				AA[iii] = 0.0;
+			for (iii = 0; iii < nn; iii++)
+				BB[iii] = 0.0;
+
+			a = p[nn - 2], b = p[nn - 1];
+			if (printout)
+				fp = fopen("C:/temp/tar.txt", "w+");
+
+			for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+			{
+				for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+				{
+					if (advanced_tech % 2 == 1)
+						II = PT.x + iii + p[0] + p[2] * iii + p[3] * jjj, JJ = PT.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+					else if (advanced_tech == 0)
+					{
+						iii2 = iii*iii, jjj2 = jjj*jjj, ij = iii*jjj;
+						II = PT.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * iii2*0.5 + p[7] * jjj2*0.5 + p[8] * ij;
+						JJ = PT.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[9] * iii2*0.5 + p[10] * jjj2*0.5 + p[11] * ij;
+					}
+
+					if (II<5.0 || II>(double)(widthTar - 5) || JJ<5.0 || JJ>(double)(heightTar - 5))
+						continue;
+
+					for (kk = 0; kk < nchannels; kk++)
+					{
+						m_F = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
+						Get_Value_Spline(TarPara + kk*TarLength, widthTar, heightTar, II, JJ, S, 0, InterpAlgo);
+						m_G = S[0], gx = S[1], gy = S[2];
+						m++;
+
+						if (printout)
+							fprintf(fp, "%.2f ", m_G);
+
+						if (advanced_tech < 2)
+						{
+							t_3 = a*m_G + b - m_F, t_4 = a;
+
+							t_5 = t_4*gx, t_6 = t_4*gy;
+							CC[0] = t_5, CC[1] = t_6;
+							CC[2] = t_5*iii, CC[3] = t_5*jjj;
+							CC[4] = t_6*iii, CC[5] = t_6*jjj;
+							CC[6] = m_G, CC[7] = 1.0;
+
+							for (j = 0; j < nn; j++)
+								BB[j] += t_3*CC[j];
+
+							for (j = 0; j < nn; j++)
+								for (i = 0; i < nn; i++)
+									AA[j*nn + i] += CC[i] * CC[j];
+
+							t_1 += t_3*t_3, t_2 += m_F*m_F;
+						}
+						else
+						{
+							Znssd_reqd[6 * m + 0] = m_F, Znssd_reqd[6 * m + 1] = m_G;
+							Znssd_reqd[6 * m + 2] = gx, Znssd_reqd[6 * m + 3] = gy;
+							Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
+							t_1 += m_F, t_2 += m_G;
+						}
+					}
+				}
+				if (printout)
+					fprintf(fp, "\n");
+			}
+			if (printout)
+				fclose(fp);
+
+			if (advanced_tech < 3)
+			{
+				DIC_Coeff = t_1 / t_2;
+				if (t_2 < 10.0e-9)
+					break;
+			}
+			else
+			{
+				if (k == 0)
+				{
+					t_f = t_1 / (m + 1);
+					t_1 = 0.0;
+					for (iii = 0; iii <= m; iii++)
+					{
+						t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+						t_1 += t_4*t_4;
+					}
+					t_ff = sqrt(t_1);
+				}
+				t_g = t_2 / (m + 1);
+				t_2 = 0.0;
+				for (iii = 0; iii <= m; iii++)
+				{
+					t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+					t_2 += t_5*t_5;
+				}
+				t_2 = sqrt(t_2);
+
+				DIC_Coeff = 0.0;
+				for (iii = 0; iii <= m; iii++)
+				{
+					t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+					t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+					t_6 = t_5 / t_2 - t_4 / t_ff;
+					t_3 = t_6 / t_2;
+					gx = Znssd_reqd[6 * iii + 2], gy = Znssd_reqd[6 * iii + 3];
+					iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
+					CC[0] = gx, CC[1] = gy;
+					CC[2] = gx*iii_n, CC[3] = gx*jjj_n;
+					CC[4] = gy*iii_n, CC[5] = gy*jjj_n;
+					if (advanced_tech == 4)
+					{
+						CC[6] = gx*iii_n*iii_n*0.5, CC[7] = gx*jjj_n*jjj_n*0.5, CC[8] = gx*iii_n*jjj_n;
+						CC[9] = gy*iii_n*iii_n*0.5, CC[10] = gy*jjj_n*jjj_n*0.5, CC[11] = gy*iii_n*jjj_n;
+					}
+					for (j = 0; j < nn; j++)
+					{
+						BB[j] += t_3*CC[j];
+						for (i = 0; i < nn; i++)
+							AA[j*nn + i] += CC[i] * CC[j] / (t_2*t_2);
+					}
+
+					DIC_Coeff += t_6*t_6;
+				}
+				if (!IsNumber(DIC_Coeff))
+					return 9e9;
+				if (!IsFiniteNumber(DIC_Coeff))
+					return 9e9;
+			}
+
+			QR_Solution_Double(AA, BB, nn, nn);
+			for (iii = 0; iii < nn; iii++)
+				p[iii] -= BB[iii];
+
+			if (abs(p[0]) > 0.005*widthTar || abs(p[1]) > 0.005*widthTar || !IsFiniteNumber(p[0]))
+			{
+				if (createMem)
+				{
+					delete[]Timg;
+					delete[]T;
+				}
+				return 0.0;
+			}
+
+			if (DIC_Coeff < DIC_Coeff_min)	// If the iteration does not converge, this can be helpful
+			{
+				DIC_Coeff_min = DIC_Coeff;
+				for (iii = 0; iii < nn; iii++)
+					p_best[iii] = p[iii];
+				if (!IsNumber(p[0]) || !IsNumber(p[1]))
+					return 9e9;
+			}
+
+			if (advanced_tech < 3)
+			{
+				if (abs(p[0] - ip[0]) > hsubset || abs(p[1] - ip[1]) > hsubset)
+					return 9e9;
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+				{
+					for (iii = 2; iii < nn - nExtraParas; iii++)
+					{
+						if (fabs(BB[iii]) > conv_crit_2)
+							break;
+					}
+					if (iii == nn - nExtraParas)
+						Break_Flag = true;
+				}
+			}
+			else if (advanced_tech == 3)
+			{
+				if (abs(p[0] - ip[0]) > hsubset || abs(p[1] - ip[1]) > hsubset)
+					return 9e9;
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+				{
+					for (iii = 2; iii < nn - nExtraParas; iii++)
+						if (fabs(BB[iii]) > conv_crit_2)
+							break;
+					if (iii == nn - nExtraParas)
+						Break_Flag = true;
+				}
+			}
+			else
+			{
+				if (abs(p[0] - ip[0]) > hsubset || abs(p[1] - ip[1]) > hsubset)
+					return 9e9;
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+				{
+					for (iii = 2; iii < nn; iii++)
+						if (fabs(BB[iii]) > conv_crit_2)
+							break;
+					if (iii == nn)
+						Break_Flag = true;
+				}
+			}
+			if (Break_Flag)
+				break;
+		}
+		_iter += k;
+
+		// In case the iteration converges to "wrong" points, always use the data that lead to the least-square value.
+		for (iii = 0; iii < nn; iii++)
+			p[iii] = p_best[iii];
+	}
+	/// DIC Iteration: End
+
+	//Now, dont really trust the pssad error too much, compute zncc score instead! 
+	//They are usually close when the convergence goes smothly, but in case of trouble, zncc is more reliable.
+	double ZNCC;
+	if (advanced_tech < 3)
+	{
+		int m = 0;
+		double t_1, t_2, t_3, t_4, t_5, t_f = 0.0, t_g = 0.0;
+		if (printout)
+			fp = fopen("C:/temp/tar.txt", "w+");
+		for (jjj = -hsubset; jjj <= hsubset; jjj++)
+		{
+			for (iii = -hsubset; iii <= hsubset; iii++)
+			{
+				II = PT.x + iii + p[0] + p[2] * iii + p[3] * jjj;
+				JJ = PT.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+
+				if (II<0.0 || II>(double)(widthTar - 1) || JJ<0.0 || JJ>(double)(heightTar - 1))
+					continue;
+
+				for (kk = 0; kk < nchannels; kk++)
+				{
+					Get_Value_Spline(TarPara + kk*TarLength, widthTar, heightTar, II, JJ, S, -1, InterpAlgo);
+					if (printout)
+						fprintf(fp, "%.4f ", S[0]);
+
+					T[2 * m] = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
+					T[2 * m + 1] = S[0];
+					t_f += T[2 * m];
+					t_g += T[2 * m + 1];
+					m++;
+				}
+			}
+			if (printout)
+				fprintf(fp, "\n");
+		}
+		if (printout)
+			fclose(fp);
+
+		t_f = t_f / m;
+		t_g = t_g / m;
+		t_1 = 0.0, t_2 = 0.0, t_3 = 0.0;
+		for (i = 0; i < m; i++)
+		{
+			t_4 = T[2 * i] - t_f;
+			t_5 = T[2 * i + 1] - t_g;
+			t_1 += 1.0*t_4*t_5;
+			t_2 += 1.0*t_4*t_4;
+			t_3 += 1.0*t_5*t_5;
+		}
+
+		t_2 = sqrt(t_2*t_3);
+		if (t_2 < 1e-10)
+			t_2 = 1e-10;
+
+		ZNCC = t_1 / t_2; //This is the zncc score
+		if (abs(ZNCC) > 1.0)
+			ZNCC = 0.0;
+	}
+	else
+		ZNCC = 1.0 - 0.5*DIC_Coeff_min; //from ZNSSD to ZNCC
+
+	if (abs(p[0]) > 0.005*widthTar || abs(p[1]) > 0.005*widthTar || p[0] != p[0] || p[1] != p[1] || ZNCC < ZNCCThreshold)
+	{
+		if (createMem)
+		{
+			delete[]Timg;
+			delete[]T;
+		}
+		return 0.0;
+	}
+
+	fufv[0] = p_best[0], fufv[1] = p_best[1];
+	if (oPara != NULL)
+		for (ii = 0; ii < 8; ii++)
+			oPara[ii] = p_best[ii];
+
+	if (createMem)
+	{
+		delete[]Timg;
+		delete[]T;
+	}
+	return ZNCC;
+}
+double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch, double *ShapePara, double *oPara, double *Timg, double *T, double *Znssd_reqd)
+{
+	//Also a fine ImgRef matching,.... some differences in the input as compared to TMatchingFine though
+	// NOTE: initial guess is of the form of the homography
+
+	int i, j, k, m, ii, kk, iii, jjj, iii_n, jjj_n, iii2, jjj2, ij;
+	double II, JJ, a, b, gx, gy, DIC_Coeff, DIC_Coeff_min, t_1, t_2, t_3, t_4, t_5, t_6, t_f, t_ff, t_g, m_F, m_G, S[6];
+	double conv_crit_1 = pow(10.0, -Convergence_Criteria - 2);
+	double conv_crit_2 = conv_crit_1*0.01;
+	int NN[] = { 8, 14, 6, 12 };
+	int nn = NN[advanced_tech - 1], nExtraParas = advanced_tech > 2 ? 0 : 2, _iter = 0;
+	int p_jump, p_jump_0 = 1, p_jump_incr = 1;
+	int TimgS = 2 * hsubset + 1, Tlength = TimgS*TimgS, RefLength = widthRef*heightRef, TarLength = widthTar*heightTar;
+
+	double 	AA[196 * 196], BB[14], CC[14], p[14], ip[14], p_best[14];
+	if (ShapePara == NULL)
+	{
+		for (ii = 0; ii < nn; ii++)
+			p[ii] = (ii == nn - nExtraParas ? 1.0 : 0.0);
+	}
+	else
+	{
+		if (advanced_tech == 1) //These are basically taylor approximation of the denumerator
+		{
+			p[0] = ShapePara[2] - PT.x, p[1] = ShapePara[5] - PT.y;
+			p[2] = ShapePara[0] - ShapePara[2] * ShapePara[6] - 1.0;
+			p[3] = ShapePara[1] - ShapePara[2] * ShapePara[7];
+			p[4] = ShapePara[3] - ShapePara[5] * ShapePara[6];
+			p[5] = ShapePara[4] - ShapePara[5] * ShapePara[7] - 1.0;
+			p[6] = 1.0, p[7] = 0.0;
+		}
+		else
+		{
+			p[0] = ShapePara[2] - PT.x, p[1] = ShapePara[5] - PT.y;
+			p[2] = ShapePara[0] - ShapePara[2] * ShapePara[6] - 1.0;
+			p[3] = ShapePara[1] - ShapePara[2] * ShapePara[7];
+			p[4] = ShapePara[3] - ShapePara[5] * ShapePara[6];
+			p[5] = ShapePara[4] - ShapePara[5] * ShapePara[7] - 1.0;
+			p[6] = -0.5*ShapePara[0] * ShapePara[6];
+			p[7] = -0.5*ShapePara[1] * ShapePara[7];
+			p[8] = -(ShapePara[0] * ShapePara[7] + ShapePara[1] * ShapePara[6]);
+			p[9] = -0.5*ShapePara[3] * ShapePara[6];
+			p[10] = -0.5*ShapePara[4] * ShapePara[7];
+			p[11] = -(ShapePara[3] * ShapePara[7] + ShapePara[4] * ShapePara[6]);
+			p[12] = 1.0, p[13] = 0.0;
+		}
+	}
+	for (i = 0; i < nn; i++)
+		ip[i] = p[i];
+
+	bool createMem = false;
+	if (Timg == NULL)
+	{
+		Timg = new double[Tlength*nchannels];
+		T = new double[2 * Tlength*nchannels];
+		Znssd_reqd = new double[6 * Tlength];
+		createMem = true;
+	}
+
+	for (jjj = -hsubset; jjj <= hsubset; jjj++)
+	{
+		for (iii = -hsubset; iii <= hsubset; iii++)
+		{
+			II = PR.x + iii, JJ = PR.y + jjj;
+			for (kk = 0; kk < nchannels; kk++)
+			{
+				Get_Value_Spline(RefPara + kk*RefLength, widthRef, heightRef, II, JJ, S, -1, InterpAlgo);
+				Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength] = S[0];
+			}
+		}
+	}
+
+	bool printout = false; FILE *fp = 0;
+	if (printout)
+	{
+		fp = fopen("C:/temp/src.txt", "w+");
+		for (jjj = -hsubset; jjj <= hsubset; jjj++)
+		{
+			for (iii = -hsubset; iii <= hsubset; iii++)
+				for (kk = 0; kk < nchannels; kk++)
+					fprintf(fp, "%.2f ", Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength]);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+
+	if (greedySearch)
+	{
+		/// Let's start with only translation and only match the at the highest level of the pyramid
+		double zncc, znccMin;
+		for (p_jump = p_jump_0; p_jump > 0; p_jump -= (advanced_tech == 0 ? 1 : 2))
+		{
+			znccMin = 1e10;
+			for (k = 0; k < Iter_Max; k++)
+			{
+				t_1 = 0.0;
+				t_2 = 0.0;
+				for (i = 0; i < 4; i++)
+					AA[i] = 0.0;
+				for (i = 0; i < 2; i++)
+					BB[i] = 0.0;
+
+				for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+				{
+					for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+					{
+						II = PT.x + iii + p[0], JJ = PT.y + jjj + p[1];
+						if (II<0.0 || II>(double)(widthTar - 2) || JJ<0.0 || JJ>(double)(heightTar - 2))
+							continue;
+
+						for (kk = 0; kk < nchannels; kk++)
+						{
+							Get_Value_Spline(TarPara + kk*TarLength, widthTar, heightTar, II, JJ, S, 0, InterpAlgo);
+
+							m_F = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
+							m_G = S[0];
+
+							t_3 = m_G - m_F;
+							CC[0] = S[1], CC[1] = S[2];
+
+							for (i = 0; i < 2; i++)
+								BB[i] += t_3*CC[i];
+
+							for (j = 0; j < 2; j++)
+								for (i = 0; i < 2; i++)
+									AA[j * 2 + i] += CC[i] * CC[j];
+
+							t_1 += t_3*t_3, t_2 += m_F*m_F;
+						}
+					}
+				}
+				zncc = t_1 / t_2;
+
+				QR_Solution_Double(AA, BB, 2, 2);
+				for (i = 0; i < 2; i++)
+					p[i] -= BB[i];
+
+				if (abs(p[0]) > 0.005*widthTar || abs(p[1]) > 0.005*widthTar || !IsFiniteNumber(p[0]))
+				{
+					if (createMem)
+					{
+						delete[]Timg;
+						delete[]T;
+					}
+					return 0.0;
+				}
+
+				if (zncc < znccMin)	// If the iteration does not converge, this can be helpful
+				{
+					znccMin = zncc;
+					p_best[0] = p[0], p_best[1] = p[1];
+				}
+
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+					break;
+			}
+		}
+		p[0] = p_best[0], p[1] = p_best[1];
+	}
+
+	/// DIC Iteration: Begin
+	bool Break_Flag;
+	DIC_Coeff_min = 1e10;
+	for (p_jump = p_jump_0; p_jump > 0; p_jump -= p_jump_incr)
+	{
+		Break_Flag = false;
+		for (k = 0; k < Iter_Max; k++)
+		{
+			m = -1, t_1 = 0.0, t_2 = 0.0;
+			for (iii = 0; iii < nn*nn; iii++)
+				AA[iii] = 0.0;
+			for (iii = 0; iii < nn; iii++)
+				BB[iii] = 0.0;
+
+			a = p[nn - 2], b = p[nn - 1];
+			if (printout)
+				fp = fopen("C:/temp/tar.txt", "w+");
+
+			for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+			{
+				for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+				{
+					if (advanced_tech % 2 == 1)
+						II = PT.x + iii + p[0] + p[2] * iii + p[3] * jjj, JJ = PT.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+					else if (advanced_tech == 0)
+					{
+						iii2 = iii*iii, jjj2 = jjj*jjj, ij = iii*jjj;
+						II = PT.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * iii2*0.5 + p[7] * jjj2*0.5 + p[8] * ij;
+						JJ = PT.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[9] * iii2*0.5 + p[10] * jjj2*0.5 + p[11] * ij;
+					}
+
+					if (II<5.0 || II>(double)(widthTar - 5) || JJ<5.0 || JJ>(double)(heightTar - 5))
+						continue;
+
+					for (kk = 0; kk < nchannels; kk++)
+					{
+						m_F = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
+						Get_Value_Spline(TarPara + kk*TarLength, widthTar, heightTar, II, JJ, S, 0, InterpAlgo);
+						m_G = S[0], gx = S[1], gy = S[2];
+						m++;
+
+						if (printout)
+							fprintf(fp, "%.2f ", m_G);
+
+						if (advanced_tech < 2)
+						{
+							t_3 = a*m_G + b - m_F, t_4 = a;
+
+							t_5 = t_4*gx, t_6 = t_4*gy;
+							CC[0] = t_5, CC[1] = t_6;
+							CC[2] = t_5*iii, CC[3] = t_5*jjj;
+							CC[4] = t_6*iii, CC[5] = t_6*jjj;
+							CC[6] = m_G, CC[7] = 1.0;
+
+							for (j = 0; j < nn; j++)
+								BB[j] += t_3*CC[j];
+
+							for (j = 0; j < nn; j++)
+								for (i = 0; i < nn; i++)
+									AA[j*nn + i] += CC[i] * CC[j];
+
+							t_1 += t_3*t_3, t_2 += m_F*m_F;
+						}
+						else
+						{
+							Znssd_reqd[6 * m + 0] = m_F, Znssd_reqd[6 * m + 1] = m_G;
+							Znssd_reqd[6 * m + 2] = gx, Znssd_reqd[6 * m + 3] = gy;
+							Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
+							t_1 += m_F, t_2 += m_G;
+						}
+					}
+				}
+				if (printout)
+					fprintf(fp, "\n");
+			}
+			if (printout)
+				fclose(fp);
+
+			if (advanced_tech < 3)
+			{
+				DIC_Coeff = t_1 / t_2;
+				if (t_2 < 10.0e-9)
+					break;
+			}
+			else
+			{
+				if (k == 0)
+				{
+					t_f = t_1 / (m + 1);
+					t_1 = 0.0;
+					for (iii = 0; iii <= m; iii++)
+					{
+						t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+						t_1 += t_4*t_4;
+					}
+					t_ff = sqrt(t_1);
+				}
+				t_g = t_2 / (m + 1);
+				t_2 = 0.0;
+				for (iii = 0; iii <= m; iii++)
+				{
+					t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+					t_2 += t_5*t_5;
+				}
+				t_2 = sqrt(t_2);
+
+				DIC_Coeff = 0.0;
+				for (iii = 0; iii <= m; iii++)
+				{
+					t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+					t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+					t_6 = t_5 / t_2 - t_4 / t_ff;
+					t_3 = t_6 / t_2;
+					gx = Znssd_reqd[6 * iii + 2], gy = Znssd_reqd[6 * iii + 3];
+					iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
+					CC[0] = gx, CC[1] = gy;
+					CC[2] = gx*iii_n, CC[3] = gx*jjj_n;
+					CC[4] = gy*iii_n, CC[5] = gy*jjj_n;
+					if (advanced_tech == 4)
+					{
+						CC[6] = gx*iii_n*iii_n*0.5, CC[7] = gx*jjj_n*jjj_n*0.5, CC[8] = gx*iii_n*jjj_n;
+						CC[9] = gy*iii_n*iii_n*0.5, CC[10] = gy*jjj_n*jjj_n*0.5, CC[11] = gy*iii_n*jjj_n;
+					}
+					for (j = 0; j < nn; j++)
+					{
+						BB[j] += t_3*CC[j];
+						for (i = 0; i < nn; i++)
+							AA[j*nn + i] += CC[i] * CC[j] / (t_2*t_2);
+					}
+
+					DIC_Coeff += t_6*t_6;
+				}
+				if (!IsNumber(DIC_Coeff))
+					return 9e9;
+				if (!IsFiniteNumber(DIC_Coeff))
+					return 9e9;
+			}
+
+			QR_Solution_Double(AA, BB, nn, nn);
+			for (iii = 0; iii < nn; iii++)
+				p[iii] -= BB[iii];
+
+			if (abs(p[0]) > 0.005*widthTar || abs(p[1]) > 0.005*widthTar || !IsFiniteNumber(p[0]))
+			{
+				if (createMem)
+				{
+					delete[]Timg;
+					delete[]T;
+				}
+				return 0.0;
+			}
+
+			if (DIC_Coeff < DIC_Coeff_min)	// If the iteration does not converge, this can be helpful
+			{
+				DIC_Coeff_min = DIC_Coeff;
+				for (iii = 0; iii < nn; iii++)
+					p_best[iii] = p[iii];
+				if (!IsNumber(p[0]) || !IsNumber(p[1]))
+					return 0.0;
+			}
+
+			if (advanced_tech < 3)
+			{
+				if (abs(p[0] - ip[0]) > hsubset || abs(p[1] - ip[1]) > hsubset)
+					return 0.0;
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+				{
+					for (iii = 2; iii < nn - nExtraParas; iii++)
+					{
+						if (fabs(BB[iii]) > conv_crit_2)
+							break;
+					}
+					if (iii == nn - nExtraParas)
+						Break_Flag = true;
+				}
+			}
+			else if (advanced_tech == 3)
+			{
+				if (abs(p[0] - ip[0]) > hsubset || abs(p[1] - ip[1]) > hsubset)
+					return 0.0;
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+				{
+					for (iii = 2; iii < nn - nExtraParas; iii++)
+						if (fabs(BB[iii]) > conv_crit_2)
+							break;
+					if (iii == nn - nExtraParas)
+						Break_Flag = true;
+				}
+			}
+			else
+			{
+				if (abs(p[0] - ip[0]) > hsubset || abs(p[1] - ip[1]) > hsubset)
+					return 0.0;
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+				{
+					for (iii = 2; iii < nn; iii++)
+						if (fabs(BB[iii]) > conv_crit_2)
+							break;
+					if (iii == nn)
+						Break_Flag = true;
+				}
+			}
+			if (Break_Flag)
+				break;
+		}
+		_iter += k;
+
+		// In case the iteration converges to "wrong" points, always use the data that lead to the least-square value.
+		for (iii = 0; iii < nn; iii++)
+			p[iii] = p_best[iii];
+	}
+	/// DIC Iteration: End
+
+	//Now, dont really trust the pssad error too much, compute zncc score instead! 
+	//They are usually close when the convergence goes smothly, but in case of trouble, zncc is more reliable.
+	double ZNCC;
+	if (advanced_tech < 3)
+	{
+		int m = 0;
+		double t_1, t_2, t_3, t_4, t_5, t_f = 0.0, t_g = 0.0;
+		if (printout)
+			fp = fopen("C:/temp/tar.txt", "w+");
+		for (jjj = -hsubset; jjj <= hsubset; jjj++)
+		{
+			for (iii = -hsubset; iii <= hsubset; iii++)
+			{
+				II = PT.x + iii + p[0] + p[2] * iii + p[3] * jjj;
+				JJ = PT.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+
+				if (II<0.0 || II>(double)(widthTar - 1) || JJ<0.0 || JJ>(double)(heightTar - 1))
+					continue;
+
+				for (kk = 0; kk < nchannels; kk++)
+				{
+					Get_Value_Spline(TarPara + kk*TarLength, widthTar, heightTar, II, JJ, S, -1, InterpAlgo);
+					if (printout)
+						fprintf(fp, "%.4f ", S[0]);
+
+					T[2 * m] = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
+					T[2 * m + 1] = S[0];
+					t_f += T[2 * m];
+					t_g += T[2 * m + 1];
+					m++;
+				}
+			}
+			if (printout)
+				fprintf(fp, "\n");
+		}
+		if (printout)
+			fclose(fp);
+
+		t_f = t_f / m;
+		t_g = t_g / m;
+		t_1 = 0.0, t_2 = 0.0, t_3 = 0.0;
+		for (i = 0; i < m; i++)
+		{
+			t_4 = T[2 * i] - t_f;
+			t_5 = T[2 * i + 1] - t_g;
+			t_1 += 1.0*t_4*t_5;
+			t_2 += 1.0*t_4*t_4;
+			t_3 += 1.0*t_5*t_5;
+		}
+
+		t_2 = sqrt(t_2*t_3);
+		if (t_2 < 1e-10)
+			t_2 = 1e-10;
+
+		ZNCC = t_1 / t_2; //This is the zncc score
+		if (abs(ZNCC) > 1.0)
+			ZNCC = 0.0;
+	}
+	else
+		ZNCC = 1.0 - 0.5*DIC_Coeff_min; //from ZNSSD to ZNCC
+
+	if (abs(p[0]) > 0.005*widthTar || abs(p[1]) > 0.005*widthTar || p[0] != p[0] || p[1] != p[1] || ZNCC < ZNCCThreshold)
+	{
+		if (createMem)
+		{
+			delete[]Timg;
+			delete[]T;
+		}
+		return 0.0;
+	}
+
+	fufv[0] = p_best[0], fufv[1] = p_best[1];
+	if (oPara != NULL)
+		for (ii = 0; ii < 8; ii++)
+			oPara[ii] = p_best[ii];
+
+	if (createMem)
+	{
+		delete[]Timg;
+		delete[]T;
+	}
+	return ZNCC;
+}

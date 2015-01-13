@@ -13,6 +13,7 @@ using namespace std;
 #define SIFTBINS 128
 #define FISHEYE  -1
 #define RADIAL_TANGENTIAL_PRISM  0
+#define VisSFMLens 1
 #define LUT  2
 #define LIMIT3D 1e-6
 #define Pi 3.1415926535897932
@@ -78,6 +79,7 @@ struct Trajectory2D
 	int timeID, nViews;
 	vector<int>viewIDs;
 	vector<Point2d> uv;
+	vector<float>angle;
 };
 struct TrajectoryData
 {

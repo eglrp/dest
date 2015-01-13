@@ -61,7 +61,7 @@ int GeneratePointsCorrespondenceMatrix(char *Path, int nviews, int timeID);
 void GenerateViewCorrespondenceMatrix(char *Path, int nviews, int timeID);
 int ExtractSiftGPUfromExtractedFrames(char *Path, vector<int> nviews, int startF, int stopF, int HistogramEqual = 1);
 int GeneratePointsCorrespondenceMatrix_SiftGPU1(char *Path, int nviews, int timeID, float nndrRatio = 0.8, int distortionCorrected = 1, int OulierRemoveTestMethod = 1, int nCams = 10, int cameraToScan = 1);
-int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int timeID, int HistogramEqual, float nndrRatio = 0.8, int LensType = RADIAL_TANGENTIAL_PRISM, int distortionCorrected = 1, int OulierRemoveTestMethod = 1, int nCams = 10, int cameraToScan = 1);
+int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int timeID, int HistogramEqual, float nndrRatio = 0.8);
 void GenerateMatchingTable(char *Path, int nviews, int timeID);
 void BestPairFinder(char *Path, int nviews, int timeID, int &viewPair);
 int NextViewFinder(char *Path, int nviews, int timeID, int currentView, int &maxPoints, vector<int> usedPairs);
@@ -81,7 +81,7 @@ void ProjectandDistort(Point3d WC, Point2d *pts, double *P, double *camera = NUL
 void Stereo_Triangulation(Point2d *pts1, Point2d *pts2, double *P1, double *P2, Point3d *WC, int npts = 1);
 void TwoViewTriangulationQualityCheck(Point2d *pts1, Point2d *pts2, Point3d *WC, double *P1, double *P2, double *K1, double *K2, double *distortion1, double *distortion2, bool *GoodPoints, int npts, double thresh);
 void NviewTriangulation(Point2d *pts, double *P, Point3d *WC, int nview, int npts, double *Cov, double *A, double *B);
-void NviewTriangulationRANSAC(Point2d *pts, double *P, Point3d *WC, bool *PassedTri, vector<int> *Inliers, int nview, int npts, int MaxRanSacIter, double inlierPercent, double threshold, double *A = NULL, double *B = NULL, double *tP = NULL);
+double NviewTriangulationRANSAC(Point2d *pts, double *P, Point3d *WC, bool *PassedTri, vector<int> *Inliers, int nview, int npts, int MaxRanSacIter, double inlierPercent, double threshold, double *A = NULL, double *B = NULL, double *tP = NULL);
 void NviewTriangulationRANSAC(vector<Point2d> *pts, double *P, Point3d *WC, int nview, int npts, int MaxRanSacIter, double inlierPercent, double threshold, double *A = NULL, double *B = NULL);
 void MultiViewQualityCheck(Point2d *Pts, double *Pmat, int LensType, double *K, double *distortion, bool *PassedPoints, int nviews, int npts, double thresh, Point3d *aWC, Point2d *apts = 0, Point2d *bkapts = 0, int *DeviceMask = 0, double *tK = 0, double *tdistortion = 0, double *tP = 0, double *A = 0, double *B = 0);
 
@@ -91,7 +91,7 @@ int AddNewViewReconstruction(char *Path, CameraData *AllViewsParas, int nviews, 
 int IncrementalBA(char *Path, int nviews, int timeID, CameraData *AllViewsParas, vector<int> AvailViews, vector<int> Selected3DIndex, Point3d *All3D, vector<Point2d> *selected2D, vector<int>*nSelectedViews, int nSelectedPts, int totalPts, bool fixSkew, bool fixIntrinsic, bool fixDistortion, bool debug);
 void IncrementalBundleAdjustment(char *Path, int nviews, int timeID, int maxKeypoints);
 
-int BuildCorpus(char *Path, int nCameras, int CameraToScan, int distortionCorrected, int NDplus = 5);
+int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int NDplus = 5);
 int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime, int LensType, int distortionCorrected, double Reprojectionthreshold, bool Gen3DPatchFile = false, double Patch_World_Unit = 1.0);
 int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d> uvAll3D, vector<bool> &Good, bool fixIntrinsic, bool fixDistortion, int distortionCorrected, bool debug);
 

@@ -1543,18 +1543,6 @@ int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCa
 		camera[ii].threshold = 2.0, camera[ii].ninlierThresh = 50;
 
 	char Fname[200];
-	{
-		if (timeID < 0)
-			sprintf(Fname, "%s/_M_%d_%d.dat", Path, id1, id2);
-		else
-			sprintf(Fname, "%s/_M%d_%d_%d.dat", Path, timeID, id1, id2);
-		FILE *fp = fopen(Fname, "r");
-		if (fp != NULL)
-		{
-			printf("%s\n", Fname);
-			abort();
-		}
-	}
 	vector<Point2i> RawPairWiseMatchID;
 	if (timeID < 0)
 		sprintf(Fname, "%s/M_%d_%d.dat", Path, id1, id2);
@@ -1564,7 +1552,10 @@ int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCa
 	int pid1, pid2, npts;
 	FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
 		return 1;
+	}
 	fscanf(fp, "%d ", &npts);
 	RawPairWiseMatchID.reserve(npts);
 	while (fscanf(fp, "%d %d ", &pid1, &pid2) != EOF)
@@ -1676,7 +1667,7 @@ int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCa
 
 	double start = omp_get_wtime();
 	Mat Inliers, E;
-	double ProThresh = 0.99, PercentInlier = 0.2;
+	double ProThresh = 0.95, PercentInlier = 0.2;
 	int iterMax = (int)(log(1.0 - ProThresh) / log(1.0 - pow(PercentInlier, 5)) + 0.5); //log(1-eps) / log(1 - (inlier%)^min_pts_requires)
 	if (cameraToScan != -1)
 	{
@@ -1886,9 +1877,9 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 	//	printf("Essential matrix fails....%d inliers\n", ninliers);
 
 	if (timeID < 0)
-		sprintf(Fname, "%s/M_%d_%d.dat", Path, id1, id2);
+		sprintf(Fname, "%s/_M_%d_%d.dat", Path, id1, id2);
 	else
-		sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, id1, id2);
+		sprintf(Fname, "%s/_M%d_%d_%d.dat", Path, timeID, id1, id2);
 	fp = fopen(Fname, "w+");
 
 	if (ninliers < ninlierThresh)
@@ -2431,7 +2422,7 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU1(char *Path, int nviews, int time
 	return 0;
 }
 //Use CPU for flann Sift matching: OulierRemoveTestMethod 0: no test, 1: Emat, 2: Fmat
-int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int timeID, int HistogramEqual, float nndrRatio, int LensType, int distortionCorrected, int OulierRemoveTestMethod, int nCams, int cameraToScan)
+int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int timeID, int HistogramEqual, float nndrRatio)
 {
 	// Allocation size to the largest width and largest height 1920x1080
 	// Maximum working dimension. All the SIFT octaves that needs a larger texture size will be skipped. maxd = 2560 <-> 768MB of graphic memory. 
@@ -2742,23 +2733,6 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 	FREE_MYLIB(hsiftgpu);
 	///SIFT MATCHING: ENDS
 
-
-	/*start = omp_get_wtime();
-	for (int jj = 0; jj < nviews - 1; jj++)
-	{
-	#pragma omp parallel for
-	for (int ii = jj + 1; ii < nviews; ii++)
-	{
-	if (OulierRemoveTestMethod == 1)
-	EssentialMatOutliersRemove(Path, timeID, jj, ii, nCams, cameraToScan, ninlierThesh, distortionCorrected, false);
-	if (OulierRemoveTestMethod == 2)
-	FundamentalMatOutliersRemove(Path, timeID, jj, ii, ninlierThesh, LensType, distortionCorrected, false, nCams, cameraToScan);
-	}
-	}
-	printf("Finished pruning matches ... in %.2fs\n", omp_get_wtime() - start);
-
-	GenerateMatchingTable(Path, nviews, timeID);*/
-
 	return 0;
 }
 
@@ -2789,9 +2763,9 @@ void GenerateMatchingTable(char *Path, int nviews, int timeID)
 			}
 			filesCount++;
 			if (timeID < 0)
-				sprintf(Fname, "%s/M_%d_%d.dat", Path, jj, ii);
+				sprintf(Fname, "%s/_M_%d_%d.dat", Path, jj, ii);
 			else
-				sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, jj, ii);
+				sprintf(Fname, "%s/_M%d_%d_%d.dat", Path, timeID, jj, ii);
 
 			int count = ii - jj - 1;
 			for (int i = 0; i <= jj - 1; i++)
@@ -3552,7 +3526,7 @@ void NviewTriangulation(Point2d *pts, double *P, Point3d *WC, int nview, int npt
 
 	return;
 }
-void NviewTriangulationRANSAC(Point2d *pts, double *P, Point3d *WC, bool *PassedTri, vector<int> *Inliers, int nview, int npts, int MaxRanSacIter, double inlierPercent, double threshold, double *A, double *B, double *tP)
+double NviewTriangulationRANSAC(Point2d *pts, double *P, Point3d *WC, bool *PassedTri, vector<int> *Inliers, int nview, int npts, int MaxRanSacIter, double inlierPercent, double threshold, double *A, double *B, double *tP)
 {
 	int ii, jj, kk, ll, goodCount, bestCount;
 	double u, v;
@@ -3571,6 +3545,7 @@ void NviewTriangulationRANSAC(Point2d *pts, double *P, Point3d *WC, bool *Passed
 	Point2d *goodpts2d = new Point2d[nview];
 	Point2d *goodpts2dbk = new Point2d[nview];
 
+	double finalerror = 999;
 	for (ii = 0; ii < npts; ii++)
 	{
 		//Pick a random pair to triangulate
@@ -3647,11 +3622,11 @@ void NviewTriangulationRANSAC(Point2d *pts, double *P, Point3d *WC, bool *Passed
 
 			ProjectandDistort(WC[ii], goodpts2d, tP, NULL, NULL, count);
 
-			double error = 0.0;
+			finalerror = 0.0;
 			for (jj = 0; jj < count; jj++)
-				error += pow(goodpts2dbk[jj].x - goodpts2d[jj].x, 2) + pow(goodpts2dbk[jj].y - goodpts2d[jj].y, 2);
-			error = sqrt(error / count);
-			if (error < threshold)
+				finalerror += pow(goodpts2dbk[jj].x - goodpts2d[jj].x, 2) + pow(goodpts2dbk[jj].y - goodpts2d[jj].y, 2);
+			finalerror = sqrt(finalerror / count);
+			if (finalerror < threshold)
 				PassedTri[ii] = true;
 			else
 				PassedTri[ii] = false;
@@ -3666,7 +3641,7 @@ void NviewTriangulationRANSAC(Point2d *pts, double *P, Point3d *WC, bool *Passed
 	delete[]goodpts2dbk;
 	if (MenCreated)
 		delete[]A, delete[]B, delete[]tP;
-	return;
+	return finalerror;
 }
 void NviewTriangulationRANSAC(vector<Point2d> *pts, double *P, Point3d *WC, int nview, int npts, int MaxRanSacIter, double inlierPercent, double threshold, double *A, double *B)
 {
@@ -4929,7 +4904,7 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 					once = false;
 					fprintf(fp, "%d %.4f %.4f %.4f ", jj, xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]);
 				}
-				fprintf(fp, "%d %.4f %.4f %.4f %.4f ", viewID, uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y, residuals[0], residuals[1]);
+				fprintf(fp, "V %d: %.4f %.4f %.4f %.4f ", viewID, uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y, residuals[0], residuals[1]);
 			}
 		}
 		if (validViewcount > 0)
@@ -5023,7 +4998,7 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 					fprintf(fp, "%d %.4f %.4f %.4f ", jj, xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]);
 				}
 				if (debug)
-					fprintf(fp, "%d %.4f %.4f %.4f %.4f ", viewID, uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y, residuals[0], residuals[1]);
+					fprintf(fp, "V %d: %.4f %.4f %.4f %.4f ", viewID, uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y, residuals[0], residuals[1]);
 			}
 			if (!once &&debug)
 				fprintf(fp, "\n");
@@ -5049,7 +5024,7 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 	delete[]notGood;
 	return 0;
 }
-int BuildCorpus(char *Path, int nCameras, int CameraToScan, int distortionCorrected, int NDplus)
+int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int NDplus)
 {
 	printf("Reading Corpus and camera info");
 	char Fname[200];
@@ -5094,7 +5069,6 @@ int BuildCorpus(char *Path, int nCameras, int CameraToScan, int distortionCorrec
 		return 1;
 
 	int nviews = corpusData.nCamera;
-
 	for (int ii = 0; ii < nviews; ii++)
 	{
 		corpusData.camera[ii].threshold = 1.5, corpusData.camera[ii].ninlierThresh = 50, corpusData.camera[ii];
@@ -5106,6 +5080,10 @@ int BuildCorpus(char *Path, int nCameras, int CameraToScan, int distortionCorrec
 				corpusData.camera[ii].distortion[jj] = 0.0;
 	}
 	printf("...Done\n");
+
+	//for (int ii = 0; ii < nviews; ii++)
+		//LensCorrectionDriver(Path, corpusData.camera[ii].K, corpusData.camera[ii].distortion, corpusData.camera[ii].LensModel, ii, ii, 1.0, 1.0, 1);
+	//return 0;
 
 	sprintf(Fname, "%s/ViewPM.txt", Path); FILE *fp = fopen(Fname, "r");
 	int nviewsi, viewi, n3D = 0;
@@ -5290,12 +5268,13 @@ int BuildCorpus(char *Path, int nCameras, int CameraToScan, int distortionCorrec
 	printf("Found %d (%d+) points.\n", goodNDplus, NDplus);
 
 	printf("Runing BA on the triangulated points...");
-	AllViewsBA(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, nviews, true, true, distortionCorrected, false);
+	AllViewsBA(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, nviews, true, true, distortionCorrected, true);
+	/*//Corpus intrinisc is not useful anymore
 	if (CameraToScan != -1)
 		SaveIntrinsicResults(Path, corpusData.camera, 1);
 	else
-		SaveIntrinsicResults(Path, corpusData.camera, nviews);
-	printf("...Done!");
+		SaveIntrinsicResults(Path, corpusData.camera, nviews);*/
+	printf("...Done!\n");
 
 	printf("Remove not good points ...");
 	sprintf(Fname, "%s/notGood.txt", Path);	fp = fopen(Fname, "r");
@@ -5727,6 +5706,9 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 		printf("Reprojection error before BA \n Min: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
 	}
 
+	if (nBadCounts > npts * 80 / 100)
+		return 1;
+
 	//Set up constant parameters:
 	printf("...set up fixed parameters ...");
 	if (distortionCorrected == 1)
@@ -5892,7 +5874,7 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 	//USAC config
 	bool USEPROSAC = false, USESPRT = true, USELOSAC = true;
 	ConfigParamsFund cfg;
-	cfg.common.confThreshold = 0.99, cfg.common.minSampleSize = 7, cfg.common.inlierThreshold = 1.5;
+	cfg.common.confThreshold = 0.99, cfg.common.minSampleSize = 7, cfg.common.inlierThreshold = 1.0;
 	cfg.common.maxHypotheses = 850000, cfg.common.maxSolutionsPerSample = 3;
 	cfg.common.prevalidateSample = true, cfg.common.prevalidateModel = true, cfg.common.testDegeneracy = true;
 	cfg.common.randomSamplingMethod = USACConfig::SAMP_UNIFORM, cfg.common.verifMethod = USACConfig::VERIF_SPRT, cfg.common.localOptMethod = USACConfig::LO_LOSAC;
@@ -5910,7 +5892,7 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 	//Match extracted features with Corpus
 	const bool useBFMatcher = false;
 	const int knn = 2, ntrees = 4, maxLeafCheck = 128;
-	bool ShowCorrespondence = 0;
+	bool ShowCorrespondence = 1;
 
 	vector<Point2f> twoD; twoD.reserve(5000);
 	vector<int> threeDiD; threeDiD.reserve(5000);
@@ -6163,7 +6145,8 @@ int EstimateCameraPoseFromCorpus(char *Path, Corpus corpusData, CameraData  &cam
 		uv.push_back(Point2d(pts[ii].x, pts[ii].y));
 	}
 
-	PoseBA(Path, cameraParas, Vxyz, uv, Good, fixedIntrinsc, fixedDistortion, distortionCorrected, false);
+	if (PoseBA(Path, cameraParas, Vxyz, uv, Good, fixedIntrinsc, fixedDistortion, distortionCorrected, false) == 1)
+		return 1;
 	if (sharedIntriniscOptim != 0)
 	{
 		sprintf(Fname, "%s/%d/Inliers_3D2D_%d.txt", Path, cameraID, timeID);

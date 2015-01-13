@@ -1,8 +1,9 @@
 #include <cmath>
 #include <stdint.h>
-
+#include <opencv2/opencv.hpp>
 #if !defined(IMAGEPRO_H )
 #define IMAGEPRO_H
+using namespace cv;
 
 void filter1D_row_Double(double *kernel, int k_size, double *in, double *out, int width, int height);
 void filter1D_row(double *kernel, int k_size, char *in, double *out, int width, int height);
@@ -33,4 +34,7 @@ void DecodePhaseShift2(char *Image, char *PBM, double *PhaseUW, int width, int h
 void RemoveNoiseMedianFilter(float *data, int width, int height, int ksize, float thresh);
 int IsBlurred(const unsigned char* const luminance, const int width, const int height, float &blur, float &extent, float blurThresh = 0.075);
 
+double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd = 0);
+double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
+double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
 #endif

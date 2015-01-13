@@ -383,6 +383,52 @@ void cross_product(double *x, double *y, double *xy)
 
 	return;
 }
+void conv(float *A, int lenA, float *B, int lenB, float *C)
+{
+	int nconv;
+	int i, j, i1;
+	double tmp;
+
+	nconv = lenA + lenB - 1;
+	for (i = 0; i < nconv; i++)
+	{
+		i1 = i;
+		tmp = 0.0;
+		for (j = 0; j < lenB; j++)
+		{
+			if (i1 >= 0 && i1 < lenA)
+				tmp = tmp + (A[i1] * B[j]);
+
+			i1 = i1 - 1;
+			C[i] = (float)tmp;
+		}
+	}
+
+	return;
+}
+void conv(double *A, int lenA, double *B, int lenB, double *C)
+{
+	int nconv;
+	int i, j, i1;
+	double tmp;
+
+	nconv = lenA + lenB - 1;
+	for (i = 0; i < nconv; i++)
+	{
+		i1 = i;
+		tmp = 0.0;
+		for (j = 0; j < lenB; j++)
+		{
+			if (i1 >= 0 && i1 < lenA)
+				tmp = tmp + (A[i1] * B[j]);
+
+			i1 = i1 - 1;
+			C[i] = tmp;
+		}
+	}
+
+	return;
+}
 void ZNCC1D(float *A, const int dimA, float *B, const int dimB, float *Result, float *nB)
 {
 	//Matlab normxcorr2
@@ -421,7 +467,6 @@ void ZNCC1D(float *A, const int dimA, float *B, const int dimB, float *Result, f
 }
 void ZNCC1D(double *A, int Asize, double *B, int Bsize, double *Result)
 {
-	//Matlab normxcorr2
 	//Matlab normxcorr2
 	int ii, jj;
 
@@ -853,7 +898,7 @@ int ReadDomeVGACalibFile(char *Path, CameraData *AllCamInfo)
 
 	sprintf(Fname, "%s/PinfoGL_%d.txt", Path, 0);
 	FILE *fp = fopen(Fname, "a+");
-	for (int ii = 0; ii <nCams; ii++)
+	for (int ii = 0; ii < nCams; ii++)
 	{
 		fprintf(fp, "%d ", ii);
 		for (int jj = 0; jj < 16; jj++)
@@ -936,6 +981,12 @@ bool LoadTrackData(char* filePath, int CurrentFrame, TrajectoryData &TrajectoryI
 	if (!loadVis)
 		return true;
 
+	int TrueCamID[480], ii = 0;
+	FILE *fp = fopen("D:/Y/camId.txt", "r");
+	while (fscanf(fp, "%d ", &TrueCamID[ii]) != EOF)
+		ii++;
+	fclose(fp);
+
 	TrajectoryInfo.cpVis = new vector<vector<int>>[TrajectoryInfo.nTrajectories];
 	TrajectoryInfo.fVis = new vector<vector<int>>[TrajectoryInfo.nTrajectories];
 
@@ -959,7 +1010,9 @@ bool LoadTrackData(char* filePath, int CurrentFrame, TrajectoryData &TrajectoryI
 			for (int v = 0; v < visibleCamNum; ++v)
 			{
 				fin >> visibleCamIdx;
-				cpVis.push_back(visibleCamIdx);
+				//cpVis.push_back visibleCamIdx);
+				int trueID = TrueCamID[visibleCamIdx];
+				cpVis.push_back(trueID);
 			}
 			TrajectoryInfo.cpVis[i].push_back(cpVis);
 			cpVis.clear();
@@ -973,7 +1026,9 @@ bool LoadTrackData(char* filePath, int CurrentFrame, TrajectoryData &TrajectoryI
 			for (int v = 0; v < visibleCamNum; ++v)
 			{
 				fin >> visibleCamIdx;
-				fVis.push_back(visibleCamIdx);
+				//fVis.push_back(visibleCamIdx);
+				int trueID = TrueCamID[visibleCamIdx];
+				fVis.push_back(trueID);
 			}
 			TrajectoryInfo.fVis[i].push_back(fVis);
 			fVis.clear();
@@ -1041,7 +1096,7 @@ void Write3DMemAtThatTime(char *Path, TrajectoryData &TrajectoryInfo, CameraData
 	fclose(fp);
 	return;
 }
-void Genrate2DTrajectory(char *Path, int CurrentFrame, TrajectoryData InfoTraj, CameraData *AllCamInfo, vector<int> trajectoriesUsed, double angleThreshold)
+void Genrate2DTrajectory(char *Path, int CurrentFrame, TrajectoryData InfoTraj, CameraData *AllCamInfo, vector<int> trajectoriesUsed)
 {
 	char Fname[200];
 	int ntrajectoriesUsed = trajectoriesUsed.size();
@@ -1082,11 +1137,11 @@ void Genrate2DTrajectory(char *Path, int CurrentFrame, TrajectoryData InfoTraj, 
 				PtoC = Point3d(AllCamInfo[viewID].camCenter[0] - t3D.x, AllCamInfo[viewID].camCenter[1] - t3D.y, AllCamInfo[viewID].camCenter[2] - t3D.z);
 				normPtoC = sqrt(pow(PtoC.x, 2) + pow(PtoC.y, 2) + pow(PtoC.z, 2));
 				angle = (n3D.x*PtoC.x + n3D.y*PtoC.y + n3D.z*PtoC.z) / normNormal / normPtoC;
-				if (angle > angleThreshold)
-					continue;
+				//if (angle > angleThreshold)
+				//continue;
 
 				ProjectandDistort(t3D, &pt, AllCamInfo[viewID].P);
-				fprintf(fp, "%d %.2f %.2f ", viewID, pt.x, pt.y);
+				fprintf(fp, "%d %.2f %.2f %.2f ", viewID, pt.x, pt.y, angle);
 			}
 			fprintf(fp, "\n");
 		}
@@ -1104,10 +1159,10 @@ void Genrate2DTrajectory(char *Path, int CurrentFrame, TrajectoryData InfoTraj, 
 				PtoC = Point3d(AllCamInfo[viewID].camCenter[0] - t3D.x, AllCamInfo[viewID].camCenter[1] - t3D.y, AllCamInfo[viewID].camCenter[2] - t3D.z);
 				normPtoC = sqrt(pow(PtoC.x, 2) + pow(PtoC.y, 2) + pow(PtoC.z, 2));
 				angle = (n3D.x*PtoC.x + n3D.y*PtoC.y + n3D.z*PtoC.z) / normNormal / normPtoC;
-				if (angle > angleThreshold)
-					continue;
+				//if (angle > angleThreshold)
+				//	continue;
 				ProjectandDistort(t3D, &pt, AllCamInfo[viewID].P);
-				fprintf(fp, "%d %.2f %.2f ", viewID, pt.x, pt.y);
+				fprintf(fp, "%d %.2f %.2f %.2f ", viewID, pt.x, pt.y, angle);
 			}
 			fprintf(fp, "\n");
 		}
@@ -1119,7 +1174,7 @@ int Load2DTrajectory(char *Path, TrajectoryData &inoTraj, int ntrajectories)
 {
 	inoTraj.trajectoryUnit = new vector<Trajectory2D>[ntrajectories];
 	int timeID, nvis, camID;
-	float u, v;
+	float u, v, angle;
 	char Fname[200];
 	for (int kk = 0; kk < ntrajectories; kk++)
 	{
@@ -1136,12 +1191,13 @@ int Load2DTrajectory(char *Path, TrajectoryData &inoTraj, int ntrajectories)
 		{
 			Trajectory2D OneTrajectory;
 			OneTrajectory.timeID = timeID, OneTrajectory.nViews = nvis;
-			OneTrajectory.uv.reserve(nvis), OneTrajectory.viewIDs.reserve(nvis);
+			OneTrajectory.uv.reserve(nvis), OneTrajectory.angle.reserve(nvis), OneTrajectory.viewIDs.reserve(nvis);
 			for (int jj = 0; jj < nvis; jj++)
 			{
-				fscanf(fp, "%d %f %f ", &camID, &u, &v);
+				fscanf(fp, "%d %f %f %f", &camID, &u, &v, &angle);
 				OneTrajectory.viewIDs.push_back(camID);
 				OneTrajectory.uv.push_back(Point2d(u, v));
+				OneTrajectory.angle.push_back(angle);
 			}
 			inoTraj.trajectoryUnit[kk].push_back(OneTrajectory);
 		}
@@ -1150,134 +1206,7 @@ int Load2DTrajectory(char *Path, TrajectoryData &inoTraj, int ntrajectories)
 
 	return 0;
 }
-int GetImagePatchIntensity2(char *Path, int nTraj, int *temporalOffset)// , vector<Point3i>& Argb1, vector<Point3i>& Argb2)
-{
-	printf("Getting  Trajectory Color profile\n");
-	char Fname[200];
-
-	static CvScalar colors[] =
-	{
-		{ { 0, 0, 255 } },
-		{ { 0, 128, 255 } },
-		{ { 0, 255, 255 } },
-		{ { 0, 255, 0 } },
-		{ { 255, 128, 0 } },
-		{ { 255, 255, 0 } },
-		{ { 255, 0, 0 } },
-		{ { 255, 0, 255 } },
-		{ { 255, 255, 255 } }
-	};
-
-	const int nCamsPerPanel = 24, width = 640, height = 480;
-	int timeID, nvis, camID, panelID, camIDInPanel;
-	Point3d t3D;
-	IplImage *Img = 0;
-	float u, v;
-	vector<Point3i> rgb1, rgb2;
-
-	vector<IplImage*> AllImagePtr;
-	for (int viewID = 0; viewID <= 1; viewID++)
-	{
-		for (int timeID = 0; timeID <= 209; timeID++)
-		{
-			panelID = viewID / nCamsPerPanel,
-				camIDInPanel = viewID%nCamsPerPanel;
-			sprintf(Fname, "%s/In/%.8d/%.8d_%.02d_%.02d.png", Path, timeID, timeID, panelID + 1, camIDInPanel + 1);
-			Img = cvLoadImage(Fname, 1);
-			if (Img == NULL)
-			{
-				printf("Cannot load %s\n", Fname);
-				continue;
-			}
-			AllImagePtr.push_back(Img);
-		}
-	}
-
-	sprintf(Fname, "%s/TrajectC%d.txt", Path, temporalOffset[1]); FILE *fp2 = fopen(Fname, "w+");
-	for (int ii = 0; ii < nTraj; ii++)
-	{
-		printf("@%.2f%% \n\r", 100.0*ii / nTraj);
-		rgb1.clear(), rgb2.clear();
-		sprintf(Fname, "%s/Traject_%d.txt", Path, ii); FILE *fp = fopen(Fname, "r");
-		while (fscanf(fp, "%d %d", &timeID, &nvis) != EOF)
-		{
-			Point3i rgb[2];
-			int count = 0, iu, iv;
-			for (int jj = 0; jj < nvis; jj++)
-			{
-				fscanf(fp, "%d %f %f ", &camID, &u, &v);
-				panelID = camID / nCamsPerPanel,
-					camIDInPanel = camID%nCamsPerPanel;
-
-				if (camID == 0 || camID == 1)
-				{
-					sprintf(Fname, "%s/In/%.8d/%.8d_%.02d_%.02d.png", Path, timeID + temporalOffset[camID], timeID + temporalOffset[camID], panelID + 1, camIDInPanel + 1);
-					Img = cvLoadImage(Fname, 1);
-					if (Img == NULL)
-					{
-						printf("Cannot load %s\n", Fname);
-						continue;
-					}
-
-					iu = (int)u, iv = (int)v;
-					for (int mm = -1; mm < 2; mm++)
-					{
-						for (int nn = -1; nn < 2; nn++)
-						{
-							rgb[camID].x += Img->imageData[3 * ((iv + mm)*width + iu + nn) + 0];
-							rgb[camID].y += Img->imageData[3 * ((iv + mm)*width + iu + nn) + 1];
-							rgb[camID].z += Img->imageData[3 * ((iv + mm)*width + iu + nn) + 2];
-						}
-					}
-					rgb[camID].x /= 9, rgb[camID].y /= 9, rgb[camID].z /= 9;
-					count++;
-
-					/*cvCircle(Img, Point2i(u, v), 2, colors[rand() % 9], 1, 8, 0);
-					CvFont font = cvFont(2.0 * 640 / 2048, 2);
-					cvInitFont(&font, CV_FONT_HERSHEY_SIMPLEX, 2.0 * 640 / 2048, 2.0 * 640 / 2048, 0, 2, 8);
-					CvPoint text_origin = { 640 / 30, 640 / 30 };
-					sprintf(Fname, "%.2d_%.02d_%.02d %d/%d NVis of Traj %d", timeID + temporalOffset[camID], panelID + 1, camIDInPanel + 1, jj+1, nvis, ii+1);
-					cvPutText(Img, Fname, text_origin, &font, CV_RGB(255, 0, 0));
-
-
-					cvShowImage("Image", Img);
-					if (waitKey(-1) == 27)
-					break;*/
-					cvReleaseImage(&Img);
-				}
-
-				if (count == 2)
-				{
-					rgb1.push_back(rgb[0]);
-					rgb2.push_back(rgb[1]);
-				}
-				if (count == 2) //Keep on reading until the end of that point
-				{
-					jj++;
-					for (jj; jj < nvis; jj++)
-						fscanf(fp, "%d %f %f ", &camID, &u, &v);
-					break;
-				}
-			}
-		}
-
-		if (rgb1.size() > 1 && rgb1.size() == rgb2.size())
-		{
-			fprintf(fp2, "%d %d \n", ii, rgb1.size());
-			for (int jj = 0; jj < rgb1.size(); jj++)
-				fprintf(fp2, "%d %d %d ", rgb1[jj].x, rgb1[jj].y, rgb1[jj].z);
-			fprintf(fp2, "\n");
-			for (int jj = 0; jj < rgb2.size(); jj++)
-				fprintf(fp2, "%d %d %d ", rgb2[jj].x, rgb2[jj].y, rgb2[jj].z);
-			fprintf(fp2, "\n");
-		}
-		fclose(fp);
-	}
-	fclose(fp2);
-
-	return 0;
-}
-int GetImagePatchIntensity3(char *Path, TrajectoryData infoTraj, int nTraj, int minFrame, int maxFrame, int *cameraPair, int *range)// , vector<Point3i>& Argb1, vector<Point3i>& Argb2)
+int GetImagePatchIntensityColorVar(char *Path, TrajectoryData infoTraj, int nTraj, int minFrame, int maxFrame, int *cameraPair, int *range)// , vector<Point3i>& Argb1, vector<Point3i>& Argb2)
 {
 	printf("Getting  Trajectory Color profile\n");
 	char Fname[200];
@@ -1434,186 +1363,7 @@ int GetImagePatchIntensity3(char *Path, TrajectoryData infoTraj, int nTraj, int 
 
 	return 0;
 }
-int GetImagePatchIntensity(char *Path, TrajectoryData infoTraj, int nTraj, int minFrame, int maxFrame, int *cameraPair, int *range)// , vector<Point3i>& Argb1, vector<Point3i>& Argb2)
-{
-	printf("Getting  Trajectory Color profile\n");
-	char Fname[200];
-
-	int syncOff[480];
-	FILE *fp = fopen("D:/Y/Out/syncOff.txt", "r");
-	for (int ii = 0; ii < 480; ii++)
-		fscanf(fp, "%d ", &syncOff[ii]);
-	fclose(fp);
-
-	static CvScalar colors[] =
-	{
-		{ { 0, 0, 255 } },
-		{ { 0, 128, 255 } },
-		{ { 0, 255, 255 } },
-		{ { 0, 255, 0 } },
-		{ { 255, 128, 0 } },
-		{ { 255, 255, 0 } },
-		{ { 255, 0, 0 } },
-		{ { 255, 0, 255 } },
-		{ { 255, 255, 255 } }
-	};
-
-	const int nCamsPerPanel = 24, width = 640, height = 480, length = width*height;
-	int timeID, nvis, camID, panelID, camIDInPanel;
-	Point3d t3D;
-	IplImage *Img = 0;
-	float u, v;
-	vector<Point3i> rgb1, rgb2;
-
-	printf("Loading images to memory\n");
-	int nchannels = 1;
-	vector<IplImage*> AllImagePtr;
-	vector<float*> AllImageParaPtr;
-	float *tImg = new float[width*height*nchannels];
-	for (int ii = 0; ii < 2; ii++)
-	{
-		int viewID = cameraPair[ii];
-		for (int timeID = 0; timeID <= maxFrame; timeID++)
-		{
-			panelID = viewID / nCamsPerPanel,
-				camIDInPanel = viewID%nCamsPerPanel;
-			sprintf(Fname, "%s/In/%.8d/%.8d_%.02d_%.02d.png", Path, timeID, timeID, panelID + 1, camIDInPanel + 1);
-			Img = cvLoadImage(Fname, nchannels == 1 ? 0 : 1);
-			float *Para = 0;
-			if (Img == NULL)
-				;// printf("Cannot load %s\n", Fname);
-			else
-			{
-				Para = new float[nchannels * length];
-				for (int kk = 0; kk < nchannels; kk++)
-				{
-					for (int jj = 0; jj < height; jj++)
-						for (int ii = 0; ii < width; ii++)
-							tImg[ii + jj*width + kk*length] = Img->imageData[nchannels*ii + nchannels*jj*width + kk];
-					Generate_Para_Spline(tImg + kk*length, Para + kk*length, width, height, 1);
-				}
-				printf("View %d: %.2f %% completed \r", viewID, 100.0*timeID / 209);
-			}
-
-			AllImagePtr.push_back(Img);
-			AllImageParaPtr.push_back(Para);
-		}
-		printf("View %d:  completed \n", viewID);
-	}
-
-	int hsubset = 5, patchSize = (2 * hsubset + 1), patchlength = (2 * hsubset + 1)*(2 * hsubset + 1);
-	double *T = new double[2 * patchlength * 3];
-	double *RGB = new double[2 * 3 * (2 * hsubset + 1)*(2 * hsubset + 1)];
-
-	bool Save = false;
-	IplImage *drawing = cvCreateImage(cvSize(640, 480), IPL_DEPTH_8U, 3);
-	vector<int> temporal;
-	vector<double>ZNCCv;
-	for (int temporalOffset = range[0]; temporalOffset <= range[1]; temporalOffset++)
-	{
-		double zncc = 0.0;
-
-		float *Para = 0;
-		double start = omp_get_wtime();
-		for (int ii = 0; ii < nTraj; ii++)
-		{
-			if (ii % 100 == 0)
-				printf("Time offset %d: @%.2f%% \r", temporalOffset, 100.0*ii / nTraj);
-			rgb1.clear(), rgb2.clear();
-			for (int kk = 0; kk < infoTraj.trajectoryUnit[ii].size(); kk++)
-			{
-				int timeID = infoTraj.trajectoryUnit[ii].at(kk).timeID, nvis = infoTraj.trajectoryUnit[ii].at(kk).nViews;
-
-				int count = 0, iu, iv;
-				for (int jj = 0; jj < nvis; jj++)
-				{
-					camID = infoTraj.trajectoryUnit[ii].at(kk).viewIDs.at(jj);
-					u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y;
-					panelID = camID / nCamsPerPanel,
-						camIDInPanel = camID%nCamsPerPanel;
-
-					if (timeID + syncOff[camID]>maxFrame || timeID + temporalOffset + syncOff[camID]> maxFrame || timeID + temporalOffset + syncOff[camID]< minFrame)
-						continue;
-
-					if (camID == cameraPair[0] || camID == cameraPair[1])
-					{
-						int ind = camID == cameraPair[0] % nCamsPerPanel ? 0 : 1;
-						int id = ind* maxFrame + timeID + ind*temporalOffset;
-						Img = AllImagePtr[ind* (maxFrame + 1) + timeID + ind*temporalOffset + syncOff[camID]];
-						if (Img == NULL)
-							continue;
-
-						iu = (int)u, iv = (int)v;
-						if (iu<hsubset || iv<hsubset || iu>width - hsubset || iv>height - hsubset)
-							continue;
-						int pcount = 0; double S[3];
-						Para = AllImageParaPtr[ind* (maxFrame + 1) + timeID + ind*temporalOffset + syncOff[camID]];
-
-						if (Save)
-						{
-							for (int mm = -0; mm < height; mm++)
-							{
-								for (int nn = -0; nn < width; nn++)
-								{
-									Get_Value_Spline(Para, width, height, nn, mm, S, -1, 1);
-									tImg[nn + mm*width] = S[0];
-								}
-							}
-							cvSaveImage("C:/temp/img1.png", Img);
-							SaveDataToImage("C:/temp/img2.png", tImg, width, height);
-						}
-
-						for (int ll = 0; ll < nchannels; ll++)
-						{
-							for (int mm = -hsubset; mm <= hsubset; mm++)
-							{
-								for (int nn = -hsubset; nn <= hsubset; nn++)
-								{
-									Get_Value_Spline(Para + ll*length, width, height, u + nn, v + mm, S, -1, 1); RGB[(3 * ind + ll)*patchlength + (mm + hsubset)*patchSize + nn + hsubset] = S[0];
-									//RGB[ind*patchlength * 3 + 3 * pcount] = Img->imageData[3 * ((iv + mm)*width + iu + nn) + 0];
-									//RGB[ind*patchlength * 3 + 3 * pcount + 1] = Img->imageData[3 * ((iv + mm)*width + iu + nn) + 1];
-									//RGB[ind*patchlength * 3 + 3 * pcount + 2] = Img->imageData[3 * ((iv + mm)*width + iu + nn) + 2];
-								}
-							}
-						}
-						count++;
-					}
-
-					if (count == 2)
-						zncc += ComputeZNCCPatch(RGB, RGB + 3 * patchlength, hsubset, nchannels, T);
-					if (count == 2) //Keep on reading until the end of that point
-						break;
-				}
-			}
-		}
-		temporal.push_back(temporalOffset);
-		ZNCCv.push_back(zncc);
-
-		printf("Time offset %d: @%.2f%% in %.2fs\n", temporalOffset, 100.0, omp_get_wtime() - start);
-	}
-
-	sprintf(Fname, "%s/dif_%d_%d.txt", Path, cameraPair[0], cameraPair[1]);
-	FILE *fp3 = fopen(Fname, "w+");
-	if (fp3 == NULL)
-	{
-		printf("Cannot open %s\n", Fname);
-		return 1;
-	}
-	for (int ii = 0; ii < ZNCCv.size(); ii++)
-		fprintf(fp3, "%d %f\n", temporal[ii], ZNCCv[ii]);
-	fclose(fp3);
-
-	delete[]T, delete[]RGB, delete[]tImg;
-	cvReleaseImage(&drawing);
-	for (int ii = 0; ii < AllImagePtr.size(); ii++)
-	{
-		cvReleaseImage(&AllImagePtr[ii]);
-		delete[]AllImageParaPtr[ii];
-	}
-
-	return 0;
-}
-int ComputeErrorIntensity(char *Path, vector<int> SyncOff, int *pair)
+int Compute3DTrajectoryErrorColorVar(char *Path, vector<int> SyncOff, int *pair)
 {
 	char Fname[200];
 	int TrajID, nframes, r, g, b;
@@ -1659,6 +1409,382 @@ int ComputeErrorIntensity(char *Path, vector<int> SyncOff, int *pair)
 	for (int ii = 0; ii < SyncOff.size(); ii++)
 		fprintf(fp, "%d %lf\n", SyncOff[ii], dif[ii]);
 	fclose(fp);
+
+	return 0;
+}
+int Compute3DTrajectoryErrorZNCC(char *Path, TrajectoryData infoTraj, int nTraj, int minFrame, int maxFrame, int *cameraPair, int *range)// , vector<Point3i>& Argb1, vector<Point3i>& Argb2)
+{
+	printf("Getting  Trajectory Color profile\n");
+	char Fname[200];
+
+	int syncOff[480];
+	FILE *fp = fopen("D:/Y/Out/syncOff.txt", "r");
+	for (int ii = 0; ii < 480; ii++)
+		fscanf(fp, "%d ", &syncOff[ii]);
+	fclose(fp);
+
+	/*int TrueCamID[480];
+	fp = fopen("D:/Y/camId.txt", "r");
+	for (int ii = 0; ii < 24; ii++)
+	fscanf(fp, "%d ", &TrueCamID[ii]);
+	fclose(fp);*/
+
+	static CvScalar colors[] =
+	{
+		{ { 0, 0, 255 } },
+		{ { 0, 128, 255 } },
+		{ { 0, 255, 255 } },
+		{ { 0, 255, 0 } },
+		{ { 255, 128, 0 } },
+		{ { 255, 255, 0 } },
+		{ { 255, 0, 0 } },
+		{ { 255, 0, 255 } },
+		{ { 255, 255, 255 } }
+	};
+
+	const int nCamsPerPanel = 24, width = 640, height = 480, length = width*height;
+	int timeID, nvis, camID, panelID, camIDInPanel;
+	Point3d t3D;
+	IplImage *Img = 0;
+	float u, v, angle;
+	vector<Point3i> rgb1, rgb2;
+
+	printf("Loading images to memory\n");
+	int nchannels = 1;
+	vector<IplImage*> AllImagePtr;
+	vector<float*> AllImageParaPtr;
+	float *tImg = new float[width*height*nchannels];
+	for (int ii = 0; ii < 2; ii++)
+	{
+		int viewID = cameraPair[ii];
+		for (int timeID = 0; timeID <= maxFrame; timeID++)
+		{
+			panelID = viewID / nCamsPerPanel,
+				camIDInPanel = viewID%nCamsPerPanel;
+			sprintf(Fname, "%s/In/%.8d/%.8d_%.02d_%.02d.png", Path, timeID, timeID, panelID + 1, camIDInPanel + 1);
+			Img = cvLoadImage(Fname, nchannels == 1 ? 0 : 1);
+			float *Para = 0;
+			if (Img == NULL)
+				;// printf("Cannot load %s\n", Fname);
+			else
+			{
+				Para = new float[nchannels * length];
+				for (int kk = 0; kk < nchannels; kk++)
+				{
+					for (int jj = 0; jj < height; jj++)
+						for (int ii = 0; ii < width; ii++)
+							tImg[ii + jj*width + kk*length] = Img->imageData[nchannels*ii + nchannels*jj*width + kk];
+					Generate_Para_Spline(tImg + kk*length, Para + kk*length, width, height, 1);
+				}
+				printf("View %d: %.2f %% completed \r", viewID, 100.0*timeID / 209);
+			}
+
+			AllImagePtr.push_back(Img);
+			AllImageParaPtr.push_back(Para);
+		}
+		printf("View %d:  completed \n", viewID);
+	}
+	IplImage *drawing = cvCreateImage(cvSize(640, 480), IPL_DEPTH_8U, 3);
+
+	int hsubset = 5, patchSize = (2 * hsubset + 1), patchlength = (2 * hsubset + 1)*(2 * hsubset + 1);
+	double *T = new double[2 * patchlength * 3];
+	double *RGB = new double[2 * 3 * (2 * hsubset + 1)*(2 * hsubset + 1)];
+
+	bool Save = false;
+	vector<int> temporal;
+	vector<double>ZNCCv;
+	for (int temporalOffset = range[0]; temporalOffset <= range[1]; temporalOffset++)
+	{
+		double zncc = 0.0;
+
+		float *Para = 0;
+		double start = omp_get_wtime();
+		for (int ii = 0; ii < nTraj; ii++)
+		{
+			if (ii % 100 == 0)
+				printf("Time offset %d: @%.2f%% \r", temporalOffset, 100.0*ii / nTraj);
+			rgb1.clear(), rgb2.clear();
+			for (int kk = 0; kk < infoTraj.trajectoryUnit[ii].size(); kk++)
+			{
+				int timeID = infoTraj.trajectoryUnit[ii].at(kk).timeID, nvis = infoTraj.trajectoryUnit[ii].at(kk).nViews;
+
+				int count = 0, iu, iv;
+				for (int jj = 0; jj < nvis; jj++)
+				{
+					camID = infoTraj.trajectoryUnit[ii].at(kk).viewIDs.at(jj);
+					panelID = camID / nCamsPerPanel, camIDInPanel = camID%nCamsPerPanel;
+
+					u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y, angle = infoTraj.trajectoryUnit[ii].at(kk).angle.at(jj);
+					if (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset)
+						break;
+					if (angle < 0.5)
+						break;
+					if (timeID + syncOff[camID] > maxFrame || timeID + temporalOffset + syncOff[camID] > maxFrame || timeID + temporalOffset + syncOff[camID] < minFrame)
+						continue;
+
+					if (camID == cameraPair[0] || camID == cameraPair[1])
+					{
+						int ind = camID == cameraPair[0] ? 0 : 1;
+						int id = ind* maxFrame + timeID + ind*temporalOffset;
+						Img = AllImagePtr[ind* (maxFrame + 1) + timeID + ind*temporalOffset + syncOff[camID]];
+						if (Img == NULL)
+							continue;
+
+						u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y;
+						if (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset)
+							continue;
+						int pcount = 0; double S[3];
+						Para = AllImageParaPtr[ind* (maxFrame + 1) + timeID + ind*temporalOffset + syncOff[camID]];
+
+						if (Save)
+						{
+							for (int mm = -0; mm < height; mm++)
+							{
+								for (int nn = -0; nn < width; nn++)
+								{
+									Get_Value_Spline(Para, width, height, nn, mm, S, -1, 1);
+									tImg[nn + mm*width] = S[0];
+								}
+							}
+							cvSaveImage("C:/temp/img1.png", Img);
+							SaveDataToImage("C:/temp/img2.png", tImg, width, height);
+						}
+
+						for (int ll = 0; ll < nchannels; ll++)
+							for (int mm = -hsubset; mm <= hsubset; mm++)
+								for (int nn = -hsubset; nn <= hsubset; nn++)
+									Get_Value_Spline(Para + ll*length, width, height, u + nn, v + mm, S, -1, 1),
+									RGB[(3 * ind + ll)*patchlength + (mm + hsubset)*patchSize + nn + hsubset] = S[0];
+
+						/*cvCopy(Img, drawing);
+						cvCircle(drawing, Point2i(u, v), 2, colors[rand() % 9], 1, 8, 0);
+						CvFont font = cvFont(2.0 * 640 / 2048, 2);
+						cvInitFont(&font, CV_FONT_HERSHEY_SIMPLEX, 2.0 * 640 / 2048, 2.0 * 640 / 2048, 0, 2, 8);
+						CvPoint text_origin = { 640 / 30, 640 / 30 };
+						sprintf(Fname, "%.2d_%.02d_%.02d %d/%d NVis of Traj %d", timeID + ind*temporalOffset, panelID + 1, camIDInPanel + 1, jj + 1, nvis, ii + 1);
+						cvPutText(drawing, Fname, text_origin, &font, CV_RGB(255, 0, 0));
+						char Fname2[200]; sprintf(Fname2, "Image %d", ind);
+						cvShowImage(Fname2, drawing); waitKey(-1);*/
+						count++;
+					}
+
+					if (count == 2)
+						zncc += ComputeZNCCPatch(RGB, RGB + 3 * patchlength, hsubset, nchannels, T);
+					if (count == 2) //Keep on reading until the end of that point
+						break;
+				}
+			}
+		}
+		temporal.push_back(temporalOffset);
+		ZNCCv.push_back(zncc);
+
+		printf("Time offset %d: @%.2f%% Zncc: %f TE: %.2fs\n", temporalOffset, 100.0, zncc, omp_get_wtime() - start);
+	}
+
+	sprintf(Fname, "%s/dif_%d_%d.txt", Path, cameraPair[0], cameraPair[1]);
+	FILE *fp3 = fopen(Fname, "w+");
+	if (fp3 == NULL)
+	{
+		printf("Cannot open %s\n", Fname);
+		return 1;
+	}
+	for (int ii = 0; ii < ZNCCv.size(); ii++)
+		fprintf(fp3, "%d %f\n", temporal[ii], ZNCCv[ii]);
+	fclose(fp3);
+
+	delete[]T, delete[]RGB, delete[]tImg;
+	cvReleaseImage(&drawing);
+	for (int ii = 0; ii < AllImagePtr.size(); ii++)
+	{
+		cvReleaseImage(&AllImagePtr[ii]);
+		delete[]AllImageParaPtr[ii];
+	}
+
+	return 0;
+}
+int Compute3DTrajectoryError2DTracking(char *Path, TrajectoryData infoTraj, int nTraj, int minFrame, int maxFrame, int SelectedViewID, int *range)
+{
+	printf("Getting  Trajectory Color profile\n");
+	char Fname[200];
+
+	int syncOff[480];
+	FILE *fp = fopen("D:/Y/Out/syncOff.txt", "r");
+	for (int ii = 0; ii < 480; ii++)
+		//fscanf(fp, "%d ", &syncOff[ii]);
+		syncOff[ii] = 0;
+	fclose(fp);
+
+	const int nCamsPerPanel = 24, width = 640, height = 480, length = width*height;
+	int timeID, nvis, viewID, panelID, camIDInPanel;
+	float u, v, angle;
+	Point3d t3D;
+	IplImage *Img = 0, *drawing = cvCreateImage(cvSize(640, 480), IPL_DEPTH_8U, 3);
+
+	printf("Loading images to memory\n");
+	int nchannels = 1;
+	vector<IplImage*> AllImagePtr;
+	vector<float*> AllImageParaPtr;
+	float *tImg = new float[width*height*nchannels];
+	for (int timeID = 0; timeID <= maxFrame; timeID++)
+	{
+		panelID = SelectedViewID / nCamsPerPanel, camIDInPanel = SelectedViewID%nCamsPerPanel;
+		sprintf(Fname, "%s/In/%.8d/%.8d_%.02d_%.02d.png", Path, timeID, timeID, panelID + 1, camIDInPanel + 1);
+		Img = cvLoadImage(Fname, nchannels == 1 ? 0 : 1);
+		float *Para = 0;
+		if (Img == NULL)
+			;// printf("Cannot load %s\n", Fname);
+		else
+		{
+			Para = new float[nchannels * length];
+			for (int kk = 0; kk < nchannels; kk++)
+			{
+				for (int jj = 0; jj < height; jj++)
+					for (int ii = 0; ii < width; ii++)
+						tImg[ii + jj*width + kk*length] = Img->imageData[nchannels*ii + nchannels*jj*width + kk];
+				Generate_Para_Spline(tImg + kk*length, Para + kk*length, width, height, 1);
+			}
+			printf("View %d: %.2f %% completed \r", SelectedViewID, 100.0*timeID / 209);
+		}
+
+		AllImagePtr.push_back(Img);
+		AllImageParaPtr.push_back(Para);
+	}
+	printf("View %d:  completed \n", SelectedViewID);
+
+	int hsubset = 7, patchSize = (2 * hsubset + 1), patchlength = (2 * hsubset + 1)*(2 * hsubset + 1);
+	double *T = new double[2 * patchlength * nchannels];
+	double *RGB = new double[2 * nchannels * patchlength];
+	double *Timg = new double[patchlength*nchannels];
+	double *Znssd_reqd = new double[6 * patchlength];
+
+	vector<int> temporal;
+	vector<double>Error2D;
+	vector<IplImage*> VisImagePtr;
+	vector<float*> VisImageParaPtr;
+	vector<Point2d> Projected2DLoc, Tracked2DLoc;
+
+	for (int temporalOffset = range[0]; temporalOffset <= range[1]; temporalOffset++)
+	{
+		double error = 0.0;
+		VisImagePtr.clear(), VisImageParaPtr.clear(), Projected2DLoc.clear(), Tracked2DLoc.clear();
+
+		double start = omp_get_wtime();
+		for (int ii = 0; ii < nTraj; ii++)
+		{
+			if (ii % 100 == 0)
+				printf("Time offset %d: @%.2f%% \r", temporalOffset, 100.0*ii / nTraj);
+
+			bool found = false;////See if the required camera is visible
+			int kk;
+			for (kk = 0; kk < infoTraj.trajectoryUnit[ii].size(); kk++)
+			{
+				int timeID = infoTraj.trajectoryUnit[ii].at(kk).timeID;
+				for (int jj = 0; jj < infoTraj.trajectoryUnit[ii].at(kk).nViews; jj++)
+				{
+					viewID = infoTraj.trajectoryUnit[ii].at(kk).viewIDs.at(jj);
+					if (timeID + syncOff[viewID] > maxFrame || timeID + temporalOffset + syncOff[viewID] > maxFrame || timeID + temporalOffset + syncOff[viewID] < minFrame)
+						break;
+					if (viewID == SelectedViewID)
+					{
+						u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y, angle = infoTraj.trajectoryUnit[ii].at(kk).angle.at(jj);
+						if (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset)
+							break;
+						if (angle < 0.5)
+							break;
+						Projected2DLoc.push_back(infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj));
+
+						VisImagePtr.push_back(AllImagePtr[timeID + temporalOffset + syncOff[viewID]]);
+						VisImageParaPtr.push_back(AllImageParaPtr[timeID + temporalOffset + syncOff[viewID]]);
+						if (VisImagePtr.back() == NULL || VisImageParaPtr.back() == NULL)
+							break;
+
+						found = true;
+						break;
+					}
+				}
+				if (found)
+					break;
+			}
+			if (!found)
+				continue;
+			double fufv[2];
+			Point2d PR = Projected2DLoc[0], PT = PR;
+			Tracked2DLoc.push_back(PR);
+
+			//See how many frames it is visible
+			found = false;
+			int visibleFrameCount = 1;
+			for (kk; kk < infoTraj.trajectoryUnit[ii].size(); kk++)
+			{
+				//See if the required camera is visible
+				int timeID = infoTraj.trajectoryUnit[ii].at(kk).timeID;
+				for (int jj = 0; jj < infoTraj.trajectoryUnit[ii].at(kk).nViews; jj++)
+				{
+					viewID = infoTraj.trajectoryUnit[ii].at(kk).viewIDs.at(jj);
+					if (timeID + syncOff[viewID] > maxFrame || timeID + temporalOffset + syncOff[viewID] > maxFrame || timeID + temporalOffset + syncOff[viewID] < minFrame)
+						break;
+					if (viewID == SelectedViewID)
+					{
+						u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y, angle = infoTraj.trajectoryUnit[ii].at(kk).angle.at(jj);
+						if (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset)
+							break;
+						if (angle < 0.5)
+							break;
+						Projected2DLoc.push_back(infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj));
+
+						VisImagePtr.push_back(AllImagePtr[timeID + temporalOffset + syncOff[viewID]]);
+						VisImageParaPtr.push_back(AllImageParaPtr[timeID + temporalOffset + syncOff[viewID]]);
+						if (VisImagePtr.back() == NULL || VisImageParaPtr.back() == NULL)
+							break;
+
+						found = true;
+						visibleFrameCount++;
+						break;
+					}
+				}
+
+				if (!found) //stop the search if the point disapperas
+					break;
+				found = false;
+			}
+
+			if (visibleFrameCount < 5)
+				continue;
+
+			//Let track the 2D points and compute their differnces
+			for (int kk = 0; kk < visibleFrameCount - 1; kk++)
+			{
+				if (TrackingByLK(VisImageParaPtr[kk], VisImageParaPtr[kk + 1], hsubset, width, height, width, height, nchannels, PR, PT, 3, 1, 0.85, 30, 1, fufv, false, NULL, NULL, Timg, T, Znssd_reqd) < 0.9)
+					break;//tracking fails
+				PR.x = PR.x + fufv[0], PR.y = PR.y + fufv[1];
+				Tracked2DLoc.push_back(PR);
+				error += sqrt(pow(Projected2DLoc[kk + 1].x - PR.x, 2) + pow(Projected2DLoc[kk + 1].y - PR.y, 2));
+			}
+		}
+		Error2D.push_back(error);
+		temporal.push_back(temporalOffset);
+
+		printf("Time offset %d: @%.2f%% in %.2fs\n", temporalOffset, 100.0, omp_get_wtime() - start);
+	}
+
+	sprintf(Fname, "%s/dif_%d.txt", Path, SelectedViewID);
+	FILE *fp3 = fopen(Fname, "w+");
+	if (fp3 == NULL)
+	{
+		printf("Cannot open %s\n", Fname);
+		return 1;
+	}
+	for (int ii = 0; ii < temporal.size(); ii++)
+		fprintf(fp, "%d %f\n", temporal[ii], Error2D[ii]);
+	fclose(fp3);
+
+	delete[]T, delete[]RGB, delete[]Timg; delete[]Znssd_reqd;  delete[]tImg;
+	cvReleaseImage(&drawing);
+	for (int ii = 0; ii < AllImagePtr.size(); ii++)
+	{
+		cvReleaseImage(&AllImagePtr[ii]);
+		delete[]AllImageParaPtr[ii];
+	}
 
 	return 0;
 }
@@ -2829,9 +2955,9 @@ int LensCorrectionImageSequenceDriver(char *Path, double *K, double *distortion,
 
 	mat_invert(K, iK, 3);
 	double omega, DistCtr[2];
-	if (LensType == 1)
+	if (LensType == FISHEYE)
 		omega = distortion[0], DistCtr[0] = distortion[1], DistCtr[1] = distortion[2];
-	else if (LensType == 2)
+	else if (LensType == RADIAL_TANGENTIAL_PRISM)
 		omega = distortion[0];
 
 	Mat cvImg;
@@ -2840,7 +2966,7 @@ int LensCorrectionImageSequenceDriver(char *Path, double *K, double *distortion,
 
 	for (int Id = StartFrame; Id <= StopFrame; Id++)
 	{
-		sprintf(Fname, "%s/%d.png", Path, Id);	cvImg = imread(Fname, 1);
+		sprintf(Fname, "%s/%d.ppm", Path, Id);	cvImg = imread(Fname, 1);
 		if (cvImg.empty())
 		{
 			printf("Cannot load %s\n", Fname);
@@ -2864,9 +2990,9 @@ int LensCorrectionImageSequenceDriver(char *Path, double *K, double *distortion,
 				Generate_Para_Spline(Img + kk*width*height, Para + kk*width*height, width, height, interpAlgo);
 		}
 
-		if (LensType == 0)
+		if (LensType == RADIAL_TANGENTIAL_PRISM)
 			LensUndistortion(Img, width, height, nchannels, K, distortion, interpAlgo, Imgscale, Contscale, Para);
-		else if (LensType == 1)
+		else if (LensType == FISHEYE)
 			FishEyeCorrection(Img, cvImg.cols, cvImg.rows, 3, omega, DistCtr[0], DistCtr[1], interpAlgo, Imgscale, Contscale, Para);
 		else if (LensType == 2)
 			FishEyeCorrection(Img, cvImg.cols, cvImg.rows, 3, K, iK, omega, interpAlgo, Imgscale, Contscale, Para);
@@ -2879,7 +3005,7 @@ int LensCorrectionImageSequenceDriver(char *Path, double *K, double *distortion,
 				for (int ii = 0; ii < Mwidth; ii++)
 					nImg.data[ii*nchannels + jj*Mwidth*nchannels + kk] = Img[ii + jj*Mwidth + kk*Mlength];
 
-		sprintf(Fname, "%s/_%d.png", Path, Id);
+		sprintf(Fname, "%s/%d.png", Path, Id);
 		imwrite(Fname, nImg);
 	}
 
@@ -2926,14 +3052,12 @@ int LensCorrectionDriver(char *Path, double *K, double *distortion, int LensType
 				Generate_Para_Spline(Img + kk*width*height, Para + kk*width*height, width, height, interpAlgo);
 		}
 
-		if (LensType == 0)
+		if (LensType == RADIAL_TANGENTIAL_PRISM)
 			LensUndistortion(Img, width, height, nchannels, K, distortion, interpAlgo, Imgscale, Contscale, Para);
-		else if (LensType == 1)
+		else if (LensType == FISHEYE)
 			FishEyeCorrection(Img, cvImg.cols, cvImg.rows, 3, distortion[0], distortion[1], distortion[2], interpAlgo, Imgscale, 1.0);
 		else if (LensType == 2)
 			printf("This lens model is not supported right now!");// FishEyeCorrection(Img, cvImg.cols, cvImg.rows, 3, K, iK, omega, interpAlgo, Imgscale, Contscale);
-		if (LensType)
-			return 1;
 
 		Mat nImg(Mheight, Mwidth, CV_8UC3);
 		for (int kk = 0; kk < nchannels; kk++)
@@ -2982,7 +3106,6 @@ int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, v
 		int x1 = keypoints1.at(pair.at(ii)).pt.x, y1 = keypoints1.at(pair.at(ii)).pt.y;
 		int x2 = keypoints2.at(pair.at(ii + 1)).pt.x + offsetX, y2 = keypoints2.at(pair.at(ii + 1)).pt.y + offsetY;
 		cvLine(correspond, cvPoint(x1, y1), cvPoint(x2, y2), colors[ii % 9], 1, 4);
-
 	}
 
 	cvNamedWindow("Correspondence", CV_WINDOW_NORMAL);
@@ -3138,12 +3261,12 @@ int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams)
 			r0 = AllViewsParas[id].distortion[0], r1 = AllViewsParas[id].distortion[1], r2 = AllViewsParas[id].distortion[2];
 			t0 = AllViewsParas[id].distortion[3], t1 = AllViewsParas[id].distortion[4];
 			p0 = AllViewsParas[id].distortion[5], p1 = AllViewsParas[id].distortion[6];
-			fprintf(fp, "%d %d %d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ", LensType, AllViewsParas[id].width, AllViewsParas[id].height, fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1);
+			fprintf(fp, "%d %d %d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf \n", LensType, AllViewsParas[id].width, AllViewsParas[id].height, fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1);
 		}
 		else
 		{
 			omega = AllViewsParas[id].distortion[0], DistCtrX = AllViewsParas[id].distortion[1], DistCtrY = AllViewsParas[id].distortion[2];
-			fprintf(fp, "%d %d %d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ", LensType, AllViewsParas[id].width, AllViewsParas[id].height, fx, fy, skew, omega, DistCtrX, DistCtrY);
+			fprintf(fp, "%d %d %d %lf %lf %lf %lf %lf %lf %lf %lf \n", LensType, AllViewsParas[id].width, AllViewsParas[id].height, fx, fy, skew, u0, v0, omega, DistCtrX, DistCtrY);
 		}
 	}
 	fclose(fp);
@@ -3516,6 +3639,21 @@ void GetrtFromRT(double *rt, double *R, double *T)
 	return;
 }
 
+void GetRTFromrt(CameraData &camera)
+{
+	Mat Rmat(3, 3, CV_64F), rvec(3, 1, CV_64F);
+	for (int jj = 0; jj < 3; jj++)
+		rvec.at<double>(jj) = camera.rt[jj];
+
+	Rodrigues(rvec, Rmat);
+
+	for (int jj = 0; jj < 9; jj++)
+		camera.R[jj] = Rmat.at<double>(jj);
+	for (int jj = 0; jj < 3; jj++)
+		camera.T[jj] = camera.rt[jj + 3];
+
+	return;
+}
 void GetRTFromrt(double *rt, double *R, double *T)
 {
 	Mat Rmat(3, 3, CV_64F), rvec(3, 1, CV_64F);
@@ -3582,6 +3720,14 @@ void DesembleRT(double *R, double *T, double *RT)
 	R[3] = RT[4], R[4] = RT[5], R[5] = RT[6], T[1] = RT[7];
 	R[6] = RT[8], R[7] = RT[9], R[8] = RT[10], T[2] = RT[11];
 }
+void AssembleP(CameraData &camera)
+{
+	double RT[12];
+	Set_Sub_Mat(camera.R, RT, 3, 3, 4, 0, 0);
+	Set_Sub_Mat(camera.T, RT, 1, 3, 4, 3, 0);
+	mat_mul(camera.K, RT, camera.P, 3, 3, 4);
+	return;
+}
 void AssembleP(double *K, double *R, double *T, double *P)
 {
 	double RT[12];
@@ -3590,6 +3736,7 @@ void AssembleP(double *K, double *R, double *T, double *P)
 	mat_mul(K, RT, P, 3, 3, 4);
 	return;
 }
+
 
 int clickCount = 0;
 Point2i ClickPos[3];
@@ -4042,7 +4189,7 @@ bool rewriteBundleAdjustedNVMResults(char *Path, char *BAfileName, Corpus &Corpu
 
 	for (int viewID = 0; viewID < CorpusData.nCamera; viewID++)
 	{
-		fprintf(fp, "%d.png %d %d %d", viewID, CorpusData.camera[viewID].LensModel, CorpusData.camera[viewID].width, CorpusData.camera[viewID].height);
+		fprintf(fp, "%d.png %d %d %d ", viewID, CorpusData.camera[viewID].LensModel, CorpusData.camera[viewID].width, CorpusData.camera[viewID].height);
 
 		fx = CorpusData.camera[viewID].intrinsic[0], fy = CorpusData.camera[viewID].intrinsic[1],
 			skew = CorpusData.camera[viewID].intrinsic[2],
@@ -5057,6 +5204,94 @@ void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker,
 	return;
 }
 
+int ImportCalibDatafromHanFormat(char *Path, VideoData &AllVideoInfo, int nVGAPanels, int nVGACamsPerPanel, int nHDs)
+{
+	char Fname[200];
+	int offset = 0;
+
+	for (unsigned int viewID = 0; viewID < nHDs; viewID++)
+	{
+		sprintf(Fname, "%s/In/Calib/00_%02d.txt", Path, viewID); FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+		{
+			printf("cannot load %s\n", Fname);
+			continue;
+		}
+		//KMatrix load
+		for (int j = 0; j < 9; j++)
+			fscanf(fp, "%lf ", &AllVideoInfo.VideoInfo[viewID].K[j]);
+		fscanf(fp, "%lf %lf ", &AllVideoInfo.VideoInfo[viewID].distortion[0], &AllVideoInfo.VideoInfo[viewID].distortion[1]);//lens distortion parameter
+
+		//RT load
+		double Quaterunion[4];
+		sprintf(Fname, "%s/In/Calib/00_%02d_ext.txt", Path, viewID); fp = fopen(Fname, "r");
+		if (fp == NULL)
+		{
+			printf("cannot load %s\n", Fname);
+			return 1;
+		}
+		for (int j = 0; j < 4; j++)
+			fscanf(fp, "%lf ", &Quaterunion[j]);
+		for (int j = 0; j < 3; j++)
+			fscanf(fp, "%lf ", &AllVideoInfo.VideoInfo[viewID].camCenter[j]);
+		fclose(fp);
+
+		ceres::QuaternionToAngleAxis(Quaterunion, AllVideoInfo.VideoInfo[viewID].rt);
+		ceres::QuaternionRotatePoint(Quaterunion, AllVideoInfo.VideoInfo[viewID].camCenter, AllVideoInfo.VideoInfo[viewID].rt + 3);
+		for (int j = 0; j < 3; j++) //position to translation t=-R*c
+			AllVideoInfo.VideoInfo[viewID].rt[j + 3] = -AllVideoInfo.VideoInfo[viewID].rt[j + 3];
+
+		AllVideoInfo.VideoInfo[viewID].LensModel = VisSFMLens;
+		GetIntrinsicFromK(AllVideoInfo.VideoInfo[viewID]);
+		GetRTFromrt(AllVideoInfo.VideoInfo[viewID]);
+		AssembleP(AllVideoInfo.VideoInfo[viewID]);
+	}
+
+	for (int panelID = 0; panelID < nVGAPanels; panelID++)
+	{
+		for (int camID = 0; camID < nVGACamsPerPanel; camID++)
+		{
+			int viewID = panelID*nVGACamsPerPanel + camID+nHDs;
+			sprintf(Fname, "%s/In/Calib/%02d_%02d.txt", Path, panelID+1, camID+1); FILE *fp = fopen(Fname, "r");
+			if (fp == NULL)
+			{
+				printf("cannot load %s\n", Fname);
+				continue;
+			}
+
+			//KMatrix load
+			for (int j = 0; j < 9; j++)
+				fscanf(fp, "%lf ", &AllVideoInfo.VideoInfo[viewID].K[j]);
+			fscanf(fp, "%lf %lf ", &AllVideoInfo.VideoInfo[viewID].distortion[0], &AllVideoInfo.VideoInfo[viewID].distortion[1]);//lens distortion parameter
+
+			//RT load
+			double Quaterunion[4];
+			sprintf(Fname, "%s/In/Calib/%02d_%02d_ext.txt", Path, panelID+1, camID+1); fp = fopen(Fname, "r");
+			if (fp == NULL)
+			{
+				printf("cannot load %s\n", Fname);
+				return 1;
+			}
+			for (int j = 0; j < 4; j++)
+				fscanf(fp, "%lf ", &Quaterunion[j]);
+			for (int j = 0; j < 3; j++)
+				fscanf(fp, "%lf ", &AllVideoInfo.VideoInfo[viewID].camCenter[j]);
+			fclose(fp);
+
+			ceres::QuaternionToAngleAxis(Quaterunion, AllVideoInfo.VideoInfo[viewID].rt);
+			ceres::QuaternionRotatePoint(Quaterunion, AllVideoInfo.VideoInfo[viewID].camCenter, AllVideoInfo.VideoInfo[viewID].rt + 3);
+			for (int j = 0; j < 3; j++)//position to translation t=-R*c
+				AllVideoInfo.VideoInfo[viewID].rt[j + 3] = -AllVideoInfo.VideoInfo[viewID].rt[j + 3];
+
+			AllVideoInfo.VideoInfo[viewID].LensModel = VisSFMLens;
+			GetIntrinsicFromK(AllVideoInfo.VideoInfo[viewID]);
+			GetRTFromrt(AllVideoInfo.VideoInfo[viewID]);
+			AssembleP(AllVideoInfo.VideoInfo[viewID]);
+		}
+	}
+
+	return 0;
+}
 void ExportCalibDatatoHanFormat(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime)
 {
 	char Fname[200];

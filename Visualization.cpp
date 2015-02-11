@@ -13,7 +13,7 @@ static bool g_bButton1Down = false;
 static GLfloat g_ratio;
 static GLfloat g_fViewDistance = 200 * VIEWING_DISTANCE_MIN;
 static GLfloat g_nearPlane = 1.0, g_farPlane = 30000;
-float g_coordAxisLength = 300.f;
+float g_coordAxisLength = 3.f;
 static int g_Width = 1280, g_Height = 1024;
 static int g_xClick = 0, g_yClick = 0;
 static int g_mouseYRotate = 0, g_mouseXRotate = 0;
@@ -29,15 +29,14 @@ static float g_lightBright[4] = { 1, 1, 1, 1 };  // Position of light
 const GLfloat Red[3] = { 1, 0, 0 }, Green[3] = { 0, 1, 0 }, Blue[3] = { 0, 0, 1 };
 GLfloat PointsCentroid[3], ViewingLoc[3];
 float InitLocFromCentroid[3];
-GLfloat Scale = 0.25f, CameraSize = 100.0f, pointSize = 10.f, normalSize = 20.f, arrowThickness = .1f;
+GLfloat Scale = 0.25f, CameraSize = .1f, pointSize = 0.1f, normalSize = 3.f, arrowThickness = .1f;
 vector<int> PickedPoints;
-vector<int> PickedTraject;
 vector<int> PickCams;
 VisualizationManager g_vis;
 
 int nviews = 10, timeID = 0, otimeID = 0, maxTime, minTime;
-bool drawCameraPose = false, drawPointColor = false, drawPatchNormal = false;
-bool drawTraject3D = false, drawCamTrajectory = false, draw3DPoints = false;
+bool drawPose = false, hasColor = false, hasNormal = false;
+bool drawCamTrajectory = false, drawNormal = false, ThreeDRecon = false;
 static bool ReCenterNeeded = false;
 
 void Draw_Axes(void)
@@ -80,7 +79,7 @@ void DrawCamera()
 	glVertex3f(-0.5*CameraSize, -0.5*CameraSize, 1 * CameraSize); //
 	glEnd();
 
-	// we also has to draw a square for the bottom of the pyramid so that as it rotates we wont be able see inside of it but all a square is is two triangle put together
+	// we also have to draw a square for the bottom of the pyramid so that as it rotates we wont be able see inside of it but all a square is is two triangle put together
 	glColor3fv(Green);
 	glBegin(GL_LINE_STRIP);
 	glVertex3f(0.5*CameraSize, 0.5*CameraSize, 1 * CameraSize);
@@ -146,9 +145,10 @@ void Arrow(GLdouble x1, GLdouble y1, GLdouble z1, GLdouble x2, GLdouble y2, GLdo
 }
 void RenderObjects()
 {
-	if (otimeID != timeID && draw3DPoints)
+
+	if (otimeID != timeID && ThreeDRecon)
 	{
-		//ReadCurrent3DGL(Path, drawPointColor, drawPatchNormal, timeID, false);
+		ReadCurrent3DGL(Path, hasColor, hasNormal, timeID);
 		otimeID = timeID;
 		printf("Loaded frame %d\n", timeID);
 	}
@@ -166,14 +166,14 @@ void RenderObjects()
 		glLoadName(i + MAX_NUM_CAM);//for picking purpose
 		glPushMatrix();
 		glTranslatef(g_vis.PointPosition[i].x - PointsCentroid[0], g_vis.PointPosition[i].y - PointsCentroid[1], g_vis.PointPosition[i].z - PointsCentroid[2]);
-		if (drawPointColor)
+		if (hasColor)
 			glColor3f(g_vis.PointColor[i].x, g_vis.PointColor[i].y, g_vis.PointColor[i].z);
 		else
 			glColor3f(1.0, 0.0, 0.0);
 		glutSolidSphere(pointSize, 4, 4);
 		glPopMatrix();
 
-		if (drawPatchNormal)
+		if (drawNormal)
 		{
 			glColor4f(0, 1, 0, 0.5f);
 			Point3d newHeadPt = normalSize *g_vis.PointNormal[i] + g_vis.PointPosition[i];
@@ -196,7 +196,7 @@ void RenderObjects()
 		glutSolidSphere(pointSize, 4, 4);
 		glPopMatrix();
 
-		if (drawPatchNormal)
+		if (drawNormal)
 		{
 			glColor4f(0, 1, 0, 0.5f);
 			Point3d newHeadPt = normalSize *g_vis.PointNormal[id] + g_vis.PointPosition[id];
@@ -206,125 +206,8 @@ void RenderObjects()
 			glPopMatrix();
 		}
 	}
-
-	//Draw trajectory: red
-	if (drawTraject3D)
-	{
-		for (int jj = 0; jj < g_vis.Traject3D.size(); jj++)
-		{
-			bool picked = false;
-			for (int ii = 0; ii < PickedTraject.size(); ii++)
-			{
-				if (jj == PickedTraject[ii])
-				{
-					picked = true;
-					break;
-				}
-			}
-			if (picked)
-				continue;
-
-			glLoadName(jj + g_vis.PointPosition.size() + MAX_NUM_CAM);//for picking purpose
-
-			glPushMatrix();
-			glBegin(GL_LINE_STRIP);
-			for (int ii = 0; ii < g_vis.Track3DLength[jj]; ii++)
-			{
-				glVertex3f(g_vis.Traject3D[jj][ii].WC.x - PointsCentroid[0], g_vis.Traject3D[jj][ii].WC.y - PointsCentroid[1], g_vis.Traject3D[jj][ii].WC.z - PointsCentroid[2]);
-				glColor3fv(Red);
-			}
-			glEnd();
-			glPopMatrix();
-		}
-
-		for (unsigned int i = 0; i < PickedTraject.size(); i++)
-		{
-			int trajID = PickedTraject[i];
-			glLoadName(trajID + g_vis.PointPosition.size() + MAX_NUM_CAM);//for picking purpose
-
-			glPushMatrix();
-			glBegin(GL_LINE_STRIP);
-			for (int ii = 0; ii < g_vis.Track3DLength[trajID]; ii++)
-			{
-				glVertex3f(g_vis.Traject3D[trajID][ii].WC.x - PointsCentroid[0], g_vis.Traject3D[trajID][ii].WC.y - PointsCentroid[1], g_vis.Traject3D[trajID][ii].WC.z - PointsCentroid[2]);
-				glColor3fv(Green);
-			}
-			glEnd();
-			glPopMatrix();
-		}
-
-		for (int jj = 0; jj < g_vis.Traject3D2.size(); jj++)
-		{
-			glPushMatrix();
-			glBegin(GL_LINE_STRIP);
-			for (int ii = 0; ii < g_vis.Track3DLength2[jj]; ii++)
-			{
-				glVertex3f(g_vis.Traject3D2[jj][ii].WC.x - PointsCentroid[0], g_vis.Traject3D2[jj][ii].WC.y - PointsCentroid[1], g_vis.Traject3D2[jj][ii].WC.z - PointsCentroid[2]);
-				glColor3fv(Green);
-			}
-			glEnd();
-			glPopMatrix();
-		}
-
-		for (int jj = 0; jj < g_vis.Traject3D3.size(); jj++)
-		{
-			glPushMatrix();
-			glBegin(GL_LINE_STRIP);
-			for (int ii = 0; ii < g_vis.Track3DLength3[jj]; ii++)
-			{
-				glVertex3f(g_vis.Traject3D3[jj][ii].WC.x - PointsCentroid[0], g_vis.Traject3D3[jj][ii].WC.y - PointsCentroid[1], g_vis.Traject3D3[jj][ii].WC.z - PointsCentroid[2]);
-				glColor3f(0.0f, 0.5f, 0.0f);
-			}
-			glEnd();
-			glPopMatrix();
-		}
-
-		for (int jj = 0; jj < g_vis.Traject3D4.size(); jj++)
-		{
-			glPushMatrix();
-			glBegin(GL_LINE_STRIP);
-			for (int ii = 0; ii < g_vis.Track3DLength4[jj]; ii++)
-			{
-				glVertex3f(g_vis.Traject3D4[jj][ii].WC.x - PointsCentroid[0], g_vis.Traject3D4[jj][ii].WC.y - PointsCentroid[1], g_vis.Traject3D4[jj][ii].WC.z - PointsCentroid[2]);
-				glColor3fv(Blue);
-			}
-			glEnd();
-			glPopMatrix();
-		}
-
-		for (int jj = 0; jj < g_vis.Traject3D5.size(); jj++)
-		{
-			glPushMatrix();
-			glBegin(GL_LINE_STRIP);
-			for (int ii = 0; ii < g_vis.Track3DLength5[jj]; ii++)
-			{
-				glVertex3f(g_vis.Traject3D5[jj][ii].WC.x - PointsCentroid[0], g_vis.Traject3D5[jj][ii].WC.y - PointsCentroid[1], g_vis.Traject3D5[jj][ii].WC.z - PointsCentroid[2]);
-				glColor3f(0.0f, 0.0f, 0.5f);
-			}
-			glEnd();
-			glPopMatrix();
-		}
-	}
-
 	//draw camera 
-	if (timeID == -1)
-	{
-		for (int j = 0; j < g_vis.glCameraInfo.size(); j++)
-		{
-			float CameraColor[3] = { 1, 0, 0 };
-			float* centerPt = g_vis.glCameraInfo[j].camCenter;
-			GLfloat* R = g_vis.glCameraInfo[j].Rgl;
-			
-			glLoadName(j);//for picking purpose
-			glPushMatrix();
-			glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
-			glMultMatrixf(R);
-			DrawCamera();
-			glPopMatrix();
-		}
-	}
-
-	if (drawCameraPose)
+	if (drawPose)
 	{
 		for (int j = 0; j < nviews; j++)
 		{
@@ -347,9 +230,6 @@ void RenderObjects()
 
 				for (unsigned int i = 0; i < g_vis.glCameraPoseInfo[j].size(); ++i)
 				{
-					if (i != timeID)
-						continue;
-
 					float* centerPt = g_vis.glCameraPoseInfo[j].at(i).camCenter;
 					GLfloat* R = g_vis.glCameraPoseInfo[j].at(i).Rgl;
 					glLoadName(i);//for picking purpose
@@ -366,7 +246,6 @@ void RenderObjects()
 
 	glFlush();
 }
-
 void display(void)
 {
 	// Clear frame buffer and depth buffer
@@ -374,11 +253,12 @@ void display(void)
 
 	// Set up viewing transformation, looking down -Z axis
 	glLoadIdentity();
+	//gluLookAt(0, 0, 0, PointsCentroid[0], PointsCentroid[1], PointsCentroid[2], 0, -1, 0);
+	//gluLookAt(ViewingLoc[0] - PointsCentroid[0], ViewingLoc[1] - PointsCentroid[1], ViewingLoc[2] - PointsCentroid[2], 0, 0, 0, 0, -1, 0);
+	//gluLookAt(0 - PointsCentroid[0], 0 - PointsCentroid[1], 100 - PointsCentroid[2], 0, 0, 0, 0, -1, 0);
+	gluLookAt(0, 0, 100, 0, 0, 0, 0, -1, 0);
+	glTranslatef(-g_mouseXPan, -g_mouseYPan, -g_fViewDistance);
 
-	gluLookAt(-100.92273509 - PointsCentroid[0], -165.08951125 - PointsCentroid[1], 1485.49577164 - PointsCentroid[2], 0, 0, 0, 0, -1, 0);
-	glTranslatef(-g_mouseXPan, -g_mouseYPan, -g_fViewDistance);
-	//gluLookAt(0, 0, 100, 0, 0, 0, 0, -1, 0);
-	glTranslatef(-g_mouseXPan, -g_mouseYPan, -g_fViewDistance);
 	glRotated(-g_mouseYRotate, 1, 0, 0);
 	glRotated(-g_mouseXRotate, 0, 1, 0);
 
@@ -441,7 +321,7 @@ int Pick(int x, int y)
 void SelectionFunction(int x, int y, bool append_rightClick = false)
 {
 	int pickedID = Pick(x, y);
-	if (pickedID >= MAX_NUM_CAM && pickedID < g_vis.PointPosition.size() + MAX_NUM_CAM)// pick points
+	if (pickedID >= MAX_NUM_CAM)// pick points
 	{
 		pickedID -= MAX_NUM_CAM;
 
@@ -453,37 +333,12 @@ void SelectionFunction(int x, int y, bool append_rightClick = false)
 		}
 		else
 		{
-			printf("Picked %d of (%.3f %.3f %.3f) \n", pickedID, g_vis.PointPosition[pickedID].x, g_vis.PointPosition[pickedID].y, g_vis.PointPosition[pickedID].z);
-
-			bool already = false;
-			for (int ii = 0; ii < PickedPoints.size(); ii++)
-				if (pickedID == PickedPoints[ii])
-				{
-				already = true; break;
-				}
-
-			if (!already)
-				PickedPoints.push_back(pickedID);
+			printf("Picked: %d\n", pickedID);
+			PickedPoints.push_back(pickedID);
 		}
 	}
-	else if (pickedID >= g_vis.PointPosition.size() + MAX_NUM_CAM)//if(pickedID<MAX_NUM_CAM)  //which means camera
-	{
-		pickedID -= g_vis.PointPosition.size() + MAX_NUM_CAM;
-		if (pickedID<0 || pickedID>g_vis.Track3DLength.size())
-			return;
-
-		printf("Pick trajectory # %d of length %d\n", pickedID, g_vis.Track3DLength[pickedID]);
-
-		bool already = false;
-		for (int ii = 0; ii < PickedTraject.size(); ii++)
-			if (pickedID == PickedTraject[ii])
-			{
-			already = true; break;
-			}
-
-		if (!already)
-			PickedTraject.push_back(pickedID);
-	}
+	else //if(pickedID<MAX_NUM_CAM)  //which means camera
+		;
 }
 void Keyboard(unsigned char key, int x, int y)
 {
@@ -508,12 +363,6 @@ void Keyboard(unsigned char key, int x, int y)
 		break;
 	case 'b':
 		break;
-	case 'a':
-		g_mouseXRotate += 5;
-		break;
-	case 'd':
-		g_mouseXRotate -= 5;
-		break;
 	}
 	glutPostRedisplay();
 }
@@ -531,19 +380,11 @@ void SpecialInput(int key, int x, int y)
 		timeID--;
 		if (timeID < minTime)
 			timeID = minTime;
-
-		//if (timeID < -8)
-		//	timeID = -8;
-		//ReadCurrentTrajectory2(Path, timeID);
 		break;
 	case GLUT_KEY_RIGHT:
 		timeID++;
 		if (timeID > maxTime)
 			timeID = maxTime;
-
-		//if (timeID > 8)
-		//	timeID = 8;
-		//ReadCurrentTrajectory2(Path, timeID);
 		glutPostRedisplay();
 		break;
 	}
@@ -582,7 +423,7 @@ void MouseButton(int button, int state, int x, int y)
 			SelectionFunction(x, y, false);
 		}
 		if (glutGetModifiers() == GLUT_ACTIVE_ALT)//Deselect
-			PickedPoints.clear(), PickCams.clear(), PickedTraject.clear();
+			PickedPoints.clear(), PickCams.clear();
 	}
 }
 void MouseMotion(int x, int y)
@@ -590,7 +431,7 @@ void MouseMotion(int x, int y)
 	if (g_bButton1Down)
 	{
 		if (g_camMode == CAM_ZOOM)
-			g_fViewDistance += 5.0f*(y - g_yClick);
+			g_fViewDistance += (y - g_yClick);
 		else if (g_camMode == CAM_ROTATE)
 		{
 			g_mouseXRotate += (x - g_xClick);
@@ -598,8 +439,8 @@ void MouseMotion(int x, int y)
 		}
 		else if (g_camMode == CAM_PAN)
 		{
-			g_mouseXPan += (x - g_xClick);
-			g_mouseYPan -= (y - g_yClick);
+			g_mouseXPan -= (x - g_xClick) / 3;
+			g_mouseYPan -= (y - g_yClick) / 3;
 		}
 
 		g_xClick = x, g_yClick = y;
@@ -626,7 +467,7 @@ void visualization()
 	glutInit(&myargc, myargv);
 
 	// setup the size, position, and display mode for new windows 
-	glutInitWindowSize(1200, 900);
+	glutInitWindowSize(500, 500);
 	glutInitWindowPosition(0, 0);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH);
 
@@ -644,39 +485,28 @@ void visualization()
 
 }
 
-int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, bool hasPointColor, bool hasPatchNormal, bool hasCameraPose, bool has3DPoints, bool Traject3DfromOneTime, int CurrentTime)
+int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, bool Color, bool Normal, bool Pose, bool ThreeD)
 {
 	nviews = nViews;
-	drawPointColor = hasPointColor, drawPatchNormal = hasPatchNormal, drawCameraPose = hasCameraPose, draw3DPoints = has3DPoints;
+	hasColor = Color, hasNormal = Normal,
+		drawPose = Pose, ThreeDRecon = ThreeD;
 	Path = inPath;
-	if (draw3DPoints)
+	if (ThreeDRecon)
 	{
 		Scale = Scale / 5;
 		minTime = StartTime, maxTime = StopTime;
 	}
 
-	timeID = StartTime;
 	if (StartTime == -1)
-		drawCameraPose = false, timeID = -1;
+		drawPose = false;
 
 	VisualizationManager g_vis;
-	if (!draw3DPoints)
-		ReadCurrentSfmGL(Path, drawPointColor, drawPatchNormal);
+	if (!ThreeDRecon)
+		ReadCurrentSfmGL(Path, hasColor, hasNormal);
 	else
-		ReadCurrent3DGL(Path, drawPointColor, drawPatchNormal, timeID, true);
+		ReadCurrent3DGL(Path, hasColor, hasNormal, timeID);
 
-	if (Traject3DfromOneTime)
-	{
-		drawTraject3D = true;
-		ReadCurrent3DGL(Path, drawPointColor, drawPatchNormal, CurrentTime, true);
-		//ReadCurrentTrajectory(Path, CurrentTime);
-		//ReadCurrentTrajectory2(Path, CurrentTime - 1);
-		//ReadCurrentTrajectory3(Path, CurrentTime);
-		//ReadCurrentTrajectory4(Path, CurrentTime);
-		//ReadCurrentTrajectory5(Path, CurrentTime);
-	}
-
-	if (drawCameraPose)
+	if (drawPose)
 		ReadCurrentPosesGL(Path, nViews, StartTime, StopTime);
 	visualization();
 
@@ -717,9 +547,9 @@ void SaveCurrentSfmGL(char *path, CameraData *AllViewParas, vector<int>AvailView
 	}
 	fclose(fp);
 
-	bool hasPointColor = false;
+	bool color = false;
 	if (AllColor != NULL)
-		hasPointColor = true;
+		color = true;
 
 	sprintf(Fname, "%s/3dGL.xyz", path);
 	fp = fopen(Fname, "w+");
@@ -728,7 +558,7 @@ void SaveCurrentSfmGL(char *path, CameraData *AllViewParas, vector<int>AvailView
 		if (abs(All3D[ii].x) + abs(All3D[ii].y) + abs(All3D[ii].z) < 0.001)
 			continue;
 		fprintf(fp, "%.16f %.16f %.16f ", All3D[ii].x, All3D[ii].y, All3D[ii].z);
-		if (hasPointColor)
+		if (color)
 			fprintf(fp, "%d %d %d\n", AllColor[ii].x, AllColor[ii].y, AllColor[ii].z);
 		else
 			fprintf(fp, "\n");
@@ -771,9 +601,9 @@ void SaveCurrentSfmGL2(char *path, CameraData *AllViewParas, vector<int>AvailVie
 	}
 	fclose(fp);
 
-	bool hasPointColor = false;
+	bool color = false;
 	if (AllColor.size() != 0)
-		hasPointColor = true;
+		color = true;
 
 	sprintf(Fname, "%s/3dGL.xyz", path);
 	fp = fopen(Fname, "w+");
@@ -782,7 +612,7 @@ void SaveCurrentSfmGL2(char *path, CameraData *AllViewParas, vector<int>AvailVie
 		if (abs(All3D[ii].x) + abs(All3D[ii].y) + abs(All3D[ii].z) < 0.001)
 			continue;
 		fprintf(fp, "%.16f %.16f %.16f ", All3D[ii].x, All3D[ii].y, All3D[ii].z);
-		if (hasPointColor)
+		if (color)
 			fprintf(fp, "%d %d %d\n", AllColor[ii].x, AllColor[ii].y, AllColor[ii].z);
 		else
 			fprintf(fp, "\n");
@@ -791,7 +621,7 @@ void SaveCurrentSfmGL2(char *path, CameraData *AllViewParas, vector<int>AvailVie
 
 	return;
 }
-void ReadCurrentSfmGL(char *path, bool drawPointColor, bool drawPatchNormal)
+void ReadCurrentSfmGL(char *path, bool hasColor, bool hasNormal)
 {
 	char Fname[200];
 	int viewID;
@@ -819,7 +649,7 @@ void ReadCurrentSfmGL(char *path, bool drawPointColor, bool drawPatchNormal)
 	}
 
 	g_vis.PointPosition.clear(); g_vis.PointPosition.reserve(10e5);
-	if (drawPointColor)
+	if (hasColor)
 		g_vis.PointColor.clear(), g_vis.PointColor.reserve(10e5);
 
 	Point3i iColor; Point3f fColor; Point3f t3d;
@@ -831,7 +661,7 @@ void ReadCurrentSfmGL(char *path, bool drawPointColor, bool drawPatchNormal)
 	}
 	while (fscanf(fp, "%f %f %f ", &t3d.x, &t3d.y, &t3d.z) != EOF)
 	{
-		if (drawPointColor)
+		if (hasColor)
 		{
 			fscanf(fp, "%d %d %d ", &iColor.x, &iColor.y, &iColor.z);
 			fColor.x = 1.0*iColor.x / 255;
@@ -865,30 +695,24 @@ void ReadCurrentSfmGL(char *path, bool drawPointColor, bool drawPatchNormal)
 
 	return;
 }
-void ReadCurrent3DGL(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate)
+void ReadCurrent3DGL(char *path, bool hasColor, bool hasNormal, int timeID)
 {
 	char Fname[200];
 	g_vis.PointPosition.clear(); g_vis.PointPosition.reserve(10e5);
-	if (drawPointColor)
+	if (hasColor)
 		g_vis.PointColor.clear(), g_vis.PointColor.reserve(10e5);
 
-	if (setCoordinate)
-		PointsCentroid[0] = 0.0f, PointsCentroid[1] = 0.0f, PointsCentroid[2] = 0.f;
+	PointsCentroid[0] = 0.0f, PointsCentroid[1] = 0.0f, PointsCentroid[2] = 0.f;
 	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
 	sprintf(Fname, "%s/3dGL_%d.xyz", path, timeID); FILE *fp = fopen(Fname, "r");
-	if (fp == NULL)
-	{
-		printf("Cannot load %s\n", Fname);
-		return;
-	}
 	while (fscanf(fp, "%f %f %f ", &t3d.x, &t3d.y, &t3d.z) != EOF)
 	{
-		if (drawPatchNormal)
+		if (hasNormal)
 		{
 			fscanf(fp, "%f %f %f ", &n3d.x, &n3d.y, &n3d.z);
 			g_vis.PointNormal.push_back(n3d);
 		}
-		if (drawPointColor)
+		if (hasColor)
 		{
 			fscanf(fp, "%d %d %d ", &iColor.x, &iColor.y, &iColor.z);
 			fColor.x = 1.0*iColor.x / 255;
@@ -897,14 +721,14 @@ void ReadCurrent3DGL(char *path, bool drawPointColor, bool drawPatchNormal, int 
 			g_vis.PointColor.push_back(fColor);
 		}
 
-		if (setCoordinate)
-			PointsCentroid[0] += t3d.x, PointsCentroid[1] += t3d.y, PointsCentroid[2] += t3d.z;
+		PointsCentroid[0] += t3d.x, PointsCentroid[1] += t3d.y, PointsCentroid[2] += t3d.z;
 		g_vis.PointPosition.push_back(t3d);
 	}
 	fclose(fp);
 
-	if (setCoordinate)
-		PointsCentroid[0] /= g_vis.PointPosition.size(), PointsCentroid[1] /= g_vis.PointPosition.size(), PointsCentroid[2] /= g_vis.PointPosition.size();
+	PointsCentroid[0] /= g_vis.PointPosition.size();
+	PointsCentroid[1] /= g_vis.PointPosition.size();
+	PointsCentroid[2] /= g_vis.PointPosition.size();
 
 	InitLocFromCentroid[0] = 0.0, InitLocFromCentroid[1] = 0.0, InitLocFromCentroid[2] = 0.0;
 	for (int ii = 0; ii < g_vis.PointPosition.size(); ii++)
@@ -920,154 +744,6 @@ void ReadCurrent3DGL(char *path, bool drawPointColor, bool drawPatchNormal, int 
 		ViewingLoc[0] = 0, ViewingLoc[1] = InitLocFromCentroid[1], InitLocFromCentroid[2] = 0;
 	else
 		ViewingLoc[0] = 0, ViewingLoc[1] = 0, InitLocFromCentroid[2] = InitLocFromCentroid[2];
-
-	return;
-}
-void ReadCurrentTrajectory(char *path, int timeID)
-{
-	char Fname[200];
-	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	//sprintf(Fname, "%s/Traject3D/Track_1.txt", path); FILE *fp = fopen(Fname, "r");
-	sprintf(Fname, "C:/temp/iGT.txt"); FILE *fp = fopen(Fname, "r");
-	if (fp == NULL)
-	{
-		printf("Cannot load %s\n", Fname);
-		return;
-	}
-	int npts = 1, currentTime = 1, ntracks = 2489;
-	//fscanf(fp, "%s %d", Fname, &npts);
-	for (int ii = 0; ii < npts; ii++)
-	{
-		//fscanf(fp, "%d %d", &currentTime, &ntracks);
-		Trajectory3D *track3D = new Trajectory3D[ntracks];
-		for (int jj = 0; jj < ntracks; jj++)
-		{
-			track3D[jj].timeID = currentTime + jj;
-			fscanf(fp, "%lf %lf %lf ", &track3D[jj].WC.x, &track3D[jj].WC.y, &track3D[jj].WC.z);
-		}
-		g_vis.Track3DLength.push_back(ntracks);
-		g_vis.Traject3D.push_back(track3D);
-	}
-	fclose(fp);
-
-	return;
-}
-void ReadCurrentTrajectory2(char *path, int timeID)
-{
-	char Fname[200];
-
-	g_vis.Track3DLength2.clear();
-	g_vis.Traject3D2.clear();
-	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	sprintf(Fname, "C:/temp/Fil_%d.txt", timeID); FILE *fp = fopen(Fname, "r");
-	if (fp == NULL)
-	{
-		printf("Cannot load %s\n", Fname);
-		return;
-	}
-	int npts = 1, currentTime = 1, ntracks = 2483;
-	//fscanf(fp, "%s %d", Fname, &npts);
-	for (int ii = 0; ii < npts; ii++)
-	{
-		//fscanf(fp, "%d %d", &currentTime, &ntracks);
-		Trajectory3D *track3D = new Trajectory3D[ntracks];
-		for (int jj = 0; jj < ntracks; jj++)
-		{
-			track3D[jj].timeID = currentTime + jj;
-			fscanf(fp, "%lf %lf %lf ", &track3D[jj].WC.x, &track3D[jj].WC.y, &track3D[jj].WC.z);
-		}
-		g_vis.Track3DLength2.push_back(ntracks);
-		g_vis.Traject3D2.push_back(track3D);
-	}
-	fclose(fp);
-
-	return;
-}
-void ReadCurrentTrajectory3(char *path, int timeID)
-{
-	char Fname[200];
-
-	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	sprintf(Fname, "C:/temp/Fil_1_3.txt"); FILE *fp = fopen(Fname, "r");
-	if (fp == NULL)
-	{
-		printf("Cannot load %s\n", Fname);
-		return;
-	}
-	int npts, currentTime, ntracks;
-	fscanf(fp, "%s %d", Fname, &npts);
-	for (int ii = 0; ii < npts; ii++)
-	{
-		fscanf(fp, "%d %d", &currentTime, &ntracks);
-		Trajectory3D *track3D = new Trajectory3D[ntracks];
-		for (int jj = 0; jj < ntracks; jj++)
-		{
-			track3D[jj].timeID = currentTime + jj;
-			fscanf(fp, "%lf %lf %lf ", &track3D[jj].WC.x, &track3D[jj].WC.y, &track3D[jj].WC.z);
-		}
-		g_vis.Track3DLength3.push_back(ntracks);
-		g_vis.Traject3D3.push_back(track3D);
-	}
-	fclose(fp);
-
-	return;
-}
-void ReadCurrentTrajectory4(char *path, int timeID)
-{
-	char Fname[200];
-
-	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	sprintf(Fname, "C:/temp/DCT_1_2.txt"); FILE *fp = fopen(Fname, "r");
-	if (fp == NULL)
-	{
-		printf("Cannot load %s\n", Fname);
-		return;
-	}
-	int npts, currentTime, ntracks;
-	fscanf(fp, "%s %d", Fname, &npts);
-	for (int ii = 0; ii < npts; ii++)
-	{
-		fscanf(fp, "%d %d", &currentTime, &ntracks);
-		Trajectory3D *track3D = new Trajectory3D[ntracks];
-		for (int jj = 0; jj < ntracks; jj++)
-		{
-			track3D[jj].timeID = currentTime + jj;
-			fscanf(fp, "%lf %lf %lf ", &track3D[jj].WC.x, &track3D[jj].WC.y, &track3D[jj].WC.z);
-		}
-		g_vis.Track3DLength4.push_back(ntracks);
-		g_vis.Traject3D4.push_back(track3D);
-	}
-	fclose(fp);
-
-	return;
-}
-void ReadCurrentTrajectory5(char *path, int timeID)
-{
-	char Fname[200];
-
-	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	sprintf(Fname, "C:/temp/DCT_1_3.txt"); FILE *fp = fopen(Fname, "r");
-	if (fp == NULL)
-	{
-		printf("Cannot load %s\n", Fname);
-		return;
-	}
-	int npts, currentTime, ntracks;
-	fscanf(fp, "%s %d", Fname, &npts);
-	for (int ii = 0; ii < npts; ii++)
-	{
-		fscanf(fp, "%d %d", &currentTime, &ntracks);
-		Trajectory3D *track3D = new Trajectory3D[ntracks];
-		for (int jj = 0; jj < ntracks; jj++)
-		{
-			track3D[jj].timeID = currentTime + jj;
-			fscanf(fp, "%lf %lf %lf ", &track3D[jj].WC.x, &track3D[jj].WC.y, &track3D[jj].WC.z);
-		}
-		g_vis.Track3DLength5.push_back(ntracks);
-		g_vis.Traject3D5.push_back(track3D);
-	}
-	fclose(fp);
-
 	return;
 }
 void SaveCurrenPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID)

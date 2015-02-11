@@ -12,7 +12,6 @@
 #include <math.h>
 #include <omp.h>
 #include <stdint.h>
-#include <direct.h>
 #include "ceres/ceres.h"
 #include "ceres/rotation.h"
 #include <opencv2/opencv.hpp>
@@ -79,7 +78,6 @@ bool ReadKPointsBinary(char *fn, vector<KeyPoint> &kpts, bool silent = false);
 bool WriteDescriptorBinary(char *fn, Mat descriptor, bool silent = false);
 Mat ReadDescriptorBinary(char *fn, int descriptorSize, bool silent = false);
 
-bool WriteKPointsSIFTGPU(char *fn, vector<SiftKeypoint>kpts, bool silent);
 bool WriteKPointsBinarySIFTGPU(char *fn, vector<SiftGPU::SiftKeypoint>kpts, bool silent = false);
 bool ReadKPointsBinarySIFTGPU(char *fn, vector<SiftGPU::SiftKeypoint> &kpts, bool silent = false);
 bool WriteKPointsBinarySIFTGPU(char *fn, vector<KeyPoint>kpts, bool silent = false);
@@ -112,7 +110,6 @@ double VarianceArray(double *data, int length, double mean = NULL);
 double MeanArray(vector<double>&data);
 double VarianceArray(vector<double>&data, double mean = NULL);
 void normalize(double *x, int dim = 3);
-double dotProduct(double *x, double *y, int dim = 3);
 double norm_dot_product(double *x, double *y, int dim = 3);
 void cross_product(double *x, double *y, double *xy);
 void conv(float *A, int lenA, float *B, int lenB, float *C);
@@ -123,7 +120,6 @@ double ComputeZNCCPatch(double *RefPatch, double *TarPatch, int hsubset, int nch
 
 void mat_invert(double* mat, double* imat, int dims = 3);
 void mat_invert(float* mat, float* imat, int dims = 3);
-void mat_mul(float *aa, float *bb, float *out, int rowa, int col_row, int colb);
 void mat_mul(double *aa, double *bb, double *out, int rowa, int col_row, int colb);
 void mat_add(double *aa, double *bb, double* cc, int row, int col, double scale_a = 1.0, double scale_b = 1.0);
 void mat_subtract(double *aa, double *bb, double* cc, int row, int col, double scale_a = 1.0, double scale_b = 1.0);
@@ -518,21 +514,16 @@ void GetrtFromRT(CameraData *AllViewsParas, int nviews);
 void GetrtFromRT(double *rt, double *R, double *T);
 void GetRTFromrt(CameraData *AllViewsParas, vector<int> AvailViews);
 void GetRTFromrt(CameraData *AllViewsParas, int nviews);
-void GetRCGL(CameraData &camInfo);
 
 void GetRTFromrt(CameraData &camera);
 void GetRTFromrt(double *rt, double *R, double *T);
-void AssembleRT(double *R, double *T, double *RT, bool GivenCenter = false);
+void AssembleRT(double *R, double *T, double *RT);
 void DesembleRT(double *R, double *T, double *RT);
 
 void AssembleP(CameraData &camera);
-void AssembleP(double *K, double *RT, double *P);
 void AssembleP(double *K, double *R, double *T, double *P);
-void CopyCamereInfo(CameraData Src, CameraData &Dst, bool Extrinsic = true);
+void CopyCamereInfo(CameraData Src, CameraData &Dst);
 
-void Rotation2Quaternion(double *R, double *q);
-void Quaternion2Rotation(double *q, double *R);
-void QuaternionLinearInterp(double *quad1, double *quad2, double *quadi, double u);
 
 double DistanceOfTwoPointsSfM(char *Path, int id1, int id2, int id3);
 
@@ -541,8 +532,7 @@ void BlurDetectionDriver(char *Path, int nimages, int width, int height, float b
 int BAVisualSfMDriver(char *Path, char *nvmName, char *camInfo, char *IntrinsicInfo = NULL, bool lensconversion = 1, int sharedIntrinsics = 0);
 bool loadNVMLite(const string filepath, Corpus &CorpusData, int sharedIntrinsics);
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
-bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor = 1.0);
-bool ReSaveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData, double ScaleFactor);
+bool rewriteBundleAdjustedNVMResults(char *Path, char *BAfileName, Corpus &CorpusData);
 
 int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool outputtext = false);
 int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool inputtext = false, bool notReadDescriptor = false);
@@ -555,22 +545,19 @@ void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker,
 int GenerateCorpusVisualWords(char *Path, int nimages);
 int ComputeWordsHistogram(char *Path, int nimages);
 
-int ReadDomeCalibFile(char *Path, CameraData *AllCamInfo);
-int ReadDomeCalibFile2(char *Path, VideoData  &AllCamInfo);
-
+int ReadDomeVGACalibFile(char *Path, CameraData *AllCamInfo);
 bool LoadTrackData(char* filePath, int CurrentFrame, TrajectoryData &TrajectoryInfo, bool loadVis);
 void Write3DMemAtThatTime(char *Path, TrajectoryData &TrajectoryInfo, CameraData *AllCamInfo, int refFrame, int curFrame);
 void Genrate2DTrajectory(char *Path, int CurrentFrame, TrajectoryData InfoTraj, CameraData *AllCamInfo, vector<int> trajectoriesUsed);
-void Genrate2DTrajectory2(char *Path, int CurrentFrame, TrajectoryData InfoTraj, VideoData  &AllCamInfo, vector<int> trajectoriesUsed);
 int Load2DTrajectory(char *Path, TrajectoryData &inoTraj, int ntrajectories);
 int Compute3DTrajectoryErrorColorVar(char *Path, vector<int> SyncOff, int *pair);
 int Compute3DTrajectoryErrorZNCC(char *Path, TrajectoryData inoTraj, int nTraj, int minFrame, int maxFrame, int *cameraPair, int* range);
-int Compute3DTrajectoryErrorZNCC2(char *Path, TrajectoryData inoTraj, int nTraj, int minFrame, int maxFrame, int *cameraPair, int* range);
-int Compute3DTrajectoryErrorZNCCDif(char *Path, TrajectoryData infoTraj, int nTraj, int minFrame, int maxFrame, int viewID, int *range);
 int Compute3DTrajectoryError2DTracking(char *Path, TrajectoryData infoTraj, int nTraj, int minFrame, int maxFrame, int SelectedViewID, int *range);
 
 int ImportCalibDatafromHanFormat(char *Path, VideoData &AllVideoInfo, int nVGAPanels, int nVGACamsPerPanel, int nHDs);
-void ExportCalibDatatoHanFormat(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime, int selectedCam = -1);
+void ExportCalibDatatoHanFormat(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime);
 
+void GetRCGL(CameraData &camInfo);
+void CopyCamereInfo(CameraData Src, CameraData &Dst);
 void GenerateViewAll_3D_2DInliers(char *Path, int viewID, int startID, int stopID, int n3Dcorpus);
 #endif

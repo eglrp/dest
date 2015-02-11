@@ -37,11 +37,9 @@ public:
 bool myImgReader(char *fname, char *Img, int &width, int &height, int nchannels);
 bool GrabImage(char *fname, char *Img, int &width, int &height, int nchannels);
 bool GrabVideoFrame2Mem(char *fname, char *Data, int &width, int &height, int &nchannels, int &nframes, int frameSample = 1, int fixnframes = 99999999);
-int ReadAudio(char *Fin, Sequence &mySeq, char *Fout = 0);
 
-int PrismMST(char *Path, int nvideos);
-int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample, double &finalframeOffset, double &MaxZNCC, double reliableThreshold = 0.25);
-int AssignOffsetFromMST(char *Path, int nvideos);
+int ReadAudio(char *Fin, Sequence &mySeq, char *Fout = 0);
+int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample, double &finalframeOffset, double reliableThreshold = 0.25);
 
 void DynamicTimeWarping3Step(Mat pM, vector<int>&p, vector<int> &q);
 void DynamicTimeWarping5Step(Mat pM, vector<int>&p, vector<int> &q);

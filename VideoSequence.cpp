@@ -1,9 +1,5 @@
 #include "VideoSequence.h"
 #include "Ultility.h"
-#include <boost/config.hpp>
-#include <iostream>
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/prim_minimum_spanning_tree.hpp>
 
 using namespace cv;
 using namespace std;
@@ -58,6 +54,7 @@ bool GrabVideoFrame2Mem(char *fname, char *Data, int &width, int &height, int &n
 
 	return true;
 }
+
 int ReadAudio(char *Fin, Sequence &mySeq, char *Fout)
 {
 	SNDFILE      *infile;
@@ -89,103 +86,7 @@ int ReadAudio(char *Fin, Sequence &mySeq, char *Fout)
 
 	return 0;
 }
-
-int PrismMST(char *Path, int nvideos)
-{
-	using namespace boost;
-	typedef adjacency_list < vecS, vecS, undirectedS, property<vertex_distance_t, int>, property < edge_weight_t, double > > Graph;
-	typedef std::pair < int, int >E;
-
-	int v1, v2; double offset;
-	char Fname[200];
-	double *TimeOffset = new double[nvideos*nvideos];
-	sprintf(Fname, "%s/audioSync.txt", Path);
-	FILE *fp = fopen(Fname, "r");
-	if (fp == NULL)
-	{
-		printf("Cannot open %s\n", Fname);
-		return 1;
-	}
-	while (fscanf(fp, "%d %d %lf ", &v1, &v2, &offset) != EOF)
-		TimeOffset[v1 + v2*nvideos] = offset, TimeOffset[v2 + v1*nvideos] = offset;
-	fclose(fp);
-
-	int num_nodes = nvideos, nedges = nvideos*(nvideos - 1) / 2;
-	E *edges = new E[nedges];
-	double *weightTable = new double[nvideos*nvideos];
-	double *weights = new double[nedges];
-
-	/*fp = fopen("C:/temp/timeoffset.txt", "w+");
-	for (int kk = 0; kk < nvideos; kk++)
-	{
-	for (int ll = 0; ll < nvideos; ll++)
-	fprintf(fp, "%.2f ", TimeOffset[kk + ll*nvideos]);
-	fprintf(fp, "\n");
-	}
-	fclose(fp);*/
-
-	//Form edges weight based on the consistency of the triplet
-	int count = 0;
-	for (int kk = 0; kk < nvideos - 1; kk++)
-	{
-		for (int ll = kk + 1; ll < nvideos; ll++)
-		{
-			edges[count] = E(kk, ll);
-			weights[count] = 0.0;
-			for (int jj = 0; jj < nvideos; jj++)
-			{
-				if (jj == ll || jj == kk)
-					continue;
-				if (jj >= ll) //ab = ac+cb;
-					weights[count] += abs(TimeOffset[ll + jj*nvideos] + TimeOffset[kk + ll*nvideos] - TimeOffset[kk + jj*nvideos]);
-				else if (jj <= kk)
-					weights[count] += abs(TimeOffset[jj + kk*nvideos] + TimeOffset[kk + ll*nvideos] - TimeOffset[jj + ll*nvideos]);
-				else
-					weights[count] += abs(TimeOffset[kk + jj*nvideos] + TimeOffset[ll + jj*nvideos] - TimeOffset[kk + ll*nvideos]);
-			}
-			weightTable[kk + ll*nvideos] = weights[count];
-			weightTable[ll + kk*nvideos] = weights[count];
-			count++;
-		}
-	}
-
-	/*fp = fopen("C:/temp/weightTable.txt", "w+");
-	for (int kk = 0; kk < nvideos; kk++)
-	{
-	for (int ll = 0; ll < nvideos; ll++)
-	fprintf(fp, "%.2f ", weightTable[kk + ll*nvideos]);
-	fprintf(fp, "\n");
-	}
-	fclose(fp);*/
-
-	Graph g(edges, edges + sizeof(E)*nedges / sizeof(E), weights, num_nodes);
-	property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, g);
-	std::vector < graph_traits < Graph >::vertex_descriptor >p(num_vertices(g));
-
-	prim_minimum_spanning_tree(g, &p[0]);
-
-	sprintf(Fname, "%s/MST_audioSync.txt", Path);
-	fp = fopen(Fname, "w+");
-	for (std::size_t i = 0; i != p.size(); ++i)
-	{
-		if (p[i] != i)
-		{
-			std::cout << "parent[" << i << "] = " << p[i] << std::endl;
-			fprintf(fp, "%d %d\n", p[i], i);
-		}
-		else
-		{
-			std::cout << "parent[" << i << "] = no parent" << std::endl;
-			fprintf(fp, "%d %d\n", i, i);
-		}
-	}
-	fclose(fp);
-
-	delete[]weights, delete[]weightTable, delete[]TimeOffset, delete []edges;
-
-	return 0;
-}
-int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample, double &finalfoffset, double &MaxZNCC, double reliableThreshold)
+int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample, double &finalfoffset, double reliableThreshold)
 {
 	omp_set_num_threads(omp_get_max_threads());
 
@@ -215,7 +116,7 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 	float *Grad1 = new float[Seq1.nsamples + filterSize - 1], *Grad2 = new float[Seq2.nsamples + filterSize - 1];
 	conv(Seq1.Audio, Seq1.nsamples, GaussianDfilter, filterSize, Grad1);
 	conv(Seq2.Audio, Seq2.nsamples, GaussianDfilter, filterSize, Grad2);
-
+	
 	for (int ii = 0; ii < Seq1.nsamples + filterSize - 1; ii++)
 		Grad1[ii] = abs(Grad1[ii]);
 	for (int ii = 0; ii < Seq2.nsamples + filterSize - 1; ii++)
@@ -297,26 +198,26 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 		minMaxLoc(zncc, &minVal, &maxVal, &minLoc, &maxLoc, Mat());
 		MaxCorr[ii] = maxVal;
 		soffset[ii] = maxLoc.x - nsamplesSubSeq + 1 - MinSample*ii;
-		foffset[ii] = 1.0*(soffset[ii]) / sampleRate*fps4;
+		foffset[ii] = 1.0*(soffset[ii]) / sampleRate*fps3;
 
 		zncc.at<float>(maxLoc.x) = 0.0;
 		minMaxLoc(zncc, &minVal, &maxVal2, &minLoc, &maxLoc2, Mat());
-		if (maxVal2 / maxVal>0.5 && abs(maxLoc2.x - maxLoc.x) < hbandwidth * 2 + 1)
+		if (maxVal2 / maxVal>0.5 || abs(maxLoc2.x - maxLoc.x) < hbandwidth * 2 + 1)
 		{
 			Goodness[ii] = false;
-			printf("Caution! Distance to the 2nd best peak (%.4f /%.4f): %d or %.2fs\n", maxVal, maxVal2, abs(maxLoc2.x - maxLoc.x), 1.0*abs(maxLoc2.x - maxLoc.x) / sampleRate*fps4);
+			printf("Caution! Distance to the 2nd best peak (%.4f /%.4f): %d or %.2fs\n", maxVal, maxVal2, abs(maxLoc2.x - maxLoc.x), 1.0*abs(maxLoc2.x - maxLoc.x) / sampleRate*fps3);
 		}
 		else
 			Goodness[ii] = true;
 
 		if (!Switch && soffset[ii] < 0)
-			printf("Split #%d (%d samples): %s is behind of %s %d samples or %.4f sec \n", ii + 1, nsamplesSubSeq, Fname1, Fname2, abs(soffset[ii]), foffset[ii]);
+			printf("Split #%d (%d samples): %s is behind of %s %d samples or %.2f frames\n", ii + 1, nsamplesSubSeq, Fname1, Fname2, abs(soffset[ii]), foffset[ii]);
 		if (!Switch && soffset[ii] >= 0)
-			printf("Split #%d (%d samples): %s is ahead of %s %d samples or %.4f sec \n", ii + 1, nsamplesSubSeq, Fname1, Fname2, abs(soffset[ii]), foffset[ii]);
+			printf("Split #%d (%d samples): %s is ahead of %s %d samples or %.2f frames\n", ii + 1, nsamplesSubSeq, Fname1, Fname2, abs(soffset[ii]), foffset[ii]);
 		if (Switch && soffset[ii] < 0)
-			printf("Split #%d (%d samples): %s is ahead of %s %d samples or %.4f sec \n", ii + 1, nsamplesSubSeq, Fname1, Fname2, abs(soffset[ii]), -foffset[ii]);
+			printf("Split #%d (%d samples): %s is behind of %s %d samples or %.2f frames\n", ii + 1, nsamplesSubSeq, Fname2, Fname1, abs(soffset[ii]), foffset[ii]);
 		if (Switch && soffset[ii] >= 0)
-			printf("Split #%d(%d samples): %s is behind of %s %d samples or %.4f sec \n", ii + 1, nsamplesSubSeq, Fname1, Fname2, abs(soffset[ii]), -foffset[ii]);
+			printf("Split #%d(%d samples): %s is ahead of %s %d samples or %.2f frames\n", ii + 1, nsamplesSubSeq, Fname2, Fname1, abs(soffset[ii]), foffset[ii]);
 	}
 
 	//Pick the one with highest correlation score
@@ -333,121 +234,24 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 	{
 		printf("The result is very unreliable (ZNCC = %.2f)! No offset will be generated.", MaxCorr[nSpliting - 1]);
 
-		delete[]Grad1, delete[]Grad2;
-		delete[]index, delete[]Goodness, delete[]soffset;
-		delete[]MaxCorr, delete[]MaxLocID;
+		delete[]index, delete[]Goodness;
 		delete[]Seq3, delete[]Seq4;
-		delete[]SubSeq, delete[]res, delete[]nres;
+		delete[]SubSeq, delete[]res;
 
 		return 1;
 	}
 	else
 	{
 		int fsoffset = soffset[index[nSpliting - 1]];
-		finalfoffset = Switch ? -1.0*fsoffset / sampleRate*fps3 : 1.0*fsoffset / sampleRate*fps4;
+		finalfoffset = 1.0*fsoffset / sampleRate*fps3;
 		printf("Final offset: %d samples or %.2f frames with ZNCC score %.4f\n", fsoffset, finalfoffset, MaxCorr[nSpliting - 1]);
 
-		MaxZNCC = MaxCorr[nSpliting - 1];
-
-		delete[]Grad1, delete[]Grad2;
-		delete[]index, delete[]Goodness, delete[]soffset;
-		delete[]MaxCorr, delete[]MaxLocID;
+		delete[]index, delete[]Goodness;
 		delete[]Seq3, delete[]Seq4;
-		delete[]SubSeq, delete[]res, delete[]nres;
+		delete[]SubSeq, delete[]res;
 
 		return 0;
 	}
-}
-int AssignOffsetFromMST(char *Path, int nvideos)
-{
-	char Fname[200];
-	vector<Point2i> ParentChild;
-
-	sprintf(Fname, "%s/MST_audioSync.txt", Path);
-	FILE *fp = fopen(Fname, "r");
-	if (fp == NULL)
-	{
-		printf("Cannot open %s\n", Fname);
-		return 1;
-	}
-	int parent, child;
-	while (fscanf(fp, "%d %d ", &parent, &child) != EOF)
-		ParentChild.push_back(Point2i(parent, child));
-	fclose(fp);
-
-	double *Offset = new double[nvideos*nvideos], t;
-	sprintf(Fname, "%s/audioSync.txt", Path);
-	fp = fopen(Fname, "r");
-	if (fp == NULL)
-	{
-		printf("Cannot open %s\n", Fname);
-		return 1;
-	}
-	while (fscanf(fp, "%d %d %lf", &parent, &child, &t) != EOF)
-		Offset[parent + child*nvideos] = t, Offset[child + parent*nvideos] = t;
-	fclose(fp);
-
-	double *OrderedOffset = new double[nvideos];
-	OrderedOffset[ParentChild[0].x] = 0;
-
-	int ncollected = 1;
-	vector<int>currentParent, currentChild, tcurrentChild;
-	currentParent.push_back(ParentChild[0].x);
-	while (ncollected != nvideos)
-	{
-		//search for children node
-		for (int jj = 0; jj < currentParent.size(); jj++)
-		{
-			for (int ii = 1; ii < ParentChild.size(); ii++)
-			{
-				if (ParentChild[ii].x == currentParent[jj])
-				{
-					tcurrentChild.push_back(ParentChild[ii].y);
-					ncollected++;
-				}
-			}
-
-			//assign offset to children
-			for (int ii = 0; ii < tcurrentChild.size(); ii++)
-			{
-				if (tcurrentChild[ii]>currentParent[jj])
-					OrderedOffset[tcurrentChild[ii]] = OrderedOffset[currentParent[jj]] + Offset[currentParent[jj] + tcurrentChild[ii] * nvideos];
-				else if (tcurrentChild[ii] < currentParent[jj])
-					OrderedOffset[tcurrentChild[ii]] = OrderedOffset[currentParent[jj]] - Offset[currentParent[jj] + tcurrentChild[ii] * nvideos];
-				else
-					printf("Error: parent is child!\n");
-			}
-
-			for (int ii = 0; ii < tcurrentChild.size(); ii++)
-				currentChild.push_back(tcurrentChild[ii]);
-			tcurrentChild.clear();
-		}
-
-		//replace parent with children
-		currentParent.clear();
-		currentParent = currentChild;
-		currentChild.clear();
-	}
-
-	//Find the video started earliest and that it as reference
-	double earliest = 999.9;
-	for (int ii = 0; ii < nvideos; ii++)
-		if (OrderedOffset[ii] < earliest)
-			earliest = OrderedOffset[ii];
-
-	for (int ii = 0; ii < nvideos; ii++)
-		OrderedOffset[ii] -= earliest;
-
-	//Write results:
-	sprintf(Fname, "%s/FaudioSync.txt", Path);
-	fp = fopen(Fname, "w+");
-	for (int ii = 0; ii < nvideos; ii++)
-		fprintf(fp, "%d %.3f\n", ii, OrderedOffset[ii]);
-	fclose(fp);
-
-	delete[]Offset, delete[]OrderedOffset;
-
-	return 0;
 }
 
 void DynamicTimeWarping3Step(Mat pM, vector<int>&pp, vector<int> &qq)

@@ -1165,833 +1165,6 @@ int USAC_FindHomographyDriver(char *Path, int id1, int id2, int timeID)
 	return 0;
 }
 
-double SearchLK(Point2d From, Point2d &Target, float *Img1Para, float *Img2Para, int nchannels, int width1, int height1, int width2, int height2, LKParameters LKArg, double *Timg = 0, double *T = 0, double *iWp = 0, double *direction = 0, double* iCovariance = 0)
-{
-	int i, j, k, kk, iii, jjj, ij, i2, j2;
-	int hsubset = LKArg.hsubset, DIC_Algo = LKArg.DIC_Algo, Interpolation_Algorithm = LKArg.InterpAlgo;
-	int Iter_Max = LKArg.IterMax, Convergence_Criteria = LKArg.Convergence_Criteria, Speed = LKArg.Analysis_Speed;
-	double znccThresh = LKArg.ZNCCThreshold, pssdabThresh = LKArg.PSSDab_thresh;
-
-	double ii, jj, II, JJ, a, b, gx, gy, DIC_Coeff, DIC_Coeff_min, t_1, t_2, t_3, t_4, t_5, t_6, m_F, m_G, S[9], p_best[14];
-	double conv_crit_1 = 1.0 / pow(10.0, Convergence_Criteria + 2);
-	double conv_crit_2 = conv_crit_1*0.01;
-	int NN[] = { 3, 7, 4, 8, 9, 13, 10, 14 };
-	int jumpStep[2] = { 1, 2 };
-	int DIC_Algo2 = DIC_Algo, nn, nExtraParas = 2, _iter = 0;
-	int p_jump, p_jump_0 = jumpStep[Speed], p_jump_incr = 1;
-
-	if (DIC_Algo == 4)
-	{
-		nn = 7, DIC_Algo2 = DIC_Algo;
-		DIC_Algo = 1;
-	}
-	else if (DIC_Algo == 5)
-	{
-		nn = 7, DIC_Algo2 = DIC_Algo;
-		DIC_Algo = 1;
-	}
-	else if (DIC_Algo == 6)
-	{
-		nn = 8, DIC_Algo2 = DIC_Algo;
-		DIC_Algo = 3;
-	}
-	else if (DIC_Algo == 7)
-	{
-		nn = 8, DIC_Algo2 = DIC_Algo;
-		DIC_Algo = 3;
-	}
-	else
-		nn = NN[DIC_Algo];
-
-	double AA[196], BB[14], CC[14], p[14];
-	for (i = 0; i < nn; i++)
-		p[i] = (i == nn - 2 ? 1.0 : 0.0);
-
-	int length1 = width1*height1, length2 = width2*height2, TimgS = 2 * hsubset + 1, Tlength = TimgS*TimgS;
-
-	bool createMem = false;
-	if (Timg == NULL)
-	{
-		Timg = new double[Tlength*nchannels];
-		T = new double[2 * Tlength*nchannels];
-	}
-
-	for (jjj = -hsubset; jjj <= hsubset; jjj++)
-	{
-		for (iii = -hsubset; iii <= hsubset; iii++)
-		{
-			ii = From.x + iii, jj = From.y + jjj;
-			for (kk = 0; kk < nchannels; kk++)
-			{
-				Get_Value_Spline(Img1Para + kk*length1, width1, height1, ii, jj, S, -1, Interpolation_Algorithm);
-				Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength] = S[0];
-			}
-		}
-	}
-
-	bool printout = false;
-	FILE *fp;
-	if (printout)
-	{
-		fp = fopen("C:/temp/src.txt", "w+");
-		for (jjj = -hsubset; jjj <= hsubset; jjj++)
-		{
-			for (iii = -hsubset; iii <= hsubset; iii++)
-				for (kk = 0; kk < nchannels; kk++)
-					fprintf(fp, "%.2f ", Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength]);
-			fprintf(fp, "\n");
-		}
-		fclose(fp);
-	}
-
-	bool useInitPara = false;
-	if (iWp != NULL)
-	{
-		useInitPara = true;
-		p[2] = iWp[0], p[3] = iWp[1], p[4] = iWp[2], p[5] = iWp[3];
-	}
-
-	/// Let's start with only translation and only match the at the highest level of the pyramid
-	bool Break_Flag = false;
-	DIC_Coeff_min = 1e10;
-	for (p_jump = p_jump_0; p_jump > 0; p_jump -= 2)
-	{
-		DIC_Coeff_min = 1e10;
-		bool Break_Flag = false;
-		for (k = 0; k < Iter_Max; k++)
-		{
-			t_1 = 0.0;
-			t_2 = 0.0;
-			for (i = 0; i < 4; i++)
-				AA[i] = 0.0;
-			for (i = 0; i < 2; i++)
-				BB[i] = 0.0;
-
-			if (printout)
-				fp = fopen("C:/temp/tar.txt", "w+");
-
-			for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
-			{
-				for (iii = -hsubset; iii <= hsubset; iii += p_jump)
-				{
-					if (DIC_Algo == 1 || DIC_Algo == 3)
-						II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj, JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
-					else
-						II = Target.x + iii + p[0], JJ = Target.y + jjj + p[1];
-
-					if (II<0.0 || II>(double)(width1 - 1) - (1e-10) || JJ<0.0 || JJ>(double)(height1 - 1) - (1e-10))
-						continue;
-
-					for (kk = 0; kk < nchannels; kk++)
-					{
-						Get_Value_Spline(Img2Para + kk*length2, width2, height2, II, JJ, S + 3 * kk, 0, Interpolation_Algorithm);
-
-						m_F = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
-						m_G = S[3 * kk];
-						if (printout)
-							fprintf(fp, "%.2f ", m_G);
-						t_3 = m_G - m_F;
-						CC[0] = S[3 * kk + 1], CC[1] = S[3 * kk + 2];
-
-						for (i = 0; i < 2; i++)
-							BB[i] += t_3*CC[i];
-
-						for (j = 0; j < 2; j++)
-							for (i = j; i < 2; i++)
-								AA[j * 2 + i] += CC[i] * CC[j];
-
-						t_1 += t_3*t_3, t_2 += m_F*m_F;
-					}
-				}
-				if (printout)
-					fprintf(fp, "\n");
-			}
-			if (printout)
-				fclose(fp);
-
-			DIC_Coeff = t_1 / t_2;
-			mat_completeSym(AA, 2);
-			QR_Solution_Double(AA, BB, 2, 2);
-			for (i = 0; i < 2; i++)
-				p[i] -= BB[i];
-
-
-			if (DIC_Coeff != DIC_Coeff || DIC_Coeff > 50 || abs(p[0]) > hsubset || abs(p[1]) > hsubset)
-			{
-				if (createMem)
-				{
-					delete[]T;
-					delete[]Timg;
-				}
-				return 0.0;
-			}
-
-			if (DIC_Coeff < DIC_Coeff_min)	// If the iteration does not converge, this can be helpful
-			{
-				DIC_Coeff_min = DIC_Coeff;
-				p_best[0] = p[0], p_best[1] = p[1];
-				if (p[0] != p[0] || p[1] != p[1])
-				{
-					if (createMem)
-					{
-						delete[]T;
-						delete[]Timg;
-					}
-					return 0.0;
-				}
-			}
-
-			if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
-				break;
-		}
-	}
-	p[0] = p_best[0], p[1] = p_best[1];
-
-	if (DIC_Algo <= 1)
-	{
-		p[0] = 0.5*(p[0] / direction[0] + p[1] / direction[1]);
-		if (DIC_Algo == 0)
-			p[1] = 1.0, p[2] = 0.0;
-		else
-			p[1] = 0.0, p[2] = 0.0, p[3] = 0.0, p[4] = 0.0;
-	}
-
-	if (useInitPara)
-	{
-		if (DIC_Algo == 1)
-			p[1] = iWp[0], p[2] = iWp[1], p[3] = iWp[2], p[4] = iWp[3], p[5] = 1.0, p[6] = 0.0;
-		else if (DIC_Algo == 3)
-			p[2] = iWp[0], p[3] = iWp[1], p[4] = iWp[2], p[5] = iWp[3], p[6] = 1.0, p[7] = 0.0;
-	}
-
-	//Now, do the full DIC
-	for (p_jump = p_jump_0; p_jump > 0; p_jump -= p_jump_incr)
-	{
-		DIC_Coeff_min = 1e10;
-		bool Break_Flag = false;
-
-		for (k = 0; k < Iter_Max; k++)
-		{
-			t_1 = 0.0, t_2 = 0.0;
-			for (i = 0; i < nn*nn; i++)
-				AA[i] = 0.0;
-			for (i = 0; i < nn; i++)
-				BB[i] = 0.0;
-
-			if (printout)
-				fp = fopen("C:/temp/tar.txt", "w+");
-
-			a = p[nn - 2], b = p[nn - 1];
-			for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
-			{
-				for (iii = -hsubset; iii <= hsubset; iii += p_jump)
-				{
-					if (DIC_Algo == 0)
-					{
-						II = Target.x + iii + p[0] * direction[0];
-						JJ = Target.y + jjj + p[0] * direction[1];
-					}
-					else if (DIC_Algo == 1) //afine
-					{
-						II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj;
-						JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj;
-					}
-					else if (DIC_Algo == 2)
-					{
-						II = Target.x + iii + p[0];
-						JJ = Target.y + jjj + p[1];
-					}
-					else if (DIC_Algo == 3)
-					{
-						II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj;
-						JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
-					}
-
-					if (II<0.0 || II>(double)(width2 - 1) - (1e-10) || JJ<0.0 || JJ>(double)(height2 - 1) - (1e-10))
-						continue;
-
-					for (kk = 0; kk < nchannels; kk++)
-					{
-						Get_Value_Spline(Img2Para + kk*length2, width2, height2, II, JJ, S + 3 * kk, 0, Interpolation_Algorithm);
-
-						m_F = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
-						m_G = S[3 * kk];
-
-						if (printout)
-							fprintf(fp, "%.2f ", m_G);
-
-						gx = S[3 * kk + 1], gy = S[3 * kk + 2];
-						t_3 = a*m_G + b - m_F;
-
-						t_4 = a, t_5 = t_4*gx, t_6 = t_4*gy;
-						if (DIC_Algo == 0)
-						{
-							CC[0] = t_5*direction[0] + t_6*direction[1];
-							CC[1] = m_G, CC[2] = 1.0;
-						}
-						else if (DIC_Algo == 1)
-						{
-							CC[0] = t_5*direction[0] + t_6*direction[1];
-							CC[1] = t_5*iii, CC[2] = t_5*jjj, CC[3] = t_6*iii, CC[4] = t_6*jjj;
-							CC[5] = m_G, CC[6] = 1.0;
-						}
-						else if (DIC_Algo == 2)
-						{
-							CC[0] = t_5, CC[1] = t_6;
-							CC[2] = m_G, CC[3] = 1.0;
-						}
-						else if (DIC_Algo == 3)
-						{
-							CC[0] = t_5, CC[1] = t_6;
-							CC[2] = t_5*iii, CC[3] = t_5*jjj, CC[4] = t_6*iii, CC[5] = t_6*jjj;
-							CC[6] = m_G, CC[7] = 1.0;
-						}
-
-						for (j = 0; j < nn; j++)
-						{
-							BB[j] += t_3*CC[j];
-							for (i = j; i < nn; i++)
-								AA[j*nn + i] += CC[i] * CC[j];
-						}
-
-						t_1 += t_3*t_3;
-						t_2 += m_F*m_F;
-					}
-				}
-				if (printout)
-					fprintf(fp, "\n");
-			}
-			if (printout)
-				fclose(fp);
-
-			DIC_Coeff = t_1 / t_2;
-
-			mat_completeSym(AA, nn);
-			QR_Solution_Double(AA, BB, nn, nn);
-			for (i = 0; i < nn; i++)
-				p[i] -= BB[i];
-
-			if (DIC_Coeff != DIC_Coeff || DIC_Coeff > 50)
-			{
-				if (createMem)
-					delete[]T, delete[]Timg;
-				return 0.0;
-			}
-			if (DIC_Coeff < DIC_Coeff_min)	// If the iteration does not converge, this can be helpful
-			{
-				DIC_Coeff_min = DIC_Coeff;
-				for (i = 0; i < nn; i++)
-					p_best[i] = p[i];
-				if (p[0] != p[0])
-				{
-					if (createMem)
-						delete[]T, delete[]Timg;
-					return 0.0;
-				}
-			}
-
-			if (DIC_Algo <= 1)
-			{
-				if (abs(p[0] * direction[0]) > hsubset || abs(p[1] * direction[0]) > hsubset)
-				{
-					if (createMem)
-						delete[]T, delete[]Timg;
-					return 0.0;
-				}
-				if (fabs(BB[0]) < conv_crit_1)
-				{
-					for (i = 1; i < nn - nExtraParas; i++)
-						if (fabs(BB[i]) > conv_crit_2)
-							break;
-					if (i == nn - nExtraParas)
-						Break_Flag = true;
-				}
-			}
-			else
-			{
-				if (abs(p[0]) > hsubset || abs(p[1]) > hsubset)
-				{
-					if (createMem)
-					{
-						delete[]T;
-						delete[]Timg;
-					}
-					return 0.0;
-				}
-				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
-				{
-					for (i = 2; i < nn - nExtraParas; i++)
-					{
-						if (fabs(BB[i]) > conv_crit_2)
-							break;
-					}
-					if (i == nn - nExtraParas)
-						Break_Flag = true;
-				}
-			}
-
-			if (Break_Flag)
-				break;
-		}
-		_iter += k;
-		// In case the iteration converges to "wrong" points, always use the data that lead to the least-square value.
-		for (i = 0; i < nn; i++)
-			p[i] = p_best[i];
-	}
-
-	//Quadratic if needed:
-	if (DIC_Algo2 > 3)
-	{
-		DIC_Algo = DIC_Algo2, nn = NN[DIC_Algo];
-		if (DIC_Algo == 4)
-		{
-			p[7] = p[5], p[8] = p[6];
-			for (i = 5; i < 7; i++)
-				p[i] = 0.0;
-		}
-		else if (DIC_Algo == 5)
-		{
-			p[11] = p[5], p[12] = p[6];
-			for (i = 5; i < 11; i++)
-				p[i] = 0.0;
-		}
-		else if (DIC_Algo == 6)
-		{
-			p[8] = p[6], p[9] = p[7];
-			for (i = 6; i < 8; i++)
-				p[i] = 0.0;
-		}
-		else if (DIC_Algo == 7)
-		{
-			p[12] = p[6], p[13] = p[7];
-			for (i = 6; i < 12; i++)
-				p[i] = 0.0;
-		}
-
-		//p_jump_0 = 1;
-		for (p_jump = p_jump_0; p_jump > 0; p_jump -= p_jump_incr)
-		{
-			DIC_Coeff_min = 1e10;
-			bool Break_Flag = false;
-
-			for (k = 0; k < Iter_Max; k++)
-			{
-				t_1 = 0.0, t_2 = 0.0;
-				for (i = 0; i < nn*nn; i++)
-					AA[i] = 0.0;
-				for (i = 0; i < nn; i++)
-					BB[i] = 0.0;
-
-				a = p[nn - 2], b = p[nn - 1];
-
-				if (printout)
-					fp = fopen("C:/temp/tar.txt", "w+");
-
-				for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
-				{
-					for (iii = -hsubset; iii <= hsubset; iii += p_jump)
-					{
-						if (DIC_Algo == 4) //irregular
-						{
-							ij = iii*jjj;
-							II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj + p[5] * ij;
-							JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj + p[6] * ij;
-						}
-						else if (DIC_Algo == 5) //Quadratic
-						{
-							ij = iii*jjj, i2 = iii*iii, j2 = jjj*jjj;
-							II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj + p[5] * ij + p[7] * i2 + p[8] * j2;
-							JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj + p[6] * ij + p[9] * i2 + p[10] * j2;
-						}
-						else if (DIC_Algo == 6)
-						{
-							ij = iii*jjj;
-							II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * ij;
-							JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[7] * ij;
-						}
-						else if (DIC_Algo == 7)
-						{
-							ij = iii*jjj, i2 = iii*iii, j2 = jjj*jjj;
-							II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * ij + p[8] * i2 + p[9] * j2;
-							JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[7] * ij + p[10] * i2 + p[11] * j2;
-						}
-
-						if (II<0.0 || II>(double)(width2 - 1) - (1e-10) || JJ<0.0 || JJ>(double)(height2 - 1) - (1e-10))
-							continue;
-
-						for (kk = 0; kk < nchannels; kk++)
-						{
-							Get_Value_Spline(Img2Para + kk*length2, width2, height2, II, JJ, S + 3 * kk, 0, Interpolation_Algorithm);
-
-							m_F = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
-							m_G = S[3 * kk];
-
-							if (printout)
-								fprintf(fp, "%.2f ", m_G);
-
-							gx = S[3 * kk + 1], gy = S[3 * kk + 2];
-							t_3 = a*m_G + b - m_F;
-
-							t_4 = a, t_5 = t_4*gx, t_6 = t_4*gy;
-							if (DIC_Algo == 4) //irregular
-							{
-								CC[0] = t_5*direction[0] + t_6*direction[1];
-								CC[1] = t_5*iii, CC[2] = t_5*jjj, CC[3] = t_6*iii, CC[4] = t_6*jjj;
-								CC[5] = t_5*ij, CC[6] = t_6*ij;
-								CC[7] = m_G, CC[8] = 1.0;
-							}
-							else if (DIC_Algo == 5) //Quadratic
-							{
-								CC[0] = t_5*direction[0] + t_6*direction[1];
-								CC[1] = t_5*iii, CC[2] = t_5*jjj, CC[3] = t_6*iii, CC[4] = t_6*jjj;
-								CC[5] = t_5*ij, CC[6] = t_6*ij, CC[7] = t_5*i2, CC[8] = t_5*j2, CC[9] = t_6*i2, CC[10] = t_6*j2;
-								CC[11] = m_G, CC[12] = 1.0;
-							}
-							else if (DIC_Algo == 6)  //irregular
-							{
-								CC[0] = t_5, CC[1] = t_6;
-								CC[2] = t_5*iii, CC[3] = t_5*jjj, CC[4] = t_6*iii, CC[5] = t_6*jjj;
-								CC[6] = t_5*ij, CC[7] = t_6*ij;
-								CC[8] = m_G, CC[9] = 1.0;
-							}
-							else if (DIC_Algo == 7)
-							{
-								CC[0] = t_5, CC[1] = t_6;
-								CC[2] = t_5*iii, CC[3] = t_5*jjj, CC[4] = t_6*iii, CC[5] = t_6*jjj;
-								CC[6] = t_5*ij, CC[7] = t_6*ij, CC[8] = t_5*i2, CC[9] = t_5*j2, CC[10] = t_6*i2, CC[11] = t_6*j2;
-								CC[12] = m_G, CC[13] = 1.0;
-							}
-
-							for (j = 0; j < nn; j++)
-							{
-								BB[j] += t_3*CC[j];
-								for (i = j; i < nn; i++)
-									AA[j*nn + i] += CC[i] * CC[j];
-							}
-
-							t_1 += t_3*t_3, t_2 += m_F*m_F;
-						}
-					}
-					if (printout)
-						fprintf(fp, "\n");
-				}
-				if (printout)
-					fclose(fp);
-
-				DIC_Coeff = t_1 / t_2;
-				mat_completeSym(AA, nn);
-				QR_Solution_Double(AA, BB, nn, nn);
-				for (i = 0; i < nn; i++)
-					p[i] -= BB[i];
-
-				if (DIC_Coeff < DIC_Coeff_min)	// If the iteration does not converge, this can be helpful
-				{
-					DIC_Coeff_min = DIC_Coeff;
-					for (i = 0; i < nn; i++)
-						p_best[i] = p[i];
-					if (p[0] != p[0])
-					{
-						if (createMem)
-							delete[]T, delete[]Timg;
-						return 0.0;
-					}
-				}
-
-				if (DIC_Algo <= 1)
-				{
-					if (abs(p[0] * direction[0]) > hsubset || abs(p[1] * direction[0]) > hsubset)
-					{
-						if (createMem)
-							delete[]T, delete[]Timg;
-						return 0.0;
-					}
-					if (fabs(BB[0]) < conv_crit_1)
-					{
-						for (i = 1; i < nn - nExtraParas; i++)
-							if (fabs(BB[i]) > conv_crit_2)
-								break;
-						if (i == nn - nExtraParas)
-							Break_Flag = true;
-					}
-				}
-				else
-				{
-					if (abs(p[0]) > hsubset || abs(p[1]) > hsubset)
-					{
-						if (createMem)
-							delete[]T, delete[]Timg;
-						return 0.0;
-					}
-					if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
-					{
-						for (i = 2; i < nn - nExtraParas; i++)
-							if (fabs(BB[i]) > conv_crit_2)
-								break;
-						if (i == nn - nExtraParas)
-							Break_Flag = true;
-					}
-				}
-				if (Break_Flag)
-					break;
-			}
-			_iter += k;
-			// In case the iteration converges to "wrong" points, always use the data that lead to the least-square value.
-			for (i = 0; i < nn; i++)
-				p[i] = p_best[i];
-		}
-	}
-	/// DIC Iteration: End
-
-	//Now, dont really trust the pssad error too much, compute zncc score instead! They are usually close on convergence, but in case of trouble, zncc is more reliable.
-	if (DIC_Coeff_min < pssdabThresh)
-	{
-		int m = 0;
-		double t_1, t_2, t_3, t_4, t_5, t_f = 0.0, t_g = 0.0;
-		if (printout)
-			fp = fopen("C:/temp/tar.txt", "w+");
-		for (jjj = -hsubset; jjj <= hsubset; jjj++)
-		{
-			for (iii = -hsubset; iii <= hsubset; iii++)
-			{
-				if (DIC_Algo == 0)
-					II = Target.x + iii + p[0] * direction[0], JJ = Target.y + jjj + p[0] * direction[1];
-				else if (DIC_Algo == 1)
-					II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj, JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj;
-				else if (DIC_Algo == 2)
-					II = Target.x + iii + p[0], JJ = Target.y + jjj + p[1];
-				else if (DIC_Algo == 3)
-					II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj, JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
-				else if (DIC_Algo == 4) //irregular
-				{
-					ij = iii*jjj;
-					II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj + p[5] * ij;
-					JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj + p[6] * ij;
-				}
-				else if (DIC_Algo == 5) //Quadratic
-				{
-					ij = iii*jjj, i2 = iii*iii, j2 = jjj*jjj;
-					II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj + p[5] * ij + p[7] * i2 + p[8] * j2;
-					JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj + p[6] * ij + p[9] * i2 + p[10] * j2;
-				}
-				else if (DIC_Algo == 6)
-				{
-					ij = iii*jjj;
-					II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * ij, JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[7] * ij;
-				}
-				else if (DIC_Algo == 7)
-				{
-					ij = iii*jjj, i2 = iii*iii, j2 = jjj*jjj;
-					II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * ij + p[8] * i2 + p[9] * j2;
-					JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[7] * ij + p[10] * i2 + p[11] * j2;
-				}
-
-				if (II<0.0 || II>(double)(width2 - 1) - (1e-10) || JJ<0.0 || JJ>(double)(height2 - 1) - (1e-10))
-					continue;
-
-				for (kk = 0; kk < nchannels; kk++)
-				{
-					Get_Value_Spline(Img2Para + kk*length2, width2, height2, II, JJ, S + 3 * kk, -1, Interpolation_Algorithm);
-					if (printout)
-						fprintf(fp, "%.4f ", S[3 * kk]);
-
-					T[2 * m] = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
-					T[2 * m + 1] = S[3 * kk];
-					t_f += T[2 * m];
-					t_g += T[2 * m + 1];
-					m++;
-				}
-			}
-			if (printout)
-				fprintf(fp, "\n");
-		}
-		if (printout)
-			fclose(fp);
-
-		t_f = t_f / m, t_g = t_g / m;
-		t_1 = 0.0, t_2 = 0.0, t_3 = 0.0;
-		for (i = 0; i < m; i++)
-		{
-			t_4 = T[2 * i] - t_f, t_5 = T[2 * i + 1] - t_g;
-			t_1 += 1.0*t_4*t_5, t_2 += 1.0*t_4*t_4, t_3 += 1.0*t_5*t_5;
-		}
-
-		t_2 = sqrt(t_2*t_3);
-		if (t_2 < 1e-10)
-			t_2 = 1e-10;
-
-		DIC_Coeff_min = t_1 / t_2; //This is the zncc score
-		if (abs(DIC_Coeff_min) > 1.0)
-			DIC_Coeff_min = 0.0;
-	}
-
-	if (createMem)
-	{
-		delete[]Timg;
-		delete[]T;
-	}
-	if (DIC_Coeff_min > 1.0)
-		return 0.0;
-
-	if (DIC_Algo <= 1)
-	{
-		if (DIC_Coeff_min< znccThresh || p[0] != p[0] || abs(p[0] * direction[0]) > hsubset || abs(p[1] * direction[0]) > hsubset)
-			return DIC_Coeff_min;
-	}
-	else
-	{
-		if (DIC_Coeff_min< znccThresh || p[0] != p[0] || p[1] != p[1] || abs(p[0]) > 2.0*hsubset || abs(p[1]) > 2.0*hsubset)
-			return DIC_Coeff_min;
-	}
-
-	if (useInitPara)
-	{
-		if (DIC_Algo == 1 || DIC_Algo == 4 || DIC_Algo == 5)
-			iWp[0] = p[1], iWp[1] = p[2], iWp[2] = p[3], iWp[3] = p[4];
-		else if (DIC_Algo == 3 || DIC_Algo == 6 || DIC_Algo == 7)
-			iWp[0] = p[2], iWp[1] = p[3], iWp[2] = p[4], iWp[3] = p[5];
-	}
-
-	if (DIC_Algo < 2 || (DIC_Algo>3 && DIC_Algo < 6))
-		Target.x += p[0] * direction[0], Target.y += p[0] * direction[1];
-	else
-		Target.x += p[0], Target.y += p[1];
-
-	return DIC_Coeff_min;
-}
-int SparsePointTrackingDriver(char *Path, vector<Point2d> &Tracks, vector<float*> &ImgPara, int viewID, int startF, int stopF, LKParameters LKArg, int &width, int &height, int nchannels)
-{
-	char Fname[200];
-
-	Mat view;
-	char *Img = 0;
-	float *sImg = 0;
-	if (ImgPara.size() < 3)
-	{
-		for (int ii = startF; ii <= startF + 1; ii++)//Load the 1st 2 images
-		{
-			sprintf(Fname, "%s/In/%08d/%08d_00_%02d.png", Path, ii, ii, viewID);
-			Mat view = imread(Fname, nchannels == 1 ? 0 : 1);
-			if (view.data == NULL)
-			{
-				cout << "Cannot load: " << Fname << endl;
-				delete[]Img;
-				return 1;
-			}
-			width = view.cols, height = view.rows;
-			int length = width *height*nchannels;
-			if (Img == NULL)
-				Img = new char[length];
-			if (sImg == NULL)
-				sImg = new float[length];
-			for (int ii = 0; ii < length; ii++)
-				Img[ii] = view.data[ii];
-			Gaussian_smooth(Img, sImg, height, width, 255.0, 1.0);
-
-			float *Para = new float[width*height*nchannels];
-			Generate_Para_Spline(sImg, Para, width, height, LKArg.InterpAlgo);
-			ImgPara.push_back(Para);
-		}
-	}
-
-	//Track:
-	int hsubset = LKArg.hsubset + LKArg.nscales * LKArg.scaleStep, orghsubset = LKArg.hsubset;
-	int TimgS = 2 * hsubset + 1, Tlength = TimgS*TimgS;
-	double *Timg = new double[Tlength*nchannels];
-	double *T = new double[2 * Tlength*nchannels];
-
-	double bestDistance = 100;
-	Point2d bestfPt;
-	for (int st = 0; st < LKArg.nscales; st++)
-	{
-		LKArg.hsubset = orghsubset + st*LKArg.scaleStep;
-
-		//Forward
-		Point2d fPt = Tracks[0];
-		double score1 = SearchLK(Tracks[0], fPt, ImgPara[0], ImgPara[1], nchannels, width, height, width, height, LKArg, Timg, T);
-
-		//Backward
-		Point2d bPt = fPt;
-		double score2 = SearchLK(fPt, bPt, ImgPara[1], ImgPara[0], nchannels, width, height, width, height, LKArg, Timg, T);
-
-		double distance = sqrt(pow(bPt.x - Tracks[0].x, 2) + pow(bPt.y - Tracks[0].y, 2));
-		if (distance < bestDistance && score1>0.0 && score2 > 0.0)
-		{
-			bestfPt = fPt;
-			bestDistance = distance;
-		}
-	}
-
-	if (bestDistance > LKArg.DisplacementThresh)//drifted
-	{
-		delete[]Img, delete[]sImg, delete[]Timg, delete[]T;
-		return 0;
-	}
-	else
-		Tracks.push_back(bestfPt);
-
-	for (int ii = startF + 2; ii <= stopF; ii++)
-	{
-		printf("%d .. ", ii);
-		if (ImgPara.size() < ii - startF + 1)
-		{
-			//sprintf(Fname, "%s/%d.png", Path, ii);
-			sprintf(Fname, "%s/In/%08d/%08d_00_%02d.png", Path, ii, ii, viewID);
-			Mat view = imread(Fname, nchannels == 1 ? 0 : 1);
-			if (view.data == NULL)
-			{
-				cout << "Cannot load: " << Fname << endl;
-				delete[]Img, delete[]Timg, delete[]T;
-				return 1;
-			}
-			width = view.cols, height = view.rows;
-			int length = width *height*nchannels;
-			if (Img == NULL)
-				Img = new char[length];
-			if (sImg == NULL)
-				sImg = new float[length];
-			for (int ii = 0; ii < length; ii++)
-				Img[ii] = view.data[ii];
-			Gaussian_smooth(Img, sImg, height, width, 255.0, 1.0);
-
-			float *Para = new float[width*height*nchannels];
-			Generate_Para_Spline(sImg, Para, width, height, LKArg.InterpAlgo);
-			ImgPara.push_back(Para);
-		}
-
-		//Run tracking
-		bestDistance = 999.0;
-		int currentTimeId = ii - startF - 1;
-		for (int st = 0; st < LKArg.nscales; st++)
-		{
-			LKArg.hsubset = orghsubset + st*LKArg.scaleStep;
-
-			//Forward
-			Point2d fPt = Tracks[currentTimeId];
-			double score1 = SearchLK(Tracks[currentTimeId], fPt, ImgPara[currentTimeId], ImgPara[currentTimeId + 1], nchannels, width, height, width, height, LKArg, Timg, T);
-
-			//Backward
-			Point2d bPt = fPt;
-			double score2 = SearchLK(fPt, bPt, ImgPara[currentTimeId + 1], ImgPara[currentTimeId], nchannels, width, height, width, height, LKArg, Timg, T);
-
-			double distance = sqrt(pow(bPt.x - Tracks[currentTimeId].x, 2) + pow(bPt.y - Tracks[currentTimeId].y, 2));
-			if (distance < bestDistance && score1>0.0 && score2 > 0.0)
-			{
-				bestfPt = fPt;
-				bestDistance = distance;
-			}
-		}
-		if (bestDistance > LKArg.DisplacementThresh)
-		{
-			delete[]Img, delete[]sImg, delete[]Timg, delete[]T;
-			return 0;
-		}
-		else
-			Tracks.push_back(bestfPt);
-	}
-
-	delete[]Img, delete[]sImg, delete[]Timg, delete[]T;
-	return 0;
-}
 //The fisheye camera is parameterized using 12 parameters: 2 for  focal length, 1 for skew, 2 for principal point, 1 for omage, 2 for distortion center, and 6 for rotation translation.
 void FishEyeCorrectionPoint(Point2d *Points, double omega, double DistCtrX, double DistCtrY, int npts)
 {
@@ -2367,7 +1540,7 @@ int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCa
 				camera[ii].distortion[jj] = 0.0;
 
 	for (int ii = 0; ii < nCams; ii++)
-		camera[ii].threshold = 3.0, camera[ii].ninlierThresh = 50;
+		camera[ii].threshold = 2.0, camera[ii].ninlierThresh = 50;
 
 	char Fname[200];
 	vector<Point2i> RawPairWiseMatchID;
@@ -2522,9 +1695,9 @@ int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCa
 	}
 
 	if (timeID < 0)
-		sprintf(Fname, "%s/M_%d_%d.dat", Path, id1, id2);
+		sprintf(Fname, "%s/_M_%d_%d.dat", Path, id1, id2);
 	else
-		sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, id1, id2);
+		sprintf(Fname, "%s/_M%d_%d_%d.dat", Path, timeID, id1, id2);
 	fp = fopen(Fname, "w+");	fprintf(fp, "%d\n", ninliers);
 	for (int ii = 0; ii < Inliers.cols; ii++)
 		if (Inliers.at<bool>(ii))
@@ -2539,7 +1712,7 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 {
 	bool notCalibrated = false;
 	CameraData *camera = new CameraData[nCams];
-	if (distortionCorrected == 0 && ReadIntrinsicResults(Path, camera) != 0 && LensType == FISHEYE)
+	if (ReadIntrinsicResults(Path, camera) != 0 && LensType == FISHEYE)
 		return 1;
 	else
 	{
@@ -2671,7 +1844,7 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 	//USAC config
 	bool USEPROSAC = false, USESPRT = true, USELOSAC = true;
 	ConfigParamsFund cfg;
-	cfg.common.confThreshold = 0.99, cfg.common.minSampleSize = 7, cfg.common.inlierThreshold = 3.0;
+	cfg.common.confThreshold = 0.99, cfg.common.minSampleSize = 7, cfg.common.inlierThreshold = 1.5;
 	cfg.common.maxHypotheses = 850000, cfg.common.maxSolutionsPerSample = 3;
 	cfg.common.prevalidateSample = true, cfg.common.prevalidateModel = true, cfg.common.testDegeneracy = true;
 	cfg.common.randomSamplingMethod = USACConfig::SAMP_UNIFORM, cfg.common.verifMethod = USACConfig::VERIF_SPRT, cfg.common.localOptMethod = USACConfig::LO_LOSAC;
@@ -2704,9 +1877,9 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 	//	printf("Essential matrix fails....%d inliers\n", ninliers);
 
 	if (timeID < 0)
-		sprintf(Fname, "%s/M_%d_%d.dat", Path, id1, id2);
+		sprintf(Fname, "%s/_M_%d_%d.dat", Path, id1, id2);
 	else
-		sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, id1, id2);
+		sprintf(Fname, "%s/_M%d_%d_%d.dat", Path, timeID, id1, id2);
 	fp = fopen(Fname, "w+");
 
 	if (ninliers < ninlierThresh)
@@ -3021,7 +2194,6 @@ int ExtractSiftGPUfromExtractedFrames(char *Path, vector<int> nviews, int startF
 	int numKeys, descriptorSize = SIFTBINS;
 	vector<float > descriptors; descriptors.reserve(MAXSIFTPTS * descriptorSize);
 	vector<SiftGPU::SiftKeypoint> keys; keys.reserve(MAXSIFTPTS);
-	vector<Point3i> Vrgb; Vrgb.reserve(MAXSIFTPTS);
 
 	Mat cvImg, equalizedImg;
 	char Fname[200];
@@ -3040,7 +2212,7 @@ int ExtractSiftGPUfromExtractedFrames(char *Path, vector<int> nviews, int startF
 				cvImg = imread(Fname, 0);
 				equalizeHist(cvImg, equalizedImg);
 
-				sprintf(Fname, "%s/%d/%d.png", Path, viewID, timeID);
+				sprintf(Fname, "%s/%d/_%d.png", Path, viewID, timeID);
 				imwrite(Fname, equalizedImg);
 			}
 
@@ -3050,26 +2222,7 @@ int ExtractSiftGPUfromExtractedFrames(char *Path, vector<int> nviews, int startF
 				keys.resize(numKeys);    descriptors.resize(descriptorSize * numKeys);
 				sift->GetFeatureVector(&keys[0], &descriptors[0]);
 
-				//Getting color info
-				Vrgb.clear();
-				if (timeID < 0)
-					sprintf(Fname, "%s/%d.png", Path, ii);
-				else
-					sprintf(Fname, "%s/%d/%d.png", Path, ii, timeID);
-				cvImg = imread(Fname, IMREAD_COLOR);
-				for (int kk = 0; kk < numKeys; kk++)
-				{
-					int x = (int)keys.at(kk).x, y = (int)keys.at(kk).y;
-					int id = x + y*cvImg.cols;
-					Point3i rgb;
-					rgb.z = cvImg.data[3 * id + 0];//b
-					rgb.y = cvImg.data[3 * id + 1];//g
-					rgb.x = cvImg.data[3 * id + 2];//r
-					Vrgb.push_back(rgb);
-				}
-
 				sprintf(Fname, "%s/%d/K%d.dat", Path, viewID, timeID); WriteKPointsBinarySIFTGPU(Fname, keys);
-				sprintf(Fname, "%s/RGB%d.dat", Path, timeID); WriteRGBBinarySIFTGPU(Fname, Vrgb);
 				sprintf(Fname, "%s/%d/D%d.dat", Path, viewID, timeID); WriteDescriptorBinarySIFTGPU(Fname, descriptors);
 				printf("View (%d, %d): %d points ... Wrote to files. Take %.2fs\n", viewID, timeID, numKeys, omp_get_wtime() - start);
 			}
@@ -3082,163 +2235,6 @@ int ExtractSiftGPUfromExtractedFrames(char *Path, vector<int> nviews, int startF
 	return 0;
 }
 
-//Use GPU for brute force Sift matching
-int SiftGPUPair(char *Path, char *Fname1, char *Fname2, float nndrRatio, int timeID, double density, bool flipCoordinate)
-{
-	// Allocation size to the largest width and largest height 1920x1080
-	// Maximum working dimension. All the SIFT octaves that needs a larger texture size will be skipped. maxd = 2560 <-> 768MB of graphic memory. 
-	char * argv[] = { "-fo", "-1", "-v", "0", "-p", "1920x1080", "-maxd", "3200" };
-	//-fo -1    staring from -1 octave 
-	//-v 1      only print out # feature and overall time
-	//-loweo    add a (.5, .5) offset
-	//-tc <num> set a soft limit to number of detected features
-	//-m,       up to 2 orientations for each feature (change to single orientation by using -m 1)
-	//-s        enable subpixel subscale (disable by using -s 0)
-	//"-cuda", "[device_id]"  : cuda implementation (fastest for smaller images). CUDA-implementation allows you to create multiple instances for multiple threads. Checkout src\TestWin\MultiThreadSIFT
-	// "-Display", "display_name" (for OPENGL) to select monitor/GPU (XLIB/GLUT) on windows the display name would be something like \\.\DISPLAY4
-	//Only the following parameters can be changed after initialization (by calling ParseParam):-dw, -ofix, -ofix-not, -fo, -unn, -maxd, -b
-	//to change other parameters at runtime, you need to first unload the dynamically loaded libaray reload the libarary, then create a new siftgpu instance
-
-	//Init SiftGPU: START
-#ifdef _WIN32
-#ifdef _DEBUG
-	HMODULE  hsiftgpu = LoadLibrary("siftgpu_d.dll");
-#else
-	HMODULE  hsiftgpu = LoadLibrary("siftgpu.dll");
-#endif
-#else
-	void * hsiftgpu = dlopen("libsiftgpu.so", RTLD_LAZY);
-#endif
-
-	if (hsiftgpu == NULL)
-		return 0;
-
-	SiftGPU* (*pCreateNewSiftGPU)(int) = NULL;
-	SiftMatchGPU* (*pCreateNewSiftMatchGPU)(int) = NULL;
-	pCreateNewSiftGPU = (SiftGPU* (*) (int)) GET_MYPROC(hsiftgpu, "CreateNewSiftGPU");
-	pCreateNewSiftMatchGPU = (SiftMatchGPU* (*)(int)) GET_MYPROC(hsiftgpu, "CreateNewSiftMatchGPU");
-	SiftGPU* sift = pCreateNewSiftGPU(1);
-
-	int argc = sizeof(argv) / sizeof(char*);
-	sift->ParseParam(argc, argv);
-	if (sift->CreateContextGL() != SiftGPU::SIFTGPU_FULL_SUPPORTED)
-		return 0;
-	//Init SiftGPU: END
-
-	//SIFT DECTION: START
-	int descriptorSize = SIFTBINS;
-	vector<float > descriptors1(1), descriptors2(1);
-	vector<SiftGPU::SiftKeypoint> keys1(1), keys2(1);
-
-	int pts1, pts2;
-	char Fname[200];
-	double start = omp_get_wtime();
-	if (sift->RunSIFT(Fname1)) //You can have at most one OpenGL-based SiftGPU (per process)--> no omp can be used
-	{
-		pts1 = sift->GetFeatureNum();
-		keys1.resize(pts1);    descriptors1.resize(descriptorSize * pts1);
-		sift->GetFeatureVector(&keys1[0], &descriptors1[0]);
-		WriteKPointsSIFTGPU("C:/temp/x.txt", keys1, true);
-
-		printf("View 1:  %d points. Take %.2fs\n", pts1, omp_get_wtime() - start);
-	}
-	else
-		printf("Cannot load %s", Fname1);
-
-	start = omp_get_wtime();
-	if (sift->RunSIFT(Fname2)) //You can have at most one OpenGL-based SiftGPU (per process)--> no omp can be used
-	{
-		pts2 = sift->GetFeatureNum();
-		keys2.resize(pts2);    descriptors2.resize(descriptorSize * pts2);
-		sift->GetFeatureVector(&keys2[0], &descriptors2[0]);
-
-		printf("View 2: %d points. Take %.2fs\n", pts2, omp_get_wtime() - start);
-	}
-	else
-		printf("Cannot load %s", Fname2);
-	//SIFT DECTION: ENDS
-
-	///SIFT MATCHING: START
-	SiftMatchGPU* matcher = pCreateNewSiftMatchGPU(8192);
-	matcher->VerifyContextGL(); //must call once
-	int(*match_buf)[2] = new int[MAXSIFTPTS][2];
-	vector<Point2i> RawPairWiseMatchID;	RawPairWiseMatchID.reserve(10000);
-
-	start = omp_get_wtime();
-	//Finding nearest neighbor. call matcher->SetMaxSift() to change the limit before calling setdescriptor if you want change maxMatch
-	matcher->SetDescriptors(0, pts1, &descriptors1[0]); //image 1
-	matcher->SetDescriptors(1, pts2, &descriptors2[0]); //image 2
-
-	//enumerate all the feature matches
-	int num_match = matcher->GetSiftMatch(pts1, match_buf, 0.7f, nndrRatio);
-	sprintf(Fname, "%s/C1P1_%05d.txt", Path, timeID);	FILE *fp1 = fopen(Fname, "w+");
-	sprintf(Fname, "%s/P1C1_%05d.txt", Path, timeID);	FILE *fp2 = fopen(Fname, "w+");
-	for (int i = 0; i < num_match; ++i)
-	{
-		//How to get the feature matches: 
-		SiftGPU::SiftKeypoint & key1 = keys1[match_buf[i][0]];
-		SiftGPU::SiftKeypoint & key2 = keys2[match_buf[i][1]];
-		if (flipCoordinate)
-		{
-			fprintf(fp1, "%.2f %.2f\n", key1.x, 500.0 - key1.y);
-			fprintf(fp2, "%.2f %.2f\n", key2.x, 600.0 - key2.y);
-		}
-		else
-		{
-			fprintf(fp1, "%.2f %.2f\n", key1.x, key1.y);
-			fprintf(fp2, "%.2f %.2f\n", key2.x, key2.y);
-		}
-		//key1 in the first image matches with key2 in the second image
-	}
-	fclose(fp1), fclose(fp2);
-	///SIFT MATCHING: ENDS
-
-	return 0;
-	int nchannels = 3;
-	IplImage *Img1 = cvLoadImage(Fname1, nchannels == 3 ? 1 : 0);
-	if (Img1->imageData == NULL)
-	{
-		printf("Cannot load %s\n", Fname);
-		return 1;
-	}
-	IplImage *Img2 = cvLoadImage(Fname2, nchannels == 3 ? 1 : 0);
-	if (Img2->imageData == NULL)
-	{
-		printf("Cannot load %s\n", Fname);
-		return 1;
-	}
-
-	IplImage* correspond = cvCreateImage(cvSize(Img1->width + Img2->width, Img1->height), 8, nchannels);
-	cvSetImageROI(correspond, cvRect(0, 0, Img1->width, Img1->height));
-	cvCopy(Img1, correspond);
-	cvSetImageROI(correspond, cvRect(Img1->width, 0, correspond->width, correspond->height));
-	cvCopy(Img2, correspond);
-	cvResetImageROI(correspond);
-
-	vector<int>CorresID;
-	vector<Point2d> keypoints1, keypoints2;
-	CorresID.reserve(2 * num_match);
-	keypoints1.reserve(num_match);
-	keypoints2.reserve(num_match);
-	for (int i = 0; i < num_match; ++i)
-	{
-		CorresID.push_back(i), CorresID.push_back(i);
-		SiftGPU::SiftKeypoint & key1 = keys1[match_buf[i][0]];
-		SiftGPU::SiftKeypoint & key2 = keys2[match_buf[i][1]];
-		keypoints1.push_back(Point2d(key1.x, key1.y));
-		keypoints2.push_back(Point2d(key2.x, key2.y));
-	}
-
-	DisplayImageCorrespondence(correspond, Img1->width, 0, keypoints1, keypoints2, CorresID, density);
-	cvReleaseImage(&correspond);
-	cvReleaseImage(&Img1), cvReleaseImage(&Img2);
-	delete[] match_buf;
-	delete sift;
-	delete matcher;
-	FREE_MYLIB(hsiftgpu);
-
-	return 0;
-}
 //Use GPU for brute force Sift matching
 int GeneratePointsCorrespondenceMatrix_SiftGPU1(char *Path, int nviews, int timeID, float nndrRatio, int distortionCorrected, int OulierRemoveTestMethod, int cameraToScan)
 {
@@ -3481,7 +2477,6 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 	Mat cvImg, equalizedImg;
 	vector<Point3i> Vrgb; Vrgb.reserve(30000);
 
-	bool HanFormat = false;
 	double start;
 	for (int ii = 0; ii < nviews; ii++)
 	{
@@ -3506,17 +2501,6 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 			sprintf(Fname, "%s/%d.png", Path, ii);
 		else
 			sprintf(Fname, "%s/%d/%d.png", Path, ii, timeID);
-
-		//Check if image is available
-		ifstream testFin(Fname);
-		if (testFin.is_open())
-			testFin.close();
-		else
-		{
-			HanFormat = true;
-			sprintf(Fname, "%s/In/%08d/%08d_00_%02d.png", Path, timeID, timeID, ii);//Han's format
-		}
-
 		if (HistogramEqual == 1)
 		{
 			cvImg = imread(Fname, 0);
@@ -3541,10 +2525,7 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 			if (timeID < 0)
 				sprintf(Fname, "%s/%d.png", Path, ii);
 			else
-				if (!HanFormat)
-					sprintf(Fname, "%s/%d/%d.png", Path, ii, timeID);
-				else
-					sprintf(Fname, "%s/In/%08d/%08d_00_%02d.png", Path, timeID, timeID, ii);//Han's format
+				sprintf(Fname, "%s/%d/%d.png", Path, ii, timeID);
 			cvImg = imread(Fname, IMREAD_COLOR);
 			for (int kk = 0; kk < numKeys; kk++)
 			{
@@ -3565,7 +2546,6 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 			}
 			else
 			{
-				sprintf(Fname, "%s/%d", Path, ii); mkdir(Fname);
 				sprintf(Fname, "%s/%d/K%d.dat", Path, ii, timeID); WriteKPointsBinarySIFTGPU(Fname, keys);
 				sprintf(Fname, "%s/%d/RGB%d.dat", Path, ii, timeID); WriteRGBBinarySIFTGPU(Fname, Vrgb);
 				sprintf(Fname, "%s/%d/D%d.dat", Path, ii, timeID); WriteDescriptorBinarySIFTGPU(Fname, descriptors);
@@ -3783,9 +2763,9 @@ void GenerateMatchingTable(char *Path, int nviews, int timeID)
 			}
 			filesCount++;
 			if (timeID < 0)
-				sprintf(Fname, "%s/M_%d_%d.dat", Path, jj, ii);
+				sprintf(Fname, "%s/_M_%d_%d.dat", Path, jj, ii);
 			else
-				sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, jj, ii);
+				sprintf(Fname, "%s/_M%d_%d_%d.dat", Path, timeID, jj, ii);
 
 			int count = ii - jj - 1;
 			for (int i = 0; i <= jj - 1; i++)
@@ -4906,10 +3886,10 @@ bool SelectRefCam_InitPatchFixedScale(Point3d *expansionVec, double &scale3D, Po
 {
 	//reference frame
 	double bestScale = -1;
-	int bestVisibleIdx = -1;
+	double bestVisibleIdx = -1;
 
 	//Find the one which has the largest SIFT scale. 
-	for (unsigned int i = 0; i < pts.size(); ++i)
+	for (unsigned int i = 0; i < AllViewsInfo.size(); ++i)
 	{
 		double scale = pts[i].size;		//This is the diameter!!! 
 		double patchHalfSize = scale / 2.0;
@@ -5811,7 +4791,7 @@ void IncrementalBundleAdjustment(char *Path, int nviews, int timeID, int maxKeyp
 
 	return;
 }
-int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < vector<int>> viewIdAll3D, vector<vector<Point2d>> uvAll3D, int nviews, bool sharedIntrinsics, bool fixIntrinsic, bool fixDistortion, int distortionCorrected, bool debug)
+int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < vector<int>> viewIdAll3D, vector<vector<Point2d>> uvAll3D, int nviews, bool fixIntrinsic, bool fixDistortion, int distortionCorrected, bool debug)
 {
 	char Fname[200]; FILE *fp = 0;
 	int ii, viewID, npts = Vxyz.size();
@@ -5828,43 +4808,29 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 		sprintf(Fname, "C:/temp/reprojectionB.txt"), fp = fopen(Fname, "w+");
 
 	bool *discard3Dpoint = new bool[npts];
-	vector<bool> *Good = new vector<bool>[npts];
+	vector<bool> *notGood = new vector<bool>[npts];
 	for (int jj = 0; jj < npts; jj++)
-		discard3Dpoint[jj] = false, Good[ii].reserve(viewIdAll3D[ii].size());
+		discard3Dpoint[jj] = false, notGood[ii].reserve(viewIdAll3D[ii].size());
 
-	int nBadCounts = 0, goodCount = 0;
+	int nBadCounts = 0;
 	vector<double> ReProjectionErrorX; ReProjectionErrorX.reserve(npts);
 	vector<double> ReProjectionErrorY; ReProjectionErrorY.reserve(npts);
 	double maxOutlierX = 0.0, maxOutlierY = 0.0;
-
-	int refCam = -1;
 	for (int jj = 0; jj < npts; jj++)
 	{
 		for (ii = 0; ii < viewIdAll3D[jj].size(); ii++)
 		{
 			viewID = viewIdAll3D[jj].at(ii);
-			if (refCam != -1)
-			{
-				if (distortionCorrected == 1)
-					IdealReprojectionDebug(camera[refCam].intrinsic, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
-					PinholeReprojectionDebug(camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-				else
-					FOVReprojectionDebug(camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-			}
+			if (distortionCorrected == 1)
+				IdealReprojectionDebug(camera[viewID].intrinsic, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
+			else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
+				PinholeReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
 			else
-			{
-				if (distortionCorrected == 1)
-					IdealReprojectionDebug(camera[viewID].intrinsic, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
-					PinholeReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-				else
-					FOVReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-			}
+				FOVReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
 
 			if (abs(residuals[0]) > 1.5*camera[0].threshold || abs(residuals[1]) > 1.5*camera[0].threshold)
 			{
-				Good[jj].push_back(false);
+				notGood[jj].push_back(false);
 				//printf("\n@P %d (%.3f %.3f %.3f):  %.2f %.2f", jj, xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2], residuals[0], residuals[1]);
 				if (abs(residuals[0]) > maxOutlierX)
 					maxOutlierX = residuals[0];
@@ -5873,20 +4839,13 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 				nBadCounts++;
 			}
 			else
-			{
-				Good[jj].push_back(true);
-				if (sharedIntrinsics && refCam == -1)
-				{
-					refCam = viewID;
-					printf("\nSet master camera to %d:\n", refCam);
-				}
-			}
+				notGood[jj].push_back(true);
 		}
 
 		//Discard point 
 		int count = 0;
 		for (ii = 0; ii < viewIdAll3D[jj].size(); ii++)
-			if (Good[jj].at(ii) == true)
+			if (notGood[jj].at(ii) == true)
 				count++;
 
 		discard3Dpoint[jj] = false;
@@ -5902,76 +4861,38 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 		double pointErrX = 0.0, pointErrY = 0.0;
 		for (ii = 0; ii < viewIdAll3D[jj].size(); ii++)
 		{
-			if (!Good[jj].at(ii))
+			if (!notGood[jj].at(ii))
 				continue;
 
 			viewID = viewIdAll3D[jj].at(ii);
-			if (refCam != -1)
+			if (distortionCorrected == 1)
 			{
-				if (distortionCorrected == 1)
-				{
-					ceres::CostFunction* cost_function = IdealReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
-					problem.AddResidualBlock(cost_function, NULL, camera[refCam].intrinsic, camera[viewID].rt, &xyz[3 * jj]);
-				}
-				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
-				{
-					ceres::CostFunction* cost_function = PinholeReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
-					problem.AddResidualBlock(cost_function, NULL, camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, &xyz[3 * jj]);
-				}
-				else
-				{
-					ceres::CostFunction* cost_function = FOVReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
-					problem.AddResidualBlock(cost_function, NULL, camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, &xyz[3 * jj]);
-				}
+				ceres::CostFunction* cost_function = IdealReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
+				problem.AddResidualBlock(cost_function, NULL, camera[viewID].intrinsic, camera[viewID].rt, &xyz[3 * jj]);
+			}
+			else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
+			{
+				ceres::CostFunction* cost_function = PinholeReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
+				problem.AddResidualBlock(cost_function, NULL, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
 			}
 			else
 			{
-				if (distortionCorrected == 1)
-				{
-					ceres::CostFunction* cost_function = IdealReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
-					problem.AddResidualBlock(cost_function, NULL, camera[viewID].intrinsic, camera[viewID].rt, &xyz[3 * jj]);
-				}
-				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
-				{
-					ceres::CostFunction* cost_function = PinholeReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
-					problem.AddResidualBlock(cost_function, NULL, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
-				}
-				else
-				{
-					ceres::CostFunction* cost_function = FOVReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
-					problem.AddResidualBlock(cost_function, NULL, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
-				}
+				ceres::CostFunction* cost_function = FOVReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
+				problem.AddResidualBlock(cost_function, NULL, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
 			}
 
 			//Set up constant parameters:-->move to here in case some views don't have any 3D points
-			if (refCam != -1)
-			{
-				if (fixIntrinsic)
-					problem.SetParameterBlockConstant(camera[refCam].intrinsic);
-				if (distortionCorrected == 0 && fixDistortion)
-					problem.SetParameterBlockConstant(camera[refCam].distortion);
+			if (fixIntrinsic)
+				problem.SetParameterBlockConstant(camera[viewID].intrinsic);
+			if (distortionCorrected == 0 && fixDistortion)
+				problem.SetParameterBlockConstant(camera[viewID].distortion);
 
-				if (distortionCorrected == 1)
-					IdealReprojectionDebug(camera[refCam].intrinsic, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
-					PinholeReprojectionDebug(camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-				else
-					FOVReprojectionDebug(camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-			}
+			if (distortionCorrected == 1)
+				IdealReprojectionDebug(camera[viewID].intrinsic, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
+			else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
+				PinholeReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
 			else
-			{
-				if (fixIntrinsic)
-					problem.SetParameterBlockConstant(camera[viewID].intrinsic);
-				if (distortionCorrected == 0 && fixDistortion)
-					problem.SetParameterBlockConstant(camera[viewID].distortion);
-
-				if (distortionCorrected == 1)
-					IdealReprojectionDebug(camera[viewID].intrinsic, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
-					PinholeReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-				else
-					FOVReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-			}
+				FOVReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
 
 			validViewcount++;
 			pointErrX += pow(residuals[0], 2), pointErrY += pow(residuals[1], 2);
@@ -5988,7 +4909,6 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 		}
 		if (validViewcount > 0)
 		{
-			goodCount++;
 			ReProjectionErrorX.push_back(sqrt(pointErrX / validViewcount));
 			ReProjectionErrorY.push_back(sqrt(pointErrY / validViewcount));
 		}
@@ -5999,22 +4919,21 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 	if (debug)
 		fclose(fp);
 
-	sprintf(Fname, "%s/Good.txt", Path);
+	sprintf(Fname, "%s/notGood.txt", Path);
 	fp = fopen(Fname, "w+");
 	for (int jj = 0; jj < npts; jj++)
 	{
 		fprintf(fp, "%d ", jj);
-		for (int ii = 0; ii < Good[jj].size(); ii++)
+		for (int ii = 0; ii < notGood[jj].size(); ii++)
 		{
-			if (Good[jj].at(ii) == false)
+			if (notGood[jj].at(ii) == false)
 				fprintf(fp, "%d ", ii);
 		}
 		fprintf(fp, "-1\n");
 	}
 	fclose(fp);
 
-	printf("%d good points\n", goodCount);
-	printf("\n %d bad points with maximum reprojection error of (%.2f %.2f) \n", nBadCounts, maxOutlierX, maxOutlierY);
+	printf("\n %d bad points detected with maximum reprojection error of (%.2f %.2f) \n", nBadCounts, maxOutlierX, maxOutlierY);
 
 	double miniX = *min_element(ReProjectionErrorX.begin(), ReProjectionErrorX.end());
 	double maxiX = *max_element(ReProjectionErrorX.begin(), ReProjectionErrorX.end());
@@ -6041,10 +4960,6 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 	std::cout << summary.FullReport() << "\n";
 
 	//Store refined parameters
-	if (refCam != -1)
-		for (int ii = 0; ii < nviews; ii++)
-			CopyCamereInfo(camera[refCam], camera[ii], false);
-
 	GetKFromIntrinsic(camera, nviews);
 	GetRTFromrt(camera, nviews);
 	for (int ii = 0; ii < nviews; ii++)
@@ -6064,7 +4979,7 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 			double pointErrX = 0.0, pointErrY = 0.0;
 			for (int ii = 0; ii < viewIdAll3D[jj].size(); ii++)
 			{
-				if (!Good[jj].at(ii))
+				if (!notGood[jj].at(ii))
 					continue;
 
 				viewID = viewIdAll3D[jj].at(ii);
@@ -6106,7 +5021,7 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 	printf("Reprojection error after BA \n Min: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
 
 	delete[]xyz, delete[]discard3Dpoint;
-	delete[]Good;
+	delete[]notGood;
 	return 0;
 }
 int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int NDplus)
@@ -6167,7 +5082,7 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int NDplu
 	printf("...Done\n");
 
 	//for (int ii = 0; ii < nviews; ii++)
-	//LensCorrectionDriver(Path, corpusData.camera[ii].K, corpusData.camera[ii].distortion, corpusData.camera[ii].LensModel, ii, ii, 1.0, 1.0, 1);
+		//LensCorrectionDriver(Path, corpusData.camera[ii].K, corpusData.camera[ii].distortion, corpusData.camera[ii].LensModel, ii, ii, 1.0, 1.0, 1);
 	//return 0;
 
 	sprintf(Fname, "%s/ViewPM.txt", Path); FILE *fp = fopen(Fname, "r");
@@ -6353,15 +5268,12 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int NDplu
 	printf("Found %d (%d+) points.\n", goodNDplus, NDplus);
 
 	printf("Runing BA on the triangulated points...");
-	AllViewsBA(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, nviews, false, false, false, distortionCorrected, true);
-
-	//sprintf(Fname, "%s/BA_Camera_AllParams_after2.txt", Path);
-	//ReSaveBundleAdjustedNVMResults(Fname, corpusData, 1.0);
+	AllViewsBA(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, nviews, true, true, distortionCorrected, true);
 	/*//Corpus intrinisc is not useful anymore
 	if (CameraToScan != -1)
-	SaveIntrinsicResults(Path, corpusData.camera, 1);
+		SaveIntrinsicResults(Path, corpusData.camera, 1);
 	else
-	SaveIntrinsicResults(Path, corpusData.camera, nviews);*/
+		SaveIntrinsicResults(Path, corpusData.camera, nviews);*/
 	printf("...Done!\n");
 
 	printf("Remove not good points ...");
@@ -6481,19 +5393,18 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int NDplu
 	delete[]A, delete[]B, delete[]tPs, delete[]passed, delete[]Ps, delete[]match2Dpts;
 	return 0;
 }
-int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime, int timeStep, int LensType, int distortionCorrected, int NDplus, double Reprojectionthreshold, bool Gen3DPatchFile, double Patch_World_Unit)
+int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime, int LensType, int distortionCorrected, double Reprojectionthreshold, bool Gen3DPatchFile, double Patch_World_Unit)
 {
-	int nFrames = MaxnFrame + 1;
-	if (nFrames < stopTime + 1)
-		nFrames = stopTime + 1;
-
+	int nFrames = stopTime - startTime + 1;
 	char Fname[200];
 	VideoData AllVideoInfo;
 	if (ReadVideoData(Path, AllVideoInfo, nviews, startTime, stopTime) == 1)
 		return 1;
 
+	//startTime = 0, stopTime = 0;
+
 	int totalPts, MAXPTS = 0;
-	for (int timeID = startTime; timeID <= stopTime; timeID += timeStep)
+	for (int timeID = startTime; timeID <= stopTime; timeID++)
 	{
 		sprintf(Fname, "%s/ViewPM_%d.txt", Path, timeID); FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
@@ -6529,10 +5440,8 @@ int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime,
 	Point2d *match2Dpts = new Point2d[nviews * 2];
 	Point3i *matchRGB = new Point3i[nviews * 2];
 
-
-	for (int timeID = startTime; timeID <= stopTime; timeID += timeStep)
+	for (int timeID = startTime; timeID <= stopTime; timeID++)
 	{
-		printf("Working on time %d ...\n", timeID);
 		cumulativePts.clear(); AllXYZ.clear(), AllRGB.clear();
 		if (ReadCumulativePoints(Path, nviews, timeID, cumulativePts) == 1)
 			continue;
@@ -6604,7 +5513,7 @@ int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime,
 		}
 
 		double ProThresh = 0.99, PercentInlier = 0.25;
-		int goodNDplus = 0, iterMax = (int)(log(1.0 - ProThresh) / log(1.0 - pow(PercentInlier, 2)) + 0.5); //log(1-eps) / log(1 - (inlier%)^min_pts_requires)
+		int NDplus = 2, goodNDplus = 0, iterMax = (int)(log(1.0 - ProThresh) / log(1.0 - pow(PercentInlier, 2)) + 0.5); //log(1-eps) / log(1 - (inlier%)^min_pts_requires)
 		bool printout = 0;
 		double start = omp_get_wtime();
 		for (int jj = 0; jj < n3D; jj++)
@@ -6672,27 +5581,6 @@ int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime,
 					{
 						fprintf(fp1, "%.4f %.4f %.4f %d %d %d\n", xyz.x, xyz.y, xyz.z, matchRGB[inlierID].x, matchRGB[inlierID].y, matchRGB[inlierID].z);
 
-						/*FILE *fp2 = fopen("C:/temp/x.txt", "r");
-						if (fp2 == NULL)
-						return 0;
-						inlierPts.clear(); inlierViewsInfo.clear();
-						inlierViewsInfo.push_back(AllVideoInfo.VideoInfo[0*nFrames + timeID]);
-						inlierViewsInfo.push_back(AllVideoInfo.VideoInfo[1 * nFrames + timeID]);
-						inlierViewsInfo.push_back(AllVideoInfo.VideoInfo[4 * nFrames + timeID]);
-						inlierViewsInfo.push_back(AllVideoInfo.VideoInfo[5 * nFrames + timeID]);
-						inlierViewsInfo.push_back(AllVideoInfo.VideoInfo[7 * nFrames + timeID]);
-						inlierViewsInfo.push_back(AllVideoInfo.VideoInfo[9 * nFrames + timeID]);
-						for (int ii = 0; ii < 6; ii++)
-						{
-						KeyPoint xy;
-						float x, y, o, s, t;
-						fscanf(fp2, "%f %f %f %f ", &xy.pt.x, &xy.pt.y, &xy.angle, &xy.size);
-						xy.angle = xy.angle / 180 * Pi;
-						inlierPts.push_back(xy);
-						for (int jj = 0; jj < 12; jj++)
-						fscanf(fp2, "%f ", &t);
-						}
-						fclose(fp2);*/
 						if (Gen3DPatchFile)
 						{
 							SelectRefCam_InitPatchFixedScale(PatchExpansionArrow, scale3D, xyz, inlierPts, inlierViewsInfo, Patch_World_Unit);
@@ -7004,7 +5892,7 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 	//Match extracted features with Corpus
 	const bool useBFMatcher = false;
 	const int knn = 2, ntrees = 4, maxLeafCheck = 128;
-	bool ShowCorrespondence = 0;
+	bool ShowCorrespondence = 1;
 
 	vector<Point2f> twoD; twoD.reserve(5000);
 	vector<int> threeDiD; threeDiD.reserve(5000);
@@ -7328,16 +6216,17 @@ int EstimateCameraPoseFromCorpus(char *Path, Corpus corpusData, CameraData  &cam
 }
 int OptimizeCameraPoseVideoData(char *Path, int startTime, int stopTime, int nviews, int selectedCams, int distortionCorrected, int LensType, Corpus corpusData, double threshold, bool debug)
 {
+	const int MaxFrames = 2000;
 	VideoData AllVideoInfo;
 	if (ReadVideoData(Path, AllVideoInfo, nviews, startTime, stopTime) == 1)
 		return 1;
 
 	char Fname[200];
-	int nVideoFrames = max(MaxnFrame, stopTime);
-	int nframes, frameID, videoID = nVideoFrames*selectedCams;
+	int nframes, frameID, videoID = (stopTime - startTime + 1)*selectedCams;
 	Point2d uv;
 	vector<int> *All3DviewIDper3D = new vector<int>[corpusData.n3dPoints];
 	vector<Point2d> *Alluvper3D = new vector<Point2d>[corpusData.n3dPoints];
+
 
 	double *xyz = new double[corpusData.n3dPoints * 3];
 	for (int ii = 0; ii < corpusData.n3dPoints; ii++)
@@ -7357,7 +6246,6 @@ int OptimizeCameraPoseVideoData(char *Path, int startTime, int stopTime, int nvi
 
 	sprintf(Fname, "%s/%d/Inliers_3D2D.txt", Path, selectedCams);
 	FILE *fp = fopen(Fname, "r");
-	int RefCamId = -1; bool setReferenceflag = false;
 	for (int kk = 0; kk < corpusData.n3dPoints; kk++)
 	{
 		fscanf(fp, "%d ", &nframes);
@@ -7368,15 +6256,12 @@ int OptimizeCameraPoseVideoData(char *Path, int startTime, int stopTime, int nvi
 			All3DviewIDper3D[kk].push_back(frameID);
 			Alluvper3D[kk].push_back(uv);
 
-			if (!setReferenceflag)
-				RefCamId = frameID;
-
 			if (distortionCorrected)
-				IdealReprojectionDebug(AllVideoInfo.VideoInfo[RefCamId + videoID].intrinsic, AllVideoInfo.VideoInfo[frameID + videoID].rt, uv, Point3d(xyz[3 * kk], xyz[3 * kk + 1], xyz[3 * kk + 2]), residuals);
+				IdealReprojectionDebug(AllVideoInfo.VideoInfo[frameID + videoID].intrinsic, AllVideoInfo.VideoInfo[frameID + videoID].rt, uv, Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
 			else if (AllVideoInfo.VideoInfo[frameID + videoID].LensModel == RADIAL_TANGENTIAL_PRISM)
-				PinholeReprojectionDebug(AllVideoInfo.VideoInfo[RefCamId + videoID].intrinsic, AllVideoInfo.VideoInfo[RefCamId + videoID].distortion, AllVideoInfo.VideoInfo[frameID + videoID].rt, uv, Point3d(xyz[3 * kk], xyz[3 * kk + 1], xyz[3 * kk + 2]), residuals);
+				PinholeReprojectionDebug(AllVideoInfo.VideoInfo[frameID + videoID].intrinsic, AllVideoInfo.VideoInfo[frameID + videoID].distortion, AllVideoInfo.VideoInfo[frameID + videoID].rt, uv, Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
 			else
-				FOVReprojectionDebug(AllVideoInfo.VideoInfo[RefCamId + videoID].intrinsic, AllVideoInfo.VideoInfo[RefCamId + videoID].distortion, AllVideoInfo.VideoInfo[frameID + videoID].rt, uv, Point3d(xyz[3 * kk], xyz[3 * kk + 1], xyz[3 * kk + 2]), residuals);
+				FOVReprojectionDebug(AllVideoInfo.VideoInfo[frameID + videoID].intrinsic, AllVideoInfo.VideoInfo[frameID + videoID].distortion, AllVideoInfo.VideoInfo[frameID + videoID].rt, uv, Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
 
 			if (abs(residuals[0]) > 1.25*threshold || abs(residuals[1]) > 1.25*threshold)
 			{
@@ -7390,26 +6275,21 @@ int OptimizeCameraPoseVideoData(char *Path, int startTime, int stopTime, int nvi
 			else
 			{
 				Good.push_back(true);
-				if (!setReferenceflag)
-					RefCamId = frameID, setReferenceflag = true;
-
 				if (distortionCorrected == 1)
 				{
 					ceres::CostFunction* cost_function = IdealReprojectionError::Create(uv.x, uv.y);
-					problem.AddResidualBlock(cost_function, NULL, AllVideoInfo.VideoInfo[RefCamId + videoID].intrinsic, AllVideoInfo.VideoInfo[frameID + videoID].rt, &xyz[3 * kk]);
+					problem.AddResidualBlock(cost_function, NULL, AllVideoInfo.VideoInfo[frameID + videoID].intrinsic, AllVideoInfo.VideoInfo[frameID + videoID].rt, &xyz[3 * jj]);
 				}
-				else if (AllVideoInfo.VideoInfo[RefCamId + videoID].LensModel == RADIAL_TANGENTIAL_PRISM)
+				else if (AllVideoInfo.VideoInfo[frameID + videoID].LensModel == RADIAL_TANGENTIAL_PRISM)
 				{
 					ceres::CostFunction* cost_function = PinholeReprojectionError2::Create(uv.x, uv.y);
-					problem.AddResidualBlock(cost_function, NULL, AllVideoInfo.VideoInfo[RefCamId + videoID].intrinsic, &AllVideoInfo.VideoInfo[RefCamId + videoID].intrinsic[2], AllVideoInfo.VideoInfo[RefCamId + videoID].intrinsic + 3,
-						AllVideoInfo.VideoInfo[RefCamId + videoID].distortion, AllVideoInfo.VideoInfo[RefCamId + videoID].distortion + 3, &AllVideoInfo.VideoInfo[RefCamId + videoID].distortion[2], AllVideoInfo.VideoInfo[RefCamId + videoID].distortion + 5,
-						AllVideoInfo.VideoInfo[frameID + videoID].rt, &xyz[3 * kk]);
+					problem.AddResidualBlock(cost_function, NULL, AllVideoInfo.VideoInfo[frameID + videoID].intrinsic, &AllVideoInfo.VideoInfo[frameID + videoID].intrinsic[2], AllVideoInfo.VideoInfo[frameID + videoID].intrinsic + 3,
+						AllVideoInfo.VideoInfo[frameID + videoID].distortion, AllVideoInfo.VideoInfo[frameID + videoID].distortion + 3, &AllVideoInfo.VideoInfo[frameID + videoID].distortion[2], AllVideoInfo.VideoInfo[frameID + videoID].distortion + 5, AllVideoInfo.VideoInfo[frameID + videoID].rt, &xyz[3 * jj]);
 				}
 				else
 				{
 					ceres::CostFunction* cost_function = FOVReprojectionError2::Create(uv.x, uv.y);
-					problem.AddResidualBlock(cost_function, NULL, AllVideoInfo.VideoInfo[RefCamId + videoID].intrinsic, &AllVideoInfo.VideoInfo[RefCamId + videoID].intrinsic[2], AllVideoInfo.VideoInfo[RefCamId + videoID].intrinsic + 3,
-						AllVideoInfo.VideoInfo[RefCamId + videoID].distortion, AllVideoInfo.VideoInfo[frameID + videoID].rt, &xyz[3 * kk]);
+					problem.AddResidualBlock(cost_function, NULL, AllVideoInfo.VideoInfo[frameID + videoID].intrinsic, &AllVideoInfo.VideoInfo[frameID + videoID].intrinsic[2], AllVideoInfo.VideoInfo[frameID + videoID].intrinsic + 3, AllVideoInfo.VideoInfo[frameID + videoID].distortion, AllVideoInfo.VideoInfo[frameID + videoID].rt, &xyz[3 * jj]);
 				}
 
 				validPtsCount++;
@@ -7418,12 +6298,11 @@ int OptimizeCameraPoseVideoData(char *Path, int startTime, int stopTime, int nvi
 			}
 
 			if (debug)
-				fprintf(fp2, "%d %.4f %.4f %.4f %.4f %.4f %.4f %.4f \n", jj, xyz[3 * kk], xyz[3 * kk + 1], xyz[3 * kk + 2], uv.x, uv.y, abs(residuals[0]), abs(residuals[1]));
+				fprintf(fp, "%d %.4f %.4f %.4f %.4f %.4f %.4f %.4f \n", jj, xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2], uv.x, uv.y, abs(residuals[0]), abs(residuals[1]));
 		}
 	}
-	fclose(fp);
 	if (debug)
-		fclose(fp2);
+		fclose(fp);
 
 	double miniX = *min_element(ReProjectionErrorX.begin(), ReProjectionErrorX.end());
 	double maxiX = *max_element(ReProjectionErrorX.begin(), ReProjectionErrorX.end());
@@ -7440,23 +6319,41 @@ int OptimizeCameraPoseVideoData(char *Path, int startTime, int stopTime, int nvi
 		printf("Reprojection error before BA \n Min: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
 	}
 
+	//Set up constant parameters:
+	printf("...set up fixed parameters ...");
+	if (distortionCorrected == 1)
+		problem.SetParameterBlockConstant(AllVideoInfo.VideoInfo[frameID + videoID].intrinsic);
+	else
+	{
+		problem.SetParameterBlockConstant(&AllVideoInfo.VideoInfo[frameID + videoID].intrinsic[2]);
+		if (AllVideoInfo.VideoInfo[frameID + videoID].LensModel == RADIAL_TANGENTIAL_PRISM)
+		{
+			problem.SetParameterBlockConstant(&AllVideoInfo.VideoInfo[frameID + videoID].distortion[2]);
+			problem.SetParameterBlockConstant(AllVideoInfo.VideoInfo[frameID + videoID].distortion + 5);
+		}
+	}
+	for (int ii = 0; ii < corpusData.n3dPoints; ii++)
+		if (Good.at(ii))
+			problem.SetParameterBlockConstant(xyz + 3 * ii);
+
+
 	//printf("...run \n");
 	ceres::Solver::Options options;
 	options.num_threads = 4;
 	options.max_num_iterations = 30;
 	options.linear_solver_type = ceres::DENSE_SCHUR;
-	options.minimizer_progress_to_stdout = true;
+	options.minimizer_progress_to_stdout = false;
 	options.trust_region_strategy_type = ceres::DOGLEG;
+	options.use_nonmonotonic_steps = false;
 
 	ceres::Solver::Summary summary;
 	ceres::Solve(options, &problem, &summary);
-	std::cout << summary.FullReport() << "\n";
+	//std::cout << summary.BriefReport() << "\n";
+	std::cout << summary.BriefReport() << "\n";
 
 	//Store refined parameters
-	printf("Reference cam: %d\n", RefCamId);
 	for (int frameID = startTime; frameID <= stopTime; frameID++)
 	{
-		CopyCamereInfo(AllVideoInfo.VideoInfo[RefCamId + videoID], AllVideoInfo.VideoInfo[frameID + videoID], false);
 		GetKFromIntrinsic(AllVideoInfo.VideoInfo[frameID + videoID]);
 		GetRTFromrt(&AllVideoInfo.VideoInfo[frameID + videoID], 1);
 		AssembleP(AllVideoInfo.VideoInfo[frameID + videoID].K, AllVideoInfo.VideoInfo[frameID + videoID].R, AllVideoInfo.VideoInfo[frameID + videoID].T, AllVideoInfo.VideoInfo[frameID + videoID].P);
@@ -7616,7 +6513,8 @@ int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, bool
 		sprintf(Fname, "%s/PinfoGL_%d.txt", Path, selectedCams);
 		if (StartTime == 0)
 		{
-			FILE *fp = fopen(Fname, "w+"); fclose(fp);
+			FILE *fp = fopen(Fname, "w+");
+			fclose(fp);
 		}
 
 		vector<int> computedTime; computedTime.reserve(StopTime - StartTime + 1);
@@ -7633,17 +6531,16 @@ int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, bool
 				SaveVideoCameraPosesGL(Path, SelectedCameraInfo, computedTime, selectedCams, StartTime);
 			}
 		}
-		delete[]AllCamsInfo, delete[]SelectedCameraInfo;
 		printf("Finished estimating poses for camera %d\n", selectedCams);
 
 		if (sharedIntriniscOptim != 0)
 		{
 			double threshold = 1.5;
 			printf("Optimizing for shared intrinsic paras for camera %d\n", selectedCams);
-			//GenerateViewAll_3D_2DInliers(Path, selectedCams, StartTime, StopTime, corpusData.n3dPoints);
-			//OptimizeCameraPoseVideoData(Path, StartTime, StopTime, nCams, selectedCams, distortionCorrected, LensType, corpusData, threshold, true);
+			GenerateViewAll_3D_2DInliers(Path, selectedCams, StartTime, StopTime, corpusData.n3dPoints);
+			OptimizeCameraPoseVideoData(Path, StartTime, StopTime, nCams, selectedCams, distortionCorrected, LensType, corpusData, threshold, false);
 		}
-
+		delete[]AllCamsInfo, delete[]SelectedCameraInfo;
 	}
 
 	printf("Total time %d: %.3fs\n", selectedCams, omp_get_wtime() - start);

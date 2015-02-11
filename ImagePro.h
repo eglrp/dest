@@ -8,14 +8,10 @@ using namespace cv;
 void filter1D_row_Double(double *kernel, int k_size, double *in, double *out, int width, int height);
 void filter1D_row(double *kernel, int k_size, char *in, double *out, int width, int height);
 void filter1D_col(double *kernel, int k_size, double *in, double *out, int width, int height, double &i_max);
-void filter1D_row(double *kernel, int k_size, char *in, float *out, int width, int height);
-void filter1D_col(double *kernel, int k_size, float *in, float *out, int width, int height, double &i_max);
 void Gaussian_smooth(char* data, double* out_data, int height, int width, double max_i , double sigma);
-void Gaussian_smooth(char* data, float* out_data, int height, int width, double max_i, double sigma);
 void Gaussian_smooth_Double(double* data, double* out_data, int height, int width, double max_i, double sigma);
 
 void Generate_Para_Spline(double *Image, double *Para, int width, int height, int Interpolation_Algorithm);
-void Generate_Para_Spline(char *Image, float *Para, int width, int height, int Interpolation_Algorithm);
 void Generate_Para_Spline(float *Image, float *Para, int width, int height, int Interpolation_Algorithm);
 void Generate_Para_Spline(char *Image, double *Para, int width, int height, int Interpolation_Algorithm);
 void Generate_Para_Spline(unsigned char *Image, double *Para, int width, int height, int Interpolation_Algorithm);

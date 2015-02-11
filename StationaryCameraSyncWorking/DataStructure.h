@@ -39,7 +39,7 @@ struct CameraData
 	double threshold, ninlierThresh;
 	std::string filename;
 	int nviews, width, height;
-	bool notCalibrated;
+	bool notCalibrated;	
 };
 
 struct SurfDesc
@@ -59,7 +59,7 @@ struct Corpus
 	CameraData *camera;
 
 	vector<Point3d>  xyz;
-	vector<Point3i >  rgb;
+	vector<Point3i >  rgb;	
 	vector < vector<int>> viewIdAll3D; //3D -> visiable views index
 	vector < vector<int>> pointIdAll3D; //3D -> 2D index in those visible views
 	vector<vector<Point2d>> uvAll3D; //3D -> uv of that point in those visible views
@@ -94,34 +94,9 @@ struct Trajectory2D
 	vector<float>angle;
 };
 
-struct Pmat
-{
-	double P[12];
-};
-struct KMatrix
-{
-	double K[9];
-};
-struct CamCenter
-{
-	double C[3];
-};
-struct RotMatrix
-{
-	double R[9];
-};
-struct Quaternion
-{
-	double quad[4];
-};
 struct Track3D
 {
 	double *xyz;
-	int npts;
-};
-struct Track4D
-{
-	double *xyzt;
 	int npts;
 };
 struct Track2D
@@ -132,18 +107,11 @@ struct Track2D
 };
 struct PerCamNonRigidTrajectory
 {
-	vector<Pmat> P;
-	vector<KMatrix> K;
-	vector<RotMatrix >R;
-	vector<Quaternion> Q;
-	vector<CamCenter>C;
-
+	double *P;
 	Track3D *Track3DInfo;
 	Track2D *Track2DInfo;
-	Track3D *CamCenter;
-	Track4D *quaternion;
 	double F;
-	int nTracks;
+	int nTracks, nframes;
 };
 struct Trajectory3D
 {

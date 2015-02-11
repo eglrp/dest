@@ -112,7 +112,6 @@ double VarianceArray(double *data, int length, double mean = NULL);
 double MeanArray(vector<double>&data);
 double VarianceArray(vector<double>&data, double mean = NULL);
 void normalize(double *x, int dim = 3);
-double dotProduct(double *x, double *y, int dim = 3);
 double norm_dot_product(double *x, double *y, int dim = 3);
 void cross_product(double *x, double *y, double *xy);
 void conv(float *A, int lenA, float *B, int lenB, float *C);
@@ -522,17 +521,13 @@ void GetRCGL(CameraData &camInfo);
 
 void GetRTFromrt(CameraData &camera);
 void GetRTFromrt(double *rt, double *R, double *T);
-void AssembleRT(double *R, double *T, double *RT, bool GivenCenter = false);
+void AssembleRT(double *R, double *T, double *RT);
 void DesembleRT(double *R, double *T, double *RT);
 
 void AssembleP(CameraData &camera);
-void AssembleP(double *K, double *RT, double *P);
 void AssembleP(double *K, double *R, double *T, double *P);
 void CopyCamereInfo(CameraData Src, CameraData &Dst, bool Extrinsic = true);
 
-void Rotation2Quaternion(double *R, double *q);
-void Quaternion2Rotation(double *q, double *R);
-void QuaternionLinearInterp(double *quad1, double *quad2, double *quadi, double u);
 
 double DistanceOfTwoPointsSfM(char *Path, int id1, int id2, int id3);
 

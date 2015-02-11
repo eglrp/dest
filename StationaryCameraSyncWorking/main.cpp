@@ -1628,94 +1628,6 @@ int GenarateTrajectoryFrom2DTracks(char *Path, int nviews, int startTime, int st
 
 	return 0;
 }
-int Interpolation3DTrajectory(int trackID)
-{
-	char Fname[200];
-	double x, y, z;
-	vector<double>X, Y, Z;
-
-	sprintf(Fname, "C:/temp/Sim/%d.txt", trackID);
-	FILE *fp = fopen(Fname, "r");
-	while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
-		X.push_back(x), Y.push_back(y), Z.push_back(z);
-	fclose(fp);
-
-	int npts = X.size();
-	double *vX = new double[npts], *vY = new double[npts], *vZ = new double[npts];
-	for (int ii = 0; ii < npts; ii++)
-		vX[ii] = X[ii], vY[ii] = Y[ii], vZ[ii] = Z[ii];
-
-	double *pX = new double[npts], *pY = new double[npts], *pZ = new double[npts];
-	Generate_Para_Spline(vX, pX, npts, 1, 1);
-	Generate_Para_Spline(vY, pY, npts, 1, 1);
-	Generate_Para_Spline(vZ, pZ, npts, 1, 1);
-
-	int Upsample = 10;
-	double S[3];
-	double *uX = new double[npts*Upsample], *uY = new double[npts*Upsample], *uZ = new double[npts*Upsample];
-	for (int ii = 0; ii < npts*Upsample; ii++)
-	{
-		Get_Value_Spline(pX, npts, 1, 1.0*ii / Upsample, 0.0, S, -1, 1); uX[ii] = S[0];
-		Get_Value_Spline(pY, npts, 1, 1.0*ii / Upsample, 0.0, S, -1, 1); uY[ii] = S[0];
-		Get_Value_Spline(pZ, npts, 1, 1.0*ii / Upsample, 0.0, S, -1, 1); uZ[ii] = S[0];
-	}
-
-	sprintf(Fname, "C:/temp/Sim/i%d.txt", trackID);
-	fp = fopen(Fname, "w+");
-	for (int ii = 0; ii < npts*Upsample; ii++)
-		fprintf(fp, "%.6f %.6f %.6f\n", uX[ii], uY[ii], uZ[ii]);
-	fclose(fp);
-
-	return 0;
-}
-int Generate2DTracksFrom3D_Simu(char *Path, int nviews, int trackID, int timeID, int startTime, int stopTime)
-{
-	char Fname[200];
-
-	int npts;
-	double x, y, z;
-	vector<Point3d> XYZ;
-	sprintf(Fname, "C:/temp/Sim/i%d.txt", trackID); FILE *fp = fopen(Fname, "r");
-	//fscanf(fp, "%s %d %d %d", Fname, &npts, &npts, &npts);
-	while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
-		XYZ.push_back(Point3d(x, y, z));
-	fclose(fp);
-	npts = XYZ.size();
-
-	VideoData AllVideoInfo;
-	if (ReadVideoData(Path, AllVideoInfo, nviews, startTime, stopTime) == 1)
-		return 1;
-	int nframes = max(MaxnFrame, stopTime);
-
-	double P[12];
-	Point2d pts;
-	sprintf(Fname, "C:/temp/Sim/iTrack_%d.txt", trackID); fp = fopen(Fname, "w+");
-	fprintf(fp, "%d ", nviews);
-	for (int kk = 0; kk < nviews; kk++)
-		fprintf(fp, "%d ", kk);
-	fprintf(fp, "\n1\n");
-	for (int kk = 0; kk < nviews; kk++)
-	{
-		fprintf(fp, "%d %d %d \n", kk, timeID, npts);
-		int videoID = kk*nframes;
-		for (int jj = 0; jj < npts; jj++)
-		{
-			for (int ii = 0; ii < 12; ii++)
-				if (kk>1 && jj>499)
-					P[ii] = AllVideoInfo.VideoInfo[videoID + 499].P[ii];
-				else
-					P[ii] = AllVideoInfo.VideoInfo[videoID + jj + timeID].P[ii];
-			//P[ii] = AllVideoInfo.VideoInfo[videoID + timeID].P[ii];
-
-			ProjectandDistort(XYZ[jj], &pts, P, NULL, NULL, 1);
-			fprintf(fp, "%.6f %.6f ", pts.x, pts.y);
-		}
-		fprintf(fp, "\n");
-	}
-	fclose(fp);
-
-	return 0;
-}
 int GenarateTrajectoryInput(char *Path, int nviews, int startTime, int stopTime, int timeID, int fileID, int syncUncertainty)
 {
 	char Fname[200];
@@ -1972,15 +1884,12 @@ int GenarateTrajectoryInput2(char *Path, int nviews, int startTime, int stopTime
 			viewId.clear();
 			for (int kk = 0; kk < nviewers; kk++)
 			{
-				int videoID = nframes * ViewerList[kk];
-				if (Tracks[kk + jj*nviewers].size() > ii)
+				int videoID = 1000 * ViewerList[kk];
+				if (Tracks[kk + jj*nviewers].size() > ii + 1)
 				{
 					PutativeCorres[nvisible] = Tracks[kk + jj*nviewers][ii];
 					for (int ll = 0; ll < 12; ll++)
-						if (kk>1 && ii>499)
-							P[12 * nvisible + ll] = AllVideoInfo.VideoInfo[videoID + 499 + timeID].P[ll];
-						else
-							P[12 * nvisible + ll] = AllVideoInfo.VideoInfo[videoID + ii + timeID].P[ll];
+						P[12 * nvisible + ll] = AllVideoInfo.VideoInfo[videoID + 0 + timeID].P[ll];
 					viewId.push_back(kk);
 					nvisible++;
 				}
@@ -2039,7 +1948,7 @@ int GenarateTrajectoryInput2(char *Path, int nviews, int startTime, int stopTime
 			int reachTrackFailture = 0;
 			for (int kk = 0; kk < npts; kk++)
 			{
-				if (jj + (2 * syncUncertainty + 1)* ii - timeID + 1 > Tracks[kk*nviewers + ii].size())
+				if (jj + (2 * syncUncertainty + 1)* ii + 1 - timeID >= Tracks[kk*nviewers + ii].size())
 					reachTrackFailture++;
 			}
 			if (reachTrackFailture == npts)
@@ -2056,48 +1965,40 @@ int GenarateTrajectoryInput2(char *Path, int nviews, int startTime, int stopTime
 			//printf calibration data
 			int videoID = nframes*ViewerList[ii];
 			int tid = jj + (2 * syncUncertainty + 1)* ii;
-			//if (ii == 1)
-			//	tid -= 3;
+			if (ii == 1)
+				tid += 6;
 			int reachTrackFailture = 0;
 			for (int kk = 0; kk < npts; kk++)
 				if (tid - timeID + 1> Tracks[kk*nviewers + ii].size())
 					reachTrackFailture++;
 			if (reachTrackFailture == npts)
 				break;
+
 			fprintf(fp, "%d %d\n", ii, count);
 			/*if (ii == 0)
 				fprintf(fp, "%d %d\n", ii, tid);
 				else
 				fprintf(fp, "%d %d\n", ii, tid + fileID);*/
 
-			for (int kk = 0; kk < 3; kk++)
-				if (ii>1 && jj>499)
-					fprintf(fp, "%f ", AllVideoInfo.VideoInfo[videoID + 499].camCenter[kk]);
-				else
-					fprintf(fp, "%f ", AllVideoInfo.VideoInfo[videoID + jj].camCenter[kk]);
-			fprintf(fp, "\n");
-			for (int kk = 0; kk < 3; kk++)
-			{
-				for (int ll = 0; ll < 3; ll++)
-					if (ii>1 && jj>499)
-						fprintf(fp, "%f ", AllVideoInfo.VideoInfo[videoID + 499].R[ll + kk * 3]);
-					else
-						fprintf(fp, "%f ", AllVideoInfo.VideoInfo[videoID + jj].R[ll + kk * 3]);
+			/*for (int kk = 0; kk < 3; kk++)
+				fprintf(fp, "%f ", AllVideoInfo.VideoInfo[videoID + timeID].camCenter[kk]);
 				fprintf(fp, "\n");
-			}
-			for (int kk = 0; kk < 3; kk++)
-			{
+				for (int kk = 0; kk < 3; kk++)
+				{
 				for (int ll = 0; ll < 3; ll++)
-					fprintf(fp, "%f ", AllVideoInfo.VideoInfo[videoID + jj].K[ll + kk * 3]);
+				fprintf(fp, "%f ", AllVideoInfo.VideoInfo[videoID + timeID].R[ll + kk * 3]);
 				fprintf(fp, "\n");
-			}
+				}
+				for (int kk = 0; kk < 3; kk++)
+				{
+				for (int ll = 0; ll < 3; ll++)
+				fprintf(fp, "%f ", AllVideoInfo.VideoInfo[videoID + timeID].K[ll + kk * 3]);
+				fprintf(fp, "\n");
+				}*/
 			for (int kk = 0; kk < 3; kk++)
 			{
 				for (int ll = 0; ll < 4; ll++)
-					if (ii>1 && jj>499)
-						fprintf(fp, "%f ", AllVideoInfo.VideoInfo[videoID + 499].P[ll + kk * 4]);
-					else
-						fprintf(fp, "%f ", AllVideoInfo.VideoInfo[videoID + jj].P[ll + kk * 4]);
+					fprintf(fp, "%f ", AllVideoInfo.VideoInfo[videoID + 0 + timeID].P[ll + kk * 4]);
 				fprintf(fp, "\n");
 			}
 
@@ -2112,10 +2013,7 @@ int GenarateTrajectoryInput2(char *Path, int nviews, int startTime, int stopTime
 
 				double P[12], XYZ[3] = { Tracks3D[kk][tid - timeID].x, Tracks3D[kk][tid - timeID].y, Tracks3D[kk][tid - timeID].z };
 				for (int ll = 0; ll < 12; ll++)
-					if (ii>1 && jj > 499)
-						P[ll] = AllVideoInfo.VideoInfo[videoID + 499].P[ll];
-					else
-						P[ll] = AllVideoInfo.VideoInfo[videoID + jj].P[ll];
+					P[ll] = AllVideoInfo.VideoInfo[videoID + timeID].P[ll];
 
 				double denum = P[8] * XYZ[0] + P[9] * XYZ[1] + P[10] * XYZ[2] + P[11];
 				double numX = P[0] * XYZ[0] + P[1] * XYZ[1] + P[2] * XYZ[2] + P[3];
@@ -2246,15 +2144,96 @@ int TestTrajectoryProjection(char *Path, int nviews, int startTime, int stopTime
 	}
 	return 0;
 }
+int Generate2DTracksFrom3D_Simu(char *Path, int nviews, int trackID, int timeID, int startTime, int stopTime)
+{
+	char Fname[200];
+
+	int npts;
+	double x, y, z;
+	vector<Point3d> XYZ;
+	sprintf(Fname, "C:/temp/Sim/i%d.txt", trackID); FILE *fp = fopen(Fname, "r");
+	//fscanf(fp, "%s %d %d %d", Fname, &npts, &npts, &npts);
+	while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
+		XYZ.push_back(Point3d(x, y, z));
+	fclose(fp);
+	npts = XYZ.size();
+
+	VideoData AllVideoInfo;
+	if (ReadVideoData(Path, AllVideoInfo, nviews, startTime, stopTime) == 1)
+		return 1;
+	int nframes = max(MaxnFrame, stopTime);
+
+	double P[12];
+	Point2d pts;
+	sprintf(Fname, "C:/temp/Sim/iTrack_%d.txt", trackID); fp = fopen(Fname, "w+");
+	fprintf(fp, "%d ", nviews);
+	for (int kk = 0; kk < nviews; kk++)
+		fprintf(fp, "%d ", kk);
+	fprintf(fp, "\n1\n");
+	for (int kk = 0; kk < nviews; kk++)
+	{
+		fprintf(fp, "%d %d %d \n", kk, timeID, npts);
+		int videoID = kk*nframes;
+		for (int jj = 0; jj < npts; jj++)
+		{
+			for (int ii = 0; ii < 12; ii++)
+				//P[ii] = AllVideoInfo.VideoInfo[videoID + jj + timeID].P[ii];
+				P[ii] = AllVideoInfo.VideoInfo[videoID + timeID].P[ii];
+
+			ProjectandDistort(XYZ[jj], &pts, P, NULL, NULL, 1);
+			fprintf(fp, "%.6f %.6f ", pts.x, pts.y);
+		}
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	return 0;
+}
+int Interpolation3DTrajectory(int trackID)
+{
+	char Fname[200];
+	double x, y, z;
+	vector<double>X, Y, Z;
+
+	sprintf(Fname, "C:/temp/Sim/%d.txt", trackID);
+	FILE *fp = fopen(Fname, "r");
+	while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
+		X.push_back(x), Y.push_back(y), Z.push_back(z);
+	fclose(fp);
+
+	int npts = X.size();
+	double *vX = new double[npts], *vY = new double[npts], *vZ = new double[npts];
+	for (int ii = 0; ii < npts; ii++)
+		vX[ii] = X[ii], vY[ii] = Y[ii], vZ[ii] = Z[ii];
+
+	double *pX = new double[npts], *pY = new double[npts], *pZ = new double[npts];
+	Generate_Para_Spline(vX, pX, npts, 1, 1);
+	Generate_Para_Spline(vY, pY, npts, 1, 1);
+	Generate_Para_Spline(vZ, pZ, npts, 1, 1);
+
+	int Upsample = 10;
+	double S[3];
+	double *uX = new double[npts*Upsample], *uY = new double[npts*Upsample], *uZ = new double[npts*Upsample];
+	for (int ii = 0; ii < npts*Upsample; ii++)
+	{
+		Get_Value_Spline(pX, npts, 1, 1.0*ii / Upsample, 0.0, S, -1, 1); uX[ii] = S[0];
+		Get_Value_Spline(pY, npts, 1, 1.0*ii / Upsample, 0.0, S, -1, 1); uY[ii] = S[0];
+		Get_Value_Spline(pZ, npts, 1, 1.0*ii / Upsample, 0.0, S, -1, 1); uZ[ii] = S[0];
+	}
+
+	sprintf(Fname, "C:/temp/Sim/i%d.txt", trackID);
+	fp = fopen(Fname, "w+");
+	for (int ii = 0; ii < npts*Upsample; ii++)
+		fprintf(fp, "%.6f %.6f %.6f\n", uX[ii], uY[ii], uZ[ii]);
+	fclose(fp);
+
+	return 0;
+}
 int ReadTrajectory(PerCamNonRigidTrajectory *CamTraj, int nCams, int nTracks, int trackID = 0)
 {
 	char Fname[200];
 	int ii, jj, camID, frameID;
 	double x, y, z, t, u, v;
-	CamCenter Ccenter;
-	RotMatrix Rmat;
-	Quaternion Qmat;
-	KMatrix Kmat;
 	Pmat P;
 
 	vector<double> *xyz = new vector<double>[nCams];
@@ -2281,34 +2260,20 @@ int ReadTrajectory(PerCamNonRigidTrajectory *CamTraj, int nCams, int nTracks, in
 		fscanf(fp, "%s %d", Fname, &jj);
 		while (fscanf(fp, "%d %d ", &camID, &frameID) != EOF)
 		{
-			for (int jj = 0; jj < 3; jj++)
-				fscanf(fp, "%lf ", &Ccenter.C[jj]);
-			for (int jj = 0; jj < 9; jj++)
-				fscanf(fp, "%lf ", &Rmat.R[jj]);
-			for (int jj = 0; jj < 9; jj++)
-				fscanf(fp, "%lf ", &Kmat.K[jj]);
 			for (int jj = 0; jj < 12; jj++)
 				fscanf(fp, "%lf ", &P.P[jj]);
-
 			fscanf(fp, "%lf %lf ", &u, &v);
 			fscanf(fp, "%lf %lf %lf %lf ", &x, &y, &z, &t);
 
-			x += 50.0*(1.0*rand() / RAND_MAX-0.5);
-			y += 50.0*(1.0*rand() / RAND_MAX - 0.5);
-			z += 50.0*(1.0*rand() / RAND_MAX - 0.5);
+			//x += .0*rand() / RAND_MAX;
+			//y += .0*rand() / RAND_MAX;
+			//z += .0*rand() / RAND_MAX;
 
 			if (frameID == 0)
 				CamTraj[camID].F = t;
 
 			if (frameID >= CamTraj[camID].P.size())
-			{
 				CamTraj[camID].P.push_back(P);
-				CamTraj[camID].K.push_back(Kmat);
-				CamTraj[camID].C.push_back(Ccenter);
-				CamTraj[camID].R.push_back(Rmat);
-				Rotation2Quaternion(Rmat.R, Qmat.quad);
-				CamTraj[camID].Q.push_back(Qmat);
-			}
 
 			xyz[camID].push_back(x), xyz[camID].push_back(y), xyz[camID].push_back(z);
 			uv[camID].push_back(u), uv[camID].push_back(v);
@@ -2352,14 +2317,12 @@ int WriteTrajectory(PerCamNonRigidTrajectory *CamTraj, int nCams, int nTracks, d
 	int maxPts = 0;
 	for (trackID = 0; trackID < nTracks; trackID++)
 	{
+		int npts = 0;
 		for (camID = 0; camID < nCams; camID++)
-		{
-			int npts = 0;
 			for (frameID = 0; frameID < CamTraj[camID].Track3DInfo[trackID].npts; frameID++)
 				npts++;
-			if (npts > maxPts)
-				maxPts = npts;
-		}
+		if (npts > maxPts)
+			maxPts = npts;
 	}
 	int *index = new int[maxPts];
 	double *CapturedTime = new double[maxPts];
@@ -2569,7 +2532,7 @@ int NonRigidTemporalCost(PerCamNonRigidTrajectory *CamTraj, int nCams, int nTrac
 int NonRigidTemporalOptim()
 {
 	const int nCams = 2, nTracks = 4, TemporalRange = 4;
-	const double Tscale = 1000.0, alpha = 50.0, ialpha = Tscale / alpha;
+	const double Tscale = 1000.0, alpha = 50.0, ialpha = Tscale / alpha; 
 	double sqrtlambda = 1000.0, sqrtlambda2 = 100.0;
 	PerCamNonRigidTrajectory CamTraj[nCams];
 
@@ -2670,7 +2633,7 @@ int NonRigidTemporalOptim()
 	std::cout << summary.FullReport() << "\n";
 
 	NonRigidTemporalCost(CamTraj, nCams, nTracks, TemporalRange, ialpha, sqrtlambda, sqrtlambda2);
-
+	
 	//Store the results	
 	printf("Write results ....\n");
 	WriteTrajectory(CamTraj, nCams, nTracks, alpha / Tscale);
@@ -2781,446 +2744,20 @@ int TestSmothnessConstraint()
 
 	return 0;
 }
-
-//Nonlinear Optimization for 3D Patch estimation
-struct TemporalOptimInterpCeres {
-	TemporalOptimInterpCeres(double *Pin, double *ParaXin, double *ParaYin, int frameIDin, int nframesIn, int interpAlgoIn)
-	{
-		P = Pin;
-		ParaX = ParaXin, ParaY = ParaYin;
-		double x = ParaXin[0], y = ParaX[0];
-		frameID = frameIDin, nframes = nframesIn, interpAlgo = interpAlgoIn;
-	}
-
-	template <typename T>	bool operator()(const T* const XYZ, const T* const F, T* residuals) 	const
-	{
-		double denum = P[8] * XYZ[0] + P[9] * XYZ[1] + P[10] * XYZ[2] + P[11];
-		double numX = P[0] * XYZ[0] + P[1] * XYZ[1] + P[2] * XYZ[2] + P[3];
-		double numY = P[4] * XYZ[0] + P[5] * XYZ[1] + P[6] * XYZ[2] + P[7];
-
-		double Fi = F[0] + frameID;
-		double Sx[3], Sy[3];
-		if (Fi < 0.0)
-			Fi = 0.0;
-		if (Fi>nframes - 1)
-			Fi = nframes - 1;
-
-		Get_Value_Spline(ParaX, nframes, 1, Fi, 0, Sx, -1, interpAlgo);
-		Get_Value_Spline(ParaY, nframes, 1, Fi, 0, Sy, -1, interpAlgo);
-
-		residuals[0] = numX / denum - Sx[0];
-		residuals[1] = numY / denum - Sy[0];
-
-
-		return true;
-	}
-
-	// Factory to hide the construction of the CostFunction object from the client code.
-	static ceres::CostFunction* Create(double *Pin, double *ParaXin, double *ParaYin, int frameIDin, int nframesIn, int interpAlgoIn)
-	{
-		return (new ceres::NumericDiffCostFunction<TemporalOptimInterpCeres, ceres::CENTRAL, 2, 3, 1>(new TemporalOptimInterpCeres(Pin, ParaXin, ParaYin, frameIDin, nframesIn, interpAlgoIn)));
-	}
-
-	int frameID, nframes, interpAlgo;
-	double F;
-	double *ParaX, *ParaY, *P;
-};
-struct TemporalOptimInterpCeres2 {
-	TemporalOptimInterpCeres2(double *Pin, double *ParaXin, double *ParaYin, int frameIDin, int nframesIn, int interpAlgoIn)
-	{
-		P = Pin;
-		ParaX = ParaXin, ParaY = ParaYin;
-		double x = ParaXin[0], y = ParaX[0];
-		frameID = frameIDin, nframes = nframesIn, interpAlgo = interpAlgoIn;
-	}
-
-	template <typename T>	bool operator()(const T* const XYZ, const T* const F, T* residuals) 	const
-	{
-		double Fi = F[0] + frameID;
-		if (Fi < 0.0)
-			Fi = 0.0;
-		if (Fi>nframes - 1)
-			Fi = nframes - 1;
-
-		int rFi = (int)(Fi + 0.5);
-		double iP[] = { P[12 * rFi], P[12 * rFi + 1], P[12 * rFi + 2], P[12 * rFi + 3],
-			P[12 * rFi + 4], P[12 * rFi + 5], P[12 * rFi + 6], P[12 * rFi + 7],
-			P[12 * rFi + 8], P[12 * rFi + 9], P[12 * rFi + 10], P[12 * rFi + 11] };
-
-		double denum = iP[8] * XYZ[0] + iP[9] * XYZ[1] + iP[10] * XYZ[2] + iP[11];
-		double numX = iP[0] * XYZ[0] + iP[1] * XYZ[1] + iP[2] * XYZ[2] + iP[3];
-		double numY = iP[4] * XYZ[0] + iP[5] * XYZ[1] + iP[6] * XYZ[2] + iP[7];
-
-		double Sx[3], Sy[3];
-		Get_Value_Spline(ParaX, nframes, 1, Fi, 0, Sx, -1, interpAlgo);
-		Get_Value_Spline(ParaY, nframes, 1, Fi, 0, Sy, -1, interpAlgo);
-
-		residuals[0] = numX / denum - Sx[0];
-		residuals[1] = numY / denum - Sy[0];
-
-
-		return true;
-	}
-
-	// Factory to hide the construction of the CostFunction object from the client code.
-	static ceres::CostFunction* Create(double *Pin, double *ParaXin, double *ParaYin, int frameIDin, int nframesIn, int interpAlgoIn)
-	{
-		return (new ceres::NumericDiffCostFunction<TemporalOptimInterpCeres2, ceres::CENTRAL, 2, 3, 1>(new TemporalOptimInterpCeres2(Pin, ParaXin, ParaYin, frameIDin, nframesIn, interpAlgoIn)));
-	}
-
-	int frameID, nframes, interpAlgo;
-	double F;
-	double *ParaX, *ParaY, *P;
-};
-struct TemporalOptimInterpCeres3 {
-	TemporalOptimInterpCeres3(double *AllPin, double *AllKin, double *AllQin, double *AllRin, double *AllCin, double *ParaCamCenterXIn, double *ParaCamCenterYIn, double *ParaCamCenterZIn, double *ParaXin, double *ParaYin, int frameIDin, int nframesIn, int interpAlgoIn)
-	{
-		AllP = AllPin, AllK = AllKin, AllQ = AllQin, AllR = AllRin, AllC = AllCin;
-		ParaCamCenterX = ParaCamCenterXIn, ParaCamCenterY = ParaCamCenterYIn, ParaCamCenterZ = ParaCamCenterZIn, ParaX = ParaXin, ParaY = ParaYin;
-		frameID = frameIDin, nframes = nframesIn, interpAlgo = interpAlgoIn;
-	}
-
-	template <typename T>	bool operator()(const T* const XYZ, const T* const F, T* residuals) 	const
-	{
-		double Fi = F[0] + frameID;
-		if (Fi < 0.0)
-			Fi = 0.0;
-		if (Fi>nframes - 2)
-			Fi = nframes - 2;
-		int lFi = (int)Fi, uFi = lFi + 1;
-		double fFi = Fi - lFi;
-
-		if (lFi < 0)
-		{
-			residuals[0] = 0.0;
-			residuals[1] = 0.0;
-			return true;
-		}
-		else if (uFi > nframes - 2)
-		{
-			residuals[0] = 0.0;
-			residuals[1] = 0.0;
-			return true;
-		}
-
-		double K[9], C[3], R[9], RT[12], P[12], Q[4];
-		for (int ll = 0; ll < 9; ll++)
-			K[ll] = AllK[9 * lFi + ll];
-
-		for (int ll = 0; ll < 3; ll++)
-			C[ll] = (1.0 - fFi)*AllC[3 * lFi + ll] + fFi*AllC[3 * uFi + ll]; //linear interpolation
-		//Get_Value_Spline(ParaCamCenterX, nframes, 1, Fi, 0, &C[0], -1, interpAlgo);
-		//Get_Value_Spline(ParaCamCenterY, nframes, 1, Fi, 0, &C[1], -1, interpAlgo);
-		//Get_Value_Spline(ParaCamCenterZ, nframes, 1, Fi, 0, &C[2], -1, interpAlgo);
-
-
-		for (int ll = 0; ll < 4; ll++)
-			Q[ll] = AllQ[4 * lFi + ll];
-		//QuaternionLinearInterp(&AllQ[4 * lFi], &AllQ[4 * uFi], Q, fFi);//linear interpolation
-
-		/*//Give good result given 1frame offset--> strange so I use rigorous interplation instead
-		lFi = (int)(Fi + 0.5);
-		for (int ll = 0; ll < 3; ll++)
-		C[ll] = AllC[3 * lFi + ll];
-		for (int ll = 0; ll < 4; ll++)
-		Q[ll] = AllQ[4 * lFi + ll];*/
-
-		Quaternion2Rotation(Q, R);
-		AssembleRT(R, C, RT, true);
-		AssembleP(K, RT, P);
-
-		double numX = P[0] * XYZ[0] + P[1] * XYZ[1] + P[2] * XYZ[2] + P[3];
-		double numY = P[4] * XYZ[0] + P[5] * XYZ[1] + P[6] * XYZ[2] + P[7];
-		double denum = P[8] * XYZ[0] + P[9] * XYZ[1] + P[10] * XYZ[2] + P[11];
-
-		double Sx[3], Sy[3];
-		Get_Value_Spline(ParaX, nframes, 1, Fi, 0, Sx, -1, interpAlgo);
-		Get_Value_Spline(ParaY, nframes, 1, Fi, 0, Sy, -1, interpAlgo);
-
-		residuals[0] = numX / denum - Sx[0];
-		residuals[1] = numY / denum - Sy[0];
-		if (abs(residuals[0]) > 5 || abs(residuals[1]) > 5)
-			int a = 0;
-		return true;
-	}
-
-	// Factory to hide the construction of the CostFunction object from the client code.
-	static ceres::CostFunction* Create(double *AllPin, double *AllKin, double *AllQin, double *AllRin, double *AllCin, double *ParaCamCenterXIn, double *ParaCamCenterYin, double *ParaCamCenterZin, double *ParaXin, double *ParaYin, int frameIDin, int nframesIn, int interpAlgoIn)
-	{
-		return (new ceres::NumericDiffCostFunction<TemporalOptimInterpCeres3, ceres::CENTRAL, 2, 3, 1>(new TemporalOptimInterpCeres3(AllPin, AllKin, AllQin, AllRin, AllCin, ParaCamCenterXIn, ParaCamCenterYin, ParaCamCenterZin, ParaXin, ParaYin, frameIDin, nframesIn, interpAlgoIn)));
-	}
-
-	int frameID, nframes, interpAlgo;
-	double F;
-	double *ParaCamCenterX, *ParaCamCenterY, *ParaCamCenterZ, *ParaX, *ParaY;
-	double *AllP, *AllK, *AllQ, *AllR, *AllC;
-};
-int TemporalOptimInterp()
-{
-	const int nCams = 3, nTracks = 4;
-	PerCamNonRigidTrajectory CamTraj[nCams];
-
-	ReadTrajectory(CamTraj, nCams, nTracks);
-
-	//Interpolate the trajectory of 2d tracks
-	int maxPts = 0;
-	for (int ii = 0; ii < nTracks; ii++)
-	{
-		for (int jj = 0; jj < nCams; jj++)
-		{
-			int npts = 0;
-			for (int kk = 0; kk < CamTraj[jj].Track3DInfo[ii].npts; kk++)
-				npts++;
-			if (npts > maxPts)
-				maxPts = npts;
-		}
-	}
-
-	int InterpAlgo = 1;
-	double *x = new double[maxPts], *y = new double[maxPts];
-	double* AllQuaternion = new double[4 * nCams*maxPts];
-	double* AllRotationMat = new double[9 * nCams*maxPts];
-	double* AllCamCenter = new double[3 * nCams*maxPts];
-	double *AllKMatrix = new double[9 * nCams*maxPts];
-	double *AllPMatrix = new double[12 * nCams*maxPts];
-
-	double *z = new double[maxPts];
-	double *ParaCamCenterX = new double[nCams*maxPts];
-	double *ParaCamCenterY = new double[nCams*maxPts];
-	double *ParaCamCenterZ = new double[nCams*maxPts];
-	for (int jj = 0; jj < nCams; jj++)
-	{
-		for (int ii = 0; ii < CamTraj[jj].nTracks; ii++)
-		{
-			int npts = CamTraj[jj].Track3DInfo[ii].npts;
-			CamTraj[jj].Track2DInfo[ii].ParaX = new double[npts];
-			CamTraj[jj].Track2DInfo[ii].ParaY = new double[npts];
-
-			for (int kk = 0; kk < npts; kk++)
-				x[kk] = CamTraj[jj].Track2DInfo[ii].uv[kk].x, y[kk] = CamTraj[jj].Track2DInfo[ii].uv[kk].y;
-			Generate_Para_Spline(x, CamTraj[jj].Track2DInfo[ii].ParaX, npts, 1, InterpAlgo);
-			Generate_Para_Spline(y, CamTraj[jj].Track2DInfo[ii].ParaY, npts, 1, InterpAlgo);
-		}
-		for (int ii = 0; ii < maxPts; ii++)
-		{
-			if (ii >= CamTraj[jj].R.size())
-				continue;
-			for (int kk = 0; kk < 9; kk++)
-				AllKMatrix[9 * jj * maxPts + 9 * ii + kk] = CamTraj[jj].K[ii].K[kk];
-			for (int kk = 0; kk < 3; kk++)
-				AllCamCenter[3 * jj * maxPts + 3 * ii + kk] = CamTraj[jj].C[ii].C[kk];
-			for (int kk = 0; kk < 9; kk++)
-				AllRotationMat[9 * jj * maxPts + 9 * ii + kk] = CamTraj[jj].R[ii].R[kk];
-			for (int kk = 0; kk < 4; kk++)
-				AllQuaternion[4 * jj * maxPts + 4 * ii + kk] = CamTraj[jj].Q[ii].quad[kk];
-			for (int kk = 0; kk < 12; kk++)
-				AllPMatrix[12 * jj * maxPts + 12 * ii + kk] = CamTraj[jj].P[ii].P[kk];
-		}
-
-		for (int ii = 0; ii < maxPts; ii++)
-		{
-			if (ii >= CamTraj[jj].R.size())
-				continue;
-			x[ii] = AllCamCenter[3 * jj * maxPts + 3 * ii];
-			y[ii] = AllCamCenter[3 * jj * maxPts + 3 * ii + 1];
-			z[ii] = AllCamCenter[3 * jj * maxPts + 3 * ii + 2];
-		}
-		Generate_Para_Spline(x, ParaCamCenterX + jj*maxPts, maxPts, 1, InterpAlgo);
-		Generate_Para_Spline(y, ParaCamCenterY + jj*maxPts, maxPts, 1, InterpAlgo);
-		Generate_Para_Spline(z, ParaCamCenterZ + jj*maxPts, maxPts, 1, InterpAlgo);
-	}
-	delete[]x, delete[]y;
-	delete[]z;
-
-	//Initialize temporal info
-	for (int ii = 0; ii < nCams; ii++)
-		CamTraj[ii].F = round(10.0*(1.0*rand() / RAND_MAX - 0.5));
-	CamTraj[0].F = 0, CamTraj[1].F = -3.0, CamTraj[2].F = 2.0;
-
-	printf("Inital offset: ");
-	for (int ii = 0; ii < nCams; ii++)
-		printf("%f ", CamTraj[ii].F);
-	printf("\n");
-
-	//printf("Set up BA ...\n");
-	ceres::Problem problem;
-
-	//printf("Adding image projection cost ...\n");
-	double Error = 0.0;
-	for (int ii = 0; ii < nTracks; ii++)
-	{
-		//find maxtracks
-		int maxTracks = 0, maxCam = 0;
-		for (int jj = 0; jj < nCams; jj++)
-			if (maxTracks < CamTraj[jj].Track3DInfo[ii].npts)
-				maxTracks = CamTraj[jj].Track3DInfo[ii].npts, maxCam = jj;
-
-		for (int kk = 0; kk < maxTracks; kk++)
-		{
-			for (int jj = 0; jj < nCams; jj++)
-			{
-				if (kk>CamTraj[jj].Track3DInfo[ii].npts || kk >= CamTraj[jj].R.size())
-					continue;
-
-				double Fi = CamTraj[jj].F + kk;
-				if (Fi < 0.0)
-					Fi = 0.0;
-				if (Fi>CamTraj[jj].Track3DInfo[ii].npts - 2)
-					Fi = CamTraj[jj].Track3DInfo[ii].npts - 2;
-				int lFi = (int)Fi, uFi = lFi + 1, rFi = (int)(Fi + 0.5);
-				double fFi = Fi - lFi;
-
-				double K[9], C[3], Q[4], R[9], RT[12], P[12];
-				for (int ll = 0; ll < 9; ll++)
-					K[ll] = AllKMatrix[9 * jj*maxPts + 9 * lFi + ll];
-				for (int ll = 0; ll < 3; ll++)
-					C[ll] = (1.0 - fFi)*AllCamCenter[3 * jj*maxPts + 3 * lFi + ll] + fFi*AllCamCenter[3 * jj*maxPts + 3 * uFi + ll]; //linear interpolation
-
-				for (int ll = 0; ll < 4; ll++)
-					Q[ll] = AllQuaternion[4 * jj*maxPts + 4 * lFi + ll];
-				//QuaternionLinearInterp(&AllQuaternion[4 * jj*maxPts + 4 * lFi], &AllQuaternion[4 * jj*maxPts + 4 * uFi], Q, fFi);//linear interpolation
-				//Get_Value_Spline(ParaCamCenterX + jj*maxPts, maxPts, 1, Fi, 0, &C[0], -1, InterpAlgo);
-				//Get_Value_Spline(ParaCamCenterY + jj*maxPts, maxPts, 1, Fi, 0, &C[1], -1, InterpAlgo);
-				//Get_Value_Spline(ParaCamCenterZ + jj*maxPts, maxPts, 1, Fi, 0, &C[2], -1, InterpAlgo);
-				
-				Quaternion2Rotation(Q, R);
-				AssembleRT(R, C, RT, true);
-				AssembleP(K, RT, P);
-
-				double XYZ[] = { CamTraj[maxCam].Track3DInfo[ii].xyz[3 * kk], CamTraj[maxCam].Track3DInfo[ii].xyz[3 * kk + 1], CamTraj[maxCam].Track3DInfo[ii].xyz[3 * kk + 2] };
-				double denum = P[8] * XYZ[0] + P[9] * XYZ[1] + P[10] * XYZ[2] + P[11];
-				double numX = P[0] * XYZ[0] + P[1] * XYZ[1] + P[2] * XYZ[2] + P[3];
-				double numY = P[4] * XYZ[0] + P[5] * XYZ[1] + P[6] * XYZ[2] + P[7];
-
-				double Sx, Sy;
-				Get_Value_Spline(CamTraj[jj].Track2DInfo[ii].ParaX, CamTraj[jj].Track3DInfo[ii].npts, 1, Fi, 0, &Sx, -1, InterpAlgo);
-				Get_Value_Spline(CamTraj[jj].Track2DInfo[ii].ParaY, CamTraj[jj].Track3DInfo[ii].npts, 1, Fi, 0, &Sy, -1, InterpAlgo);
-
-				double residualsX = numX / denum - Sx;
-				double residualsY = numY / denum - Sy;
-				double Residual = residualsX*residualsX + residualsY*residualsY;
-				Error += Residual;
-
-				//ceres::CostFunction* cost_function = TemporalOptimInterpCeres2::Create(CamTraj[jj].P[kk].P, CamTraj[jj].Track2DInfo[ii].ParaX, CamTraj[jj].Track2DInfo[ii].ParaY, kk, CamTraj[jj].Track3DInfo[ii].npts, InterpAlgo);
-				ceres::CostFunction* cost_function = TemporalOptimInterpCeres3::Create(&AllPMatrix[12 * jj*maxPts], &AllKMatrix[9 * jj*maxPts], &AllQuaternion[4 * jj*maxPts], &AllRotationMat[9 * jj*maxPts], &AllCamCenter[3 * jj*maxPts],
-					ParaCamCenterX + jj*maxPts, ParaCamCenterY + jj*maxPts, ParaCamCenterZ + jj*maxPts, CamTraj[jj].Track2DInfo[ii].ParaX, CamTraj[jj].Track2DInfo[ii].ParaY, kk, CamTraj[jj].Track3DInfo[ii].npts, InterpAlgo);
-				problem.AddResidualBlock(cost_function, NULL, CamTraj[maxCam].Track3DInfo[ii].xyz + 3 * kk, &CamTraj[jj].F);
-			}
-		}
-	}
-	printf("Initial error: %.6e\n", Error);
-
-	//printf("Setting fixed parameters...\n");
-	problem.SetParameterBlockConstant(&CamTraj[0].F);
-
-	//printf("Running optim..\n");
-	ceres::Solver::Options options;
-	options.num_threads = 4;
-	options.max_num_iterations = 50;
-	options.linear_solver_type = ceres::DENSE_SCHUR;
-	options.minimizer_progress_to_stdout = true;
-	options.trust_region_strategy_type = ceres::DOGLEG;
-	options.use_nonmonotonic_steps = true;
-
-	ceres::Solver::Summary summary;
-	ceres::Solve(options, &problem, &summary);
-	std::cout << summary.FullReport() << "\n";
-
-	Error = 0.0;
-	FILE *fp = fopen("C:/temp/Sim/Results.txt", "w+");
-	fprintf(fp, "Temporal alignment (ms): ");
-	for (int ii = 0; ii < nCams; ii++)
-		fprintf(fp, "%f ", CamTraj[ii].F);
-	fprintf(fp, "\n");
-	for (int ii = 0; ii < nTracks; ii++)
-	{
-		//find maxtracks
-		int maxTracks = 0, maxCam = 0;
-		for (int jj = 0; jj < nCams; jj++)
-			if (maxTracks < CamTraj[jj].Track3DInfo[ii].npts)
-				maxTracks = CamTraj[jj].Track3DInfo[ii].npts, maxCam = jj;
-
-		fprintf(fp, "3D track %d \n", ii);
-		for (int kk = 0; kk < maxTracks; kk++)
-		{
-			for (int jj = 0; jj < nCams; jj++)
-			{
-				if (kk>CamTraj[jj].Track3DInfo[ii].npts || kk >= CamTraj[jj].R.size())
-					continue;
-
-				double Fi = CamTraj[jj].F + kk;
-				if (Fi < 0.0)
-					Fi = 0.0;
-				if (Fi>CamTraj[jj].Track3DInfo[ii].npts - 2)
-					Fi = CamTraj[jj].Track3DInfo[ii].npts - 2;
-				int lFi = (int)Fi, uFi = lFi + 1, rFi = (int)(Fi + 0.5);
-				double fFi = Fi - lFi;
-
-				double K[9], C[3], Q[4], R[9], RT[12], P[12];
-				for (int ll = 0; ll < 9; ll++)
-					K[ll] = AllKMatrix[9 * jj*maxPts + 9 * lFi + ll];
-				for (int ll = 0; ll < 3; ll++)
-					C[ll] = (1.0 - fFi)*AllCamCenter[3 * jj*maxPts + 3 * lFi + ll] + fFi*AllCamCenter[3 * jj*maxPts + 3 * uFi + ll]; //linear interpolation
-
-				for (int ll = 0; ll < 4; ll++)
-					Q[ll] = AllQuaternion[4 * jj*maxPts + 4 * lFi + ll];
-				//QuaternionLinearInterp(&AllQuaternion[4 * jj*maxPts + 4 * lFi], &AllQuaternion[4 * jj*maxPts + 4 * uFi], Q, fFi);//linear interpolation
-				//Get_Value_Spline(ParaCamCenterX + jj*maxPts, maxPts, 1, Fi, 0, &C[0], -1, InterpAlgo);
-				//Get_Value_Spline(ParaCamCenterY + jj*maxPts, maxPts, 1, Fi, 0, &C[1], -1, InterpAlgo);
-				//Get_Value_Spline(ParaCamCenterZ + jj*maxPts, maxPts, 1, Fi, 0, &C[2], -1, InterpAlgo);
-
-				Quaternion2Rotation(Q, R);
-				AssembleRT(R, C, RT, true);
-				AssembleP(K, RT, P);
-
-				double XYZ[] = { CamTraj[maxCam].Track3DInfo[ii].xyz[3 * kk], CamTraj[maxCam].Track3DInfo[ii].xyz[3 * kk + 1], CamTraj[maxCam].Track3DInfo[ii].xyz[3 * kk + 2] };
-				double denum = P[8] * XYZ[0] + P[9] * XYZ[1] + P[10] * XYZ[2] + P[11];
-				double numX = P[0] * XYZ[0] + P[1] * XYZ[1] + P[2] * XYZ[2] + P[3];
-				double numY = P[4] * XYZ[0] + P[5] * XYZ[1] + P[6] * XYZ[2] + P[7];
-
-				double Sx, Sy;
-				Get_Value_Spline(CamTraj[jj].Track2DInfo[ii].ParaX, CamTraj[jj].Track3DInfo[ii].npts, 1, Fi, 0, &Sx, -1, InterpAlgo);
-				Get_Value_Spline(CamTraj[jj].Track2DInfo[ii].ParaY, CamTraj[jj].Track3DInfo[ii].npts, 1, Fi, 0, &Sy, -1, InterpAlgo);
-
-				double residualsX = numX / denum - Sx;
-				double residualsY = numY / denum - Sy;
-				double Residual = residualsX*residualsX + residualsY*residualsY;
-				Error += Residual;
-
-				if (jj == 0)
-					fprintf(fp, "%.4f %.4f %.4f ", CamTraj[maxCam].Track3DInfo[ii].xyz[3 * kk], CamTraj[maxCam].Track3DInfo[ii].xyz[3 * kk + 1], CamTraj[maxCam].Track3DInfo[ii].xyz[3 * kk + 2]);
-			}
-		}
-		fprintf(fp, "\n");
-	}
-	printf("Final error: %.6e\n", Error);
-	printf("Final offset: ");
-	for (int ii = 0; ii < nCams; ii++)
-		printf("%f ", CamTraj[ii].F);
-	printf("\n");
-
-	//printf("Write results ....\n");
-	//WriteTrajectory(CamTraj, nCams, nTracks, 1.0);
-	delete[]AllRotationMat, delete[]AllPMatrix, delete[]AllKMatrix, delete[]AllQuaternion, delete[]AllCamCenter;
-	delete[]ParaCamCenterX, delete[]ParaCamCenterY, delete[]ParaCamCenterZ;
-
-	return 0;
-}
 int main(int argc, char* argv[])
 {
 	//char Path[] = "D:/DomeSync", Fname[200], Fname2[200];
-	char Path[] = "E:/Phuong", Fname[200], Fname2[200];
-	srand((unsigned int)time(NULL));
+	char Path[] = "D:/Phuong", Fname[200], Fname2[200];
+
 	for (int ii = 1; ii <= 4; ii++)
 	{
 		//Interpolation3DTrajectory(ii);
-		//Generate2DTracksFrom3D_Simu(Path, 9, ii, 1, 1, 2600);
-		//GenarateTrajectoryInput2(Path, 9, 1, 2600, 1, ii, 0, 50.0);
+		//Generate2DTracksFrom3D_Simu(Path, 9, ii, 1,1, 500);
+		GenarateTrajectoryInput2(Path, 9, 1, 500, 1, ii, 2, 50.0);
 	}
 
 	//TestSmothnessConstraint();
-	//NonRigidTemporalOptim();
-	TemporalOptimInterp();
+	NonRigidTemporalOptim();
 	return 0;
 	//GenerateCommonCameraForNPlusPoint(Path, 9, 3, 1);
 	//GenerateTracksForNPlusPoint(Path, 9, 3, 1, atoi(argv[1]));

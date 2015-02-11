@@ -362,13 +362,6 @@ double VarianceArray(vector<double>&data, double mean)
 		var += pow(data[ii] - mean, 2);
 	return var / (data.size() - 1);
 }
-double dotProduct(double *x, double *y, int dim)
-{
-	double res = 0.0;
-	for (int ii = 0; ii < dim; ii++)
-		res += x[ii] * y[ii];
-	return res;
-}
 double norm_dot_product(double *x, double *y, int dim)
 {
 	double nx = 0.0, ny = 0.0, dxy = 0.0;
@@ -4588,22 +4581,11 @@ void GetRTFromrt(CameraData *AllViewsParas, int nviews)
 
 	return;
 }
-void AssembleRT(double *R, double *T, double *RT, bool GivenCenter)
+void AssembleRT(double *R, double *T, double *RT)
 {
-	if (!GivenCenter)
-	{
-		RT[0] = R[0], RT[1] = R[1], RT[2] = R[2], RT[3] = T[0];
-		RT[4] = R[3], RT[5] = R[4], RT[6] = R[5], RT[7] = T[1];
-		RT[8] = R[6], RT[9] = R[7], RT[10] = R[8], RT[11] = T[2];
-	}
-	else//RT = [R, -R*C];
-	{
-		double mT[3];
-		mat_mul(R, T, mT, 3, 3, 1);
-		RT[0] = R[0], RT[1] = R[1], RT[2] = R[2], RT[3] = -mT[0];
-		RT[4] = R[3], RT[5] = R[4], RT[6] = R[5], RT[7] = -mT[1];
-		RT[8] = R[6], RT[9] = R[7], RT[10] = R[8], RT[11] = -mT[2];
-	}
+	RT[0] = R[0], RT[1] = R[1], RT[2] = R[2], RT[3] = T[0];
+	RT[4] = R[3], RT[5] = R[4], RT[6] = R[5], RT[7] = T[1];
+	RT[8] = R[6], RT[9] = R[7], RT[10] = R[8], RT[11] = T[2];
 }
 void DesembleRT(double *R, double *T, double *RT)
 {
@@ -4627,79 +4609,8 @@ void AssembleP(double *K, double *R, double *T, double *P)
 	mat_mul(K, RT, P, 3, 3, 4);
 	return;
 }
-void AssembleP(double *K, double *RT, double *P)
-{
-	mat_mul(K, RT, P, 3, 3, 4);
-	return;
-}
 
-#define QW_ZERO 1e-6
-void Rotation2Quaternion(double *R, double *q)
-{
-	double r11 = R[0], r12 = R[1], r13 = R[2];
-	double r21 = R[3], r22 = R[4], r23 = R[5];
-	double r31 = R[6], r32 = R[7], r33 = R[8];
 
-	double qw = sqrt(abs(1.0 + r11 + r22 + r33)) / 2;
-	double qx, qy, qz;
-	if (qw > QW_ZERO)
-	{
-		qx = (r32 - r23) / 4 / qw;
-		qy = (r13 - r31) / 4 / qw;
-		qz = (r21 - r12) / 4 / qw;
-	}
-	else
-	{
-		double d = sqrt((r12*r12*r13*r13 + r12*r12*r23*r23 + r13*r13*r23*r23));
-		qx = r12*r13 / d;
-		qy = r12*r23 / d;
-		qz = r13*r23 / d;
-	}
-
-	q[0]= qw, 	q[1]= qx, q[2] = qy, q[3] = qz;
-
-	normalize(q, 4);
-}
-void Quaternion2Rotation(double *q, double *R)
-{
-	normalize(q, 4);
-
-	double qw = q[0], qx = q[1], qy = q[2], qz = q[3];
-
-	R[0] = 1.0 - 2 * qy*qy - 2 * qz*qz;
-	R[1] = 2 * qx*qy - 2 * qz*qw;
-	R[2] = 2 * qx*qz + 2 * qy*qw;
-
-	R[3] = 2 * qx*qy + 2 * qz*qw;
-	R[4] = 1.0 - 2 * qx*qx - 2 * qz*qz;
-	R[5] = 2 * qz*qy - 2 * qx*qw;
-
-	R[6] = 2 * qx*qz - 2 * qy*qw;
-	R[7] = 2 * qy*qz + 2 * qx*qw;
-	R[8] = 1.0 - 2 * qx*qx - 2 * qy*qy;
-}
-
-void QuaternionLinearInterp(double *quad1, double *quad2, double *quadi, double u)
-{
-	const double DOT_THRESHOLD = 0.9995;
-
-	double C_phi = dotProduct(quad1, quad2);
-	if (C_phi > DOT_THRESHOLD) //do linear interp
-		for (int ii = 0; ii < 4; ii++)
-			quadi[ii] = (1.0 - u)*quad1[ii] + u*quad2[ii];
-	else
-	{
-		double phi = acos(C_phi);
-		double  S_phi = sin(phi), S_1uphi = sin((1.0 - u)*phi) / S_phi, S_uphi = sin(u*phi)/ S_phi;
-		for (int ii = 0; ii < 4; ii++)
-			quadi[ii] = S_1uphi*quad1[ii] + S_uphi*quad2[ii];
-		normalize(quadi, 4);
-		if (dotProduct(quad1, quadi)<0.0)
-			for (int ii = 0; ii < 4; ii++)
-				quadi[ii] = -quadi[ii];
-	}
-	return;
-}
 
 int clickCount = 0;
 Point2i ClickPos[3];

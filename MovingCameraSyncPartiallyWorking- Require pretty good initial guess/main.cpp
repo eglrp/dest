@@ -2293,9 +2293,9 @@ int ReadTrajectory(PerCamNonRigidTrajectory *CamTraj, int nCams, int nTracks, in
 			fscanf(fp, "%lf %lf ", &u, &v);
 			fscanf(fp, "%lf %lf %lf %lf ", &x, &y, &z, &t);
 
-			x += 50.0*(1.0*rand() / RAND_MAX-0.5);
-			y += 50.0*(1.0*rand() / RAND_MAX - 0.5);
-			z += 50.0*(1.0*rand() / RAND_MAX - 0.5);
+			//x += 5.0*(1.0*rand() / RAND_MAX-0.5);
+			//y += 5.0*(1.0*rand() / RAND_MAX - 0.5);
+			//z += 5.0*(1.0*rand() / RAND_MAX - 0.5);
 
 			if (frameID == 0)
 				CamTraj[camID].F = t;
@@ -3003,6 +3003,9 @@ int TemporalOptimInterp()
 		}
 		for (int ii = 0; ii < maxPts; ii++)
 		{
+
+			if (jj == 2 && ii == 836)
+				cout << ii << endl;
 			if (ii >= CamTraj[jj].R.size())
 				continue;
 			for (int kk = 0; kk < 9; kk++)

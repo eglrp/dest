@@ -4866,6 +4866,106 @@ void NviewTriangulationRANSACDriver(CameraData *AllViewsInfo, vector<int>Selecte
 
 	return;
 }
+struct IdealReprojectionErrorSimple {
+	IdealReprojectionErrorSimple(double *Pmat, double u, double v)
+	{
+		P = Pmat, observed_x = u, observed_y = v;
+	}
+
+	template <typename T>	bool operator()(const T* const points, T* residuals) 	const
+	{
+		T numX = (T)P[0] * points[0] + (T)P[1] * points[1] + (T)P[2] * points[2] + (T)P[3];
+		T numY = (T)P[4] * points[0] + (T)P[5] * points[1] + (T)P[6] * points[2] + (T)P[7];
+		T denum = (T)P[8] * points[0] + (T)P[9] * points[1] + (T)P[10] * points[2] + (T)P[11];
+
+		residuals[0] = numX / denum - T(observed_x);
+		residuals[1] = numY / denum - T(observed_y);
+
+		return true;
+	}
+
+	static ceres::CostFunction* Create(double *Pmat, const double observed_x, const double observed_y)
+	{
+		return (new ceres::AutoDiffCostFunction<IdealReprojectionErrorSimple, 2, 3>(new IdealReprojectionErrorSimple(Pmat, observed_x, observed_y)));
+	}
+
+	double observed_x, observed_y, *P;
+};
+double IdealReprojectionErrorSimple(double *P, Point3d Point, Point2d uv)
+{
+	double numX = P[0] * Point.x + P[1] * Point.y + P[2] * Point.z + P[3];
+	double numY = P[4] * Point.x + P[5] * Point.y + P[6] * Point.z + P[7];
+	double denum = P[8] * Point.x + P[9] * Point.y + P[10] * Point.z + P[11];
+
+	double residual = sqrt(pow(numX / denum - uv.x, 2) + pow(numY / denum - uv.y, 2));
+	return residual;
+}
+void NviewTriangulationNonLinear(double *P, double *Point2D, double *Point3D, double *ReprojectionError, int nviews, int npts)
+{
+	ceres::Problem problem;
+
+	//printf("Error before: \n");
+	for (int ii = 0; ii < npts; ii++)
+	{
+		ReprojectionError[ii] = 0.0;
+		for (int jj = 0; jj < nviews; jj++)
+		{
+			ReprojectionError[ii] += IdealReprojectionErrorSimple(P + 12 * jj, Point3d(Point3D[3 * ii], Point3D[3 * ii + 1], Point3D[3 * ii + 2]), Point2d(Point2D[2 * (ii*nviews + jj)], Point2D[2 * (ii*nviews + jj) + 1]));
+			ceres::CostFunction* cost_function = IdealReprojectionErrorSimple::Create(P + 12 * jj, Point2D[2 * (ii*nviews + jj)], Point2D[2 * (ii*nviews + jj) + 1]);
+			problem.AddResidualBlock(cost_function, NULL, &Point3D[ii]);
+		}
+		ReprojectionError[ii] /= nviews;
+		//printf("%f ", ReprojectionError[ii]);
+	}
+	//printf("\n");
+
+	ceres::Solver::Options options;
+	options.num_threads = 1;
+	options.max_num_iterations = 100;
+	options.linear_solver_type = ceres::DENSE_SCHUR;
+	options.minimizer_progress_to_stdout = false;
+
+	ceres::Solver::Summary summary;
+	ceres::Solve(options, &problem, &summary);
+	//std::cout << summary.BriefReport() << "\n";
+
+	//printf("Error after: \n");
+	for (int ii = 0; ii < npts; ii++)
+	{
+		ReprojectionError[ii] = 0.0;
+		for (int jj = 0; jj < nviews; jj++)
+			ReprojectionError[ii] += IdealReprojectionErrorSimple(P + 12 * jj, Point3d(Point3D[3 * ii], Point3D[3 * ii + 1], Point3D[3 * ii + 2]), Point2d(Point2D[2 * (ii*nviews + jj)], Point2D[2 * (ii*nviews + jj) + 1]));
+		ReprojectionError[ii] /= nviews;
+		//printf("%f ", ReprojectionError[ii]);
+	}
+	//printf("\n");
+
+	return;
+}
+double MinDistanceTwoLines(double *P0, double *u, double *Q0, double *v, double &s, double &t)
+{
+	//http://geomalgorithms.com/a07-_distance.html
+	double w0[] = { P0[0] - Q0[0], P0[1] - Q0[1], P0[2] - Q0[2] };
+	double a = dotProduct(u, u), b = dotProduct(u, v), c = dotProduct(v, v), d = dotProduct(u, w0), e = dotProduct(v, w0);
+	double denum = a*c - b*b;
+
+	double distance = 0.0;
+	if (denum < 0.00001)//Near parallel line
+	{
+		s = 0.0, t = d / b;
+		double Q[] = { Q0[0] + t*v[0], Q0[1] + t*v[1], Q0[2] + t*v[2] };
+		distance = sqrt(pow(P0[0] - Q[0], 2) + pow(P0[1] - Q[1], 2) + pow(P0[2] - Q[2], 2));
+	}
+	else
+	{
+		s = (b*e - c*d) / denum, t = (a*e - b*d) / denum;
+		double P[] = { P0[0] + s*u[0], P0[1] + s*u[1], P0[2] + s*u[2] };
+		double Q[] = { Q0[0] + t*v[0], Q0[1] + t*v[1], Q0[2] + t*v[2] };
+		distance = sqrt(pow(P[0] - Q[0], 2) + pow(P[1] - Q[1], 2) + pow(P[2] - Q[2], 2));
+	}
+
+	return distance;
+}
 
 template <typename Type>void Normalize(Point3_<Type>& vect)
 {
@@ -5281,7 +5381,6 @@ struct IdealReprojectionError {
 		return true;
 	}
 
-	// Factory to hide the construction of the CostFunction object from the client code.
 	static ceres::CostFunction* Create(const double observed_x, const double observed_y)
 	{
 		return (new ceres::AutoDiffCostFunction<IdealReprojectionError, 2, 5, 6, 3>(new IdealReprojectionError(observed_x, observed_y)));
@@ -5335,7 +5434,6 @@ struct FOVReprojectionError {
 		return true;
 	}
 
-	// Factory to hide the construction of the CostFunction object from the client code.
 	static ceres::CostFunction* Create(const double observed_x, const double observed_y)
 	{
 		return (new ceres::AutoDiffCostFunction<FOVReprojectionError, 2, 5, 3, 3, 3>(new FOVReprojectionError(observed_x, observed_y)));

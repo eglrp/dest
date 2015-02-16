@@ -106,6 +106,8 @@ bool IsFiniteNumber(double x);
 double UniformNoise(double High, double Low);
 double gaussian_noise(double mean, double std);
 
+double L1norm(vector<double>A);
+double L2norm(double *A, int dim);
 float MeanArray(float *data, int length);
 double MeanArray(double *data, int length);
 double VarianceArray(double *data, int length, double mean = NULL);

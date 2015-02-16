@@ -311,6 +311,13 @@ double L1norm(vector<double>A)
 		res += abs(A[ii]);
 	return res;
 }
+double L2norm(double *A, int dim)
+{
+	double res = 0.0;
+	for (int ii = 0; ii < dim; ii++)
+		res += A[ii]*A[ii];
+	return sqrt(res);
+}
 void normalize(double *x, int dim)
 {
 	double tt = 0;

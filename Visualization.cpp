@@ -13,7 +13,7 @@ static bool g_bButton1Down = false;
 static GLfloat g_ratio;
 static GLfloat g_fViewDistance = 200 * VIEWING_DISTANCE_MIN;
 static GLfloat g_nearPlane = 1.0, g_farPlane = 30000;
-float g_coordAxisLength = 300.f;
+float g_coordAxisLength = 1000.f;
 static int g_Width = 1280, g_Height = 1024;
 static int g_xClick = 0, g_yClick = 0;
 static int g_mouseYRotate = 0, g_mouseXRotate = 0;
@@ -314,7 +314,7 @@ void RenderObjects()
 			float CameraColor[3] = { 1, 0, 0 };
 			float* centerPt = g_vis.glCameraInfo[j].camCenter;
 			GLfloat* R = g_vis.glCameraInfo[j].Rgl;
-			
+
 			glLoadName(j);//for picking purpose
 			glPushMatrix();
 			glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
@@ -459,7 +459,7 @@ void SelectionFunction(int x, int y, bool append_rightClick = false)
 			for (int ii = 0; ii < PickedPoints.size(); ii++)
 				if (pickedID == PickedPoints[ii])
 				{
-				already = true; break;
+					already = true; break;
 				}
 
 			if (!already)
@@ -478,7 +478,7 @@ void SelectionFunction(int x, int y, bool append_rightClick = false)
 		for (int ii = 0; ii < PickedTraject.size(); ii++)
 			if (pickedID == PickedTraject[ii])
 			{
-			already = true; break;
+				already = true; break;
 			}
 
 		if (!already)
@@ -532,8 +532,8 @@ void SpecialInput(int key, int x, int y)
 		if (timeID < minTime)
 			timeID = minTime;
 
-		//if (timeID < -8)
-		//	timeID = -8;
+		//if (timeID < 0)
+		//	timeID = 0;
 		//ReadCurrentTrajectory2(Path, timeID);
 		break;
 	case GLUT_KEY_RIGHT:
@@ -541,8 +541,8 @@ void SpecialInput(int key, int x, int y)
 		if (timeID > maxTime)
 			timeID = maxTime;
 
-		//if (timeID > 8)
-		//	timeID = 8;
+		//if (timeID > 500)
+		//	timeID = 500;
 		//ReadCurrentTrajectory2(Path, timeID);
 		glutPostRedisplay();
 		break;
@@ -584,6 +584,13 @@ void MouseButton(int button, int state, int x, int y)
 		if (glutGetModifiers() == GLUT_ACTIVE_ALT)//Deselect
 			PickedPoints.clear(), PickCams.clear(), PickedTraject.clear();
 	}
+	else if (button == GLUT_MIDDLE_BUTTON)
+	{
+		g_xClick = x;
+		g_yClick = y;
+		g_bButton1Down = true;
+		g_camMode = CAM_ZOOM;
+	}
 }
 void MouseMotion(int x, int y)
 {
@@ -598,7 +605,7 @@ void MouseMotion(int x, int y)
 		}
 		else if (g_camMode == CAM_PAN)
 		{
-			g_mouseXPan += (x - g_xClick);
+			g_mouseXPan -= (x - g_xClick);
 			g_mouseYPan -= (y - g_yClick);
 		}
 
@@ -669,8 +676,8 @@ int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, b
 	{
 		drawTraject3D = true;
 		ReadCurrent3DGL(Path, drawPointColor, drawPatchNormal, CurrentTime, true);
-		//ReadCurrentTrajectory(Path, CurrentTime);
-		//ReadCurrentTrajectory2(Path, CurrentTime - 1);
+		ReadCurrentTrajectory(Path, CurrentTime);
+		//ReadCurrentTrajectory2(Path, CurrentTime);
 		//ReadCurrentTrajectory3(Path, CurrentTime);
 		//ReadCurrentTrajectory4(Path, CurrentTime);
 		//ReadCurrentTrajectory5(Path, CurrentTime);
@@ -928,22 +935,31 @@ void ReadCurrentTrajectory(char *path, int timeID)
 	char Fname[200];
 	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
 	//sprintf(Fname, "%s/Traject3D/Track_1.txt", path); FILE *fp = fopen(Fname, "r");
-	sprintf(Fname, "C:/temp/iGT.txt"); FILE *fp = fopen(Fname, "r");
+	sprintf(Fname, "C:/temp/i1.txt"); FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
 		printf("Cannot load %s\n", Fname);
 		return;
 	}
-	int npts = 1, currentTime = 1, ntracks = 2489;
+	int npts = 1, currentTime = 1, ntracks = 1640;
 	//fscanf(fp, "%s %d", Fname, &npts);
 	for (int ii = 0; ii < npts; ii++)
 	{
 		//fscanf(fp, "%d %d", &currentTime, &ntracks);
 		Trajectory3D *track3D = new Trajectory3D[ntracks];
+		double mX = 0.0, mY = 0.0, mZ = 0.0;
 		for (int jj = 0; jj < ntracks; jj++)
 		{
 			track3D[jj].timeID = currentTime + jj;
 			fscanf(fp, "%lf %lf %lf ", &track3D[jj].WC.x, &track3D[jj].WC.y, &track3D[jj].WC.z);
+			mX += track3D[jj].WC.x, mY += track3D[jj].WC.y, mZ += track3D[jj].WC.z;
+		}
+		mX = mX / ntracks, mY = mY / ntracks, mZ = mZ / ntracks;
+		for (int jj = 0; jj < ntracks; jj++)
+		{
+			track3D[jj].WC.x = 1.0*(track3D[jj].WC.x - mX) + mX;
+			track3D[jj].WC.y = 1.0*(track3D[jj].WC.y - mY) + mY;
+			track3D[jj].WC.z = 1.0*(track3D[jj].WC.z - mZ) + mZ;
 		}
 		g_vis.Track3DLength.push_back(ntracks);
 		g_vis.Traject3D.push_back(track3D);
@@ -959,13 +975,13 @@ void ReadCurrentTrajectory2(char *path, int timeID)
 	g_vis.Track3DLength2.clear();
 	g_vis.Traject3D2.clear();
 	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	sprintf(Fname, "C:/temp/Fil_%d.txt", timeID); FILE *fp = fopen(Fname, "r");
+	sprintf(Fname, "C:/temp/xyz_%d_2.txt", timeID); FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
 		printf("Cannot load %s\n", Fname);
 		return;
 	}
-	int npts = 1, currentTime = 1, ntracks = 2483;
+	int npts = 1, currentTime = 1, ntracks = 800;
 	//fscanf(fp, "%s %d", Fname, &npts);
 	for (int ii = 0; ii < npts; ii++)
 	{

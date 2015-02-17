@@ -2577,188 +2577,164 @@ double ComputeSmoothnessCost(vector<Point3d> traj, vector<double>Time, double ep
 	}
 	return Cost;
 }
+void RecursiveUpdateCameraOffset(int *currentOffset, int BruteForceTimeWindow, int currentCam, int nCams)
+{
+	if (currentOffset[currentCam] > BruteForceTimeWindow)
+	{
+		currentOffset[currentCam] = -BruteForceTimeWindow;
+		if (currentCam < nCams - 1)
+			currentOffset[currentCam + 1] ++;
+		RecursiveUpdateCameraOffset(currentOffset, BruteForceTimeWindow, currentCam + 1, nCams);
+	}
+
+	return;
+}
 int TestSmothnessConstraint()
 {
-	const int nCams = 3, nTracks = 13, gtOff = 3, gtOff2 = -8;
+	char Fname[200];
+
+	const int nCams = 2, nTracks = 13, BruteForceTimeWindow = 20;
 	const double Tscale = 1000.0, ialpha = 0.02; //1/50
-	
+
 	vector<Point3d> XYZ, xyz1, xyz2, xyz3, Traj;
 	vector<double>Time;
 	double T[2000];
 	int ID[2000], XYZ_ID[2000], offsetID[2000];
 	Point3d XYZAll[2000];
 
+	int gtOff[nCams] = { 0, 0 };
+	int PerCam_nf[nCams];
+	vector<Point3d> *PerCam_XYZ = new vector<Point3d>[nCams];
+
 	int syncUncertainty = 2;
 	double eps = 1.0e0, rate = (2.0 * syncUncertainty + 1)* nCams;
-	for (int KNN = 1; KNN <= 1; KNN++)
+
+
+	const int nCostEdgeLength = 2 * BruteForceTimeWindow + 1, nCostSize = pow(2 * BruteForceTimeWindow + 1, (nCams - 1));
+	double *AllCost = new double[nCostSize];
+	for (int ii = 0; ii < nCostSize; ii++)
+		AllCost[ii] = 0.0;
+
+	for (int trackID = 1; trackID <= nTracks; trackID++)
 	{
-		char Fname[200];
-		sprintf(Fname, "C:/temp/cost%d.txt", KNN);
-		FILE *fp2 = fopen(Fname, "w+");
+		double x, y, z;
+		XYZ.clear();
+		sprintf(Fname, "C:/temp/Sim/i%d.txt", trackID); FILE *fp = fopen(Fname, "r");
+		while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
+			XYZ.push_back(Point3d(x, y, z));
+		fclose(fp);
+		int nf = XYZ.size();
 
-		for (int offset = -20; offset <= 20; offset++)
+		for (int ii = 0; ii < nCams; ii++)
 		{
-			for (int offset2 = -20; offset2 <= 20; offset2++)
+			PerCam_XYZ[ii].clear();
+			for (int jj = 0; jj < nf; jj += (2 * syncUncertainty + 1)* nCams)
 			{
-				double Cost = 0.0;
-				for (int trackID = 1; trackID <= nTracks; trackID++)
-				{
-					double x, y, z;
-					XYZ.clear();
-					sprintf(Fname, "C:/temp/Sim/i%d.txt", trackID); FILE *fp = fopen(Fname, "r");
-					while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
-						XYZ.push_back(Point3d(x, y, z));
-					fclose(fp);
-					int nf = XYZ.size();
+				int tid = jj + (2 * syncUncertainty + 1)* ii;
+				if (tid >= nf)
+					continue;
+				PerCam_XYZ[ii].push_back(XYZ[tid + gtOff[ii]]);
+			}
+		}
+		for (int ii = 0; ii < nCams; ii++)
+			PerCam_nf[ii] = PerCam_XYZ[ii].size();
 
-					xyz1.clear(), xyz2.clear(), xyz3.clear();
-					for (int ii = 0; ii < nCams; ii++)
+		int currentOffset[nCams], cumframe;
+		for (int kk = 1; kk < nCams; kk++)
+			currentOffset[kk] = -BruteForceTimeWindow;
+
+		int count = 0;
+		while (true)
+		{
+			//Assemble trajactory and time from all Cameras
+			cumframe = 0;
+			for (int kk = 0; kk < nCams; kk++)
+			{
+				if (kk == 0)
+				{
+					for (int ii = 0; ii < PerCam_nf[kk]; ii++)
 					{
-						int count = 0;
-						for (int jj = 0; jj < nf; jj += (2 * syncUncertainty + 1)* nCams)
+						T[ii + cumframe] = 1.0*gtOff[kk] * ialpha*Tscale + 1.0*ii*ialpha*Tscale*rate;
+						ID[ii + cumframe] = ii + cumframe;
+						XYZ_ID[ii + cumframe] = ii;
+						offsetID[ii + cumframe] = gtOff[kk];
+						XYZAll[ii + cumframe] = PerCam_XYZ[kk][ii];
+					}
+					cumframe += PerCam_nf[kk];
+					continue;
+				}
+				else
+				{
+					for (int offset = -BruteForceTimeWindow; offset <= BruteForceTimeWindow; offset++)
+					{
+						if (offset != currentOffset[kk])
+							continue;
+
+						for (int ii = 0; ii < PerCam_nf[kk]; ii++)
 						{
-							int tid = jj + (2 * syncUncertainty + 1)* ii;
-							if (tid >= nf)
-								continue;
-							if (ii == 0)
-								xyz1.push_back(XYZ[tid]);
-							else if (ii == 1)
-								xyz2.push_back(XYZ[tid + gtOff]);
-							else
-								xyz3.push_back(XYZ[tid + gtOff2]);
+							T[ii + cumframe] = 1.0*offset * ialpha*Tscale + 1.0*ii*ialpha*Tscale*rate;
+							ID[ii + cumframe] = ii + cumframe;
+							XYZ_ID[ii + cumframe] = ii;
+							offsetID[ii + cumframe] = offset;
+							XYZAll[ii + cumframe] = PerCam_XYZ[kk][ii];
 						}
 					}
 
-					//Assemble time
-					int nf1 = xyz1.size(), nf2 = xyz2.size(), nf3 = xyz3.size();
-					for (int ii = 0; ii < nf1; ii++)
-					{
-						T[ii] = 1.0*0.0*ialpha*Tscale + 1.0*ii*ialpha*Tscale*rate;
-						XYZ_ID[ii] = ii;
-						ID[ii] = ii;
-						offsetID[ii] = 0;
-						XYZAll[ii] = xyz1[ii];
-					}
-					for (int ii = 0; ii < nf2; ii++)
-					{
-						T[ii + nf1] = 1.0*offset*ialpha*Tscale + 1.0*ii*ialpha*Tscale*rate;
-						ID[ii + nf1] = ii + nf1;
-						XYZ_ID[ii + nf1] = ii;
-						offsetID[ii + nf1] = offset;
-						XYZAll[ii + nf1] = xyz2[ii];
-					}
-					for (int ii = 0; ii < nf3; ii++)
-					{
-						T[ii + nf1 + nf2] = 1.0*offset2*ialpha*Tscale + 1.0*ii*ialpha*Tscale*rate;
-						ID[ii + nf1 + nf2] = ii + nf1 + nf2;
-						XYZ_ID[ii + nf1 + nf2] = ii;
-						offsetID[ii + nf1 + nf2] = offset2;
-						XYZAll[ii + nf1 + nf2] = xyz3[ii];
-					}
-					Quick_Sort_Double(T, ID, 0, nf1 + nf2 + nf3 - 1);
-
-					double cost = 0.0, T1, T2;
-					Point3d XYZ1, XYZ2;
-
-					Traj.clear(); Time.clear();
-					for (int ii = 0; ii < nf1 + nf2 + nf3; ii++)
-					{
-						int id = ID[ii];
-						T1 = 1.0*offsetID[id] * ialpha*Tscale + 1.0*XYZ_ID[id] * ialpha*Tscale*rate;
-						XYZ1 = XYZAll[id];
-
-						Traj.push_back(XYZ1);
-						Time.push_back(T1);
-					}
-
-					Cost += ComputeSmoothnessCost(Traj, Time, eps);
+					cumframe += PerCam_nf[kk];
 				}
-				fprintf(fp2, "%d %d %.16f\n", offset, offset2, Cost);
 			}
+
+			//Arrange in time order
+			Quick_Sort_Double(T, ID, 0, cumframe - 1);
+
+			Traj.clear(); Time.clear();
+			for (int ii = 0; ii < cumframe; ii++)
+			{
+				int id = ID[ii];
+				double T = 1.0*offsetID[id] * ialpha*Tscale + 1.0*XYZ_ID[id] * ialpha*Tscale*rate;
+				Point3d XYZ = XYZAll[id];
+
+				Traj.push_back(XYZ);
+				Time.push_back(T);
+			}
+
+			//Compute energy
+			AllCost[count] += ComputeSmoothnessCost(Traj, Time, eps);
+
+			currentOffset[1]++;
+			RecursiveUpdateCameraOffset(currentOffset, BruteForceTimeWindow, 1, nCams);
+
+			count++;
+			if (count == nCostSize)
+				break;
 		}
-		fclose(fp2);
 	}
 
-	/*for (int KNN = 1; KNN <= 1; KNN++)
-	{
-	char Fname[200];
-	sprintf(Fname, "C:/temp/cost%d.txt", KNN);
-	FILE *fp2 = fopen(Fname, "w+");
+	//Parse the Cost into offset and print
+	int currentOffset[nCams], cumframe, count = 0;
+	for (int kk = 1; kk < nCams; kk++)
+		currentOffset[kk] = -BruteForceTimeWindow;
 
-	for (int offset =-20; offset <= 20; offset++)
+	sprintf(Fname, "C:/temp/cost.txt");  FILE *fp = fopen(Fname, "w+");
+	while (true)
 	{
-	double Cost = 0.0;
-	for (int trackID = 1; trackID <= nTracks; trackID++)
-	{
-	double x, y, z;
-	vector<Point3d> XYZ;
-	sprintf(Fname, "C:/temp/Sim/i%d.txt", trackID); FILE *fp = fopen(Fname, "r");
-	while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
-	XYZ.push_back(Point3d(x, y, z));
+		for (int kk = 1; kk < nCams; kk++)
+			fprintf(fp, "%d ", currentOffset[kk]);
+		fprintf(fp, "%.16f\n", AllCost[count]);
+
+		currentOffset[1]++;
+		RecursiveUpdateCameraOffset(currentOffset, BruteForceTimeWindow, 1, nCams);
+
+		count++;
+		if (count == nCostSize)
+			break;
+	}
 	fclose(fp);
-	int nf = XYZ.size();
 
-	vector<Point3d> xyz1, xyz2;
 	for (int ii = 0; ii < nCams; ii++)
-	{
-	int count = 0;
-	for (int jj = 0; jj < nf; jj += (2 * syncUncertainty + 1)* nCams)
-	{
-	int tid = jj + (2 * syncUncertainty + 1)* ii;
-	if (tid >= nf)
-	continue;
-	if (ii == 0)
-	xyz1.push_back(XYZ[tid]);
-	else
-	xyz2.push_back(XYZ[tid + gtOff]);
-	}
-	}
-
-	//Assemble time
-	double T[2000];
-	int ID[2000];
-
-	int nf1 = xyz1.size(), nf2 = xyz2.size();
-	for (int ii = 0; ii < nf1; ii++)
-	{
-	T[ii] = 1.0*0.0*ialpha*Tscale + 1.0*ii*ialpha*Tscale*rate;
-	ID[ii] = ii;
-	}
-	for (int ii = 0; ii < nf2; ii++)
-	{
-	T[ii + nf1] = 1.0*offset*ialpha*Tscale   +1.0*ii*ialpha*Tscale*rate;
-	ID[ii + nf1] = ii + nf1;
-	}
-	Quick_Sort_Double(T, ID, 0, nf1 + nf2 - 1);
-
-	double cost = 0.0, T1, T2;
-	Point3d XYZ1, XYZ2;
-
-	vector<Point3d> Traj;
-	vector<double>Time;
-	for (int ii = 0; ii < nf1 + nf2; ii++)
-	{
-	if (ID[ii] >= nf1)
-	{
-	T1 = 1.0*offset*ialpha*Tscale + 1.0*(ID[ii] - nf1)*ialpha*Tscale*rate;
-	XYZ1 = xyz2[ID[ii] - nf1];
-	}
-	else
-	{
-	T1 = 1.0*0.0*ialpha*Tscale + 1.0*ID[ii] * ialpha*Tscale*rate;
-	XYZ1 = xyz1[ID[ii]];
-	}
-
-	Traj.push_back(XYZ1);
-	Time.push_back(T1);
-	}
-
-	Cost += ComputeSmoothnessCost(Traj, Time, eps);
-	}
-	fprintf(fp2, "%.2f %.16f\n", 1.0*offset, Cost);
-	}
-	fclose(fp2);
-	}*/
+		PerCam_XYZ[ii].clear();
+	delete[]PerCam_XYZ;
+	delete[]AllCost;
 
 	return 0;
 }

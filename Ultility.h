@@ -131,8 +131,12 @@ void mat_add(double *aa, double *bb, double* cc, int row, int col, double scale_
 void mat_subtract(double *aa, double *bb, double* cc, int row, int col, double scale_a = 1.0, double scale_b = 1.0);
 void mat_transpose(double *in, double *out, int row_in, int col_in);
 void mat_completeSym(double *mat, int size, bool upper = true);
-void Rodrigues_trans(double *RT_vec, double *R_mat, bool vec2mat, double *dR_dm = NULL);
 
+template <class myType>void RemoveEleFromArray(myType *Array, int neles, int eleID)
+{
+	for (int i = eleID; i < neles - 1; i++)
+		Array[i] = Array[i + 1];
+}
 
 void LS_Solution_Double(double *lpA, double *lpB, int m, int n);
 void QR_Solution_Double(double *lpA, double *lpB, int m, int n);
@@ -535,6 +539,7 @@ void CopyCamereInfo(CameraData Src, CameraData &Dst, bool Extrinsic = true);
 void Rotation2Quaternion(double *R, double *q);
 void Quaternion2Rotation(double *q, double *R);
 void QuaternionLinearInterp(double *quad1, double *quad2, double *quadi, double u);
+void Rodrigues_trans(double *RT_vec, double *R_mat, bool vec2mat, double *dR_dm = NULL);
 
 double DistanceOfTwoPointsSfM(char *Path, int id1, int id2, int id3);
 

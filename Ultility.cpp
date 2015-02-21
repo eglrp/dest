@@ -315,7 +315,7 @@ double L2norm(double *A, int dim)
 {
 	double res = 0.0;
 	for (int ii = 0; ii < dim; ii++)
-		res += A[ii]*A[ii];
+		res += A[ii] * A[ii];
 	return sqrt(res);
 }
 void normalize(double *x, int dim)
@@ -2835,8 +2835,8 @@ bool WriteDescriptorBinary(char *fn, Mat descriptor, bool silent)
 	for (int j = 0; j < npts; ++j)
 		for (int i = 0; i < descriptorSize; i++)
 		{
-		float x = descriptor.at<float>(j, i);
-		fout.write(reinterpret_cast<char *>(&x), sizeof(float));
+			float x = descriptor.at<float>(j, i);
+			fout.write(reinterpret_cast<char *>(&x), sizeof(float));
 		}
 	fout.close();
 
@@ -3305,16 +3305,16 @@ void ResizeImage(unsigned char *Image, unsigned char *OutImage, int width, int h
 	for (int kk = 0; kk < nchannels; kk++)
 		for (int jj = 0; jj < nheight; jj++)
 		{
-		for (int ii = 0; ii<nwidth; ii++)
-		{
-			Get_Value_Spline(InPara + kk*length, width, height, 1.0*ii / Rfactor, 1.0*jj / Rfactor, S, -1, InterpAlgo);
-			if (S[0]>255.0)
-				OutImage[ii + jj*nwidth + kk*nlength] = 255;
-			else if (S[0] < 0.0)
-				OutImage[ii + jj*nwidth + kk*nlength] = 0;
-			else
-				OutImage[ii + jj*nwidth + kk*nlength] = (unsigned char)(int)(S[0] + 0.5);
-		}
+			for (int ii = 0; ii<nwidth; ii++)
+			{
+				Get_Value_Spline(InPara + kk*length, width, height, 1.0*ii / Rfactor, 1.0*jj / Rfactor, S, -1, InterpAlgo);
+				if (S[0]>255.0)
+					OutImage[ii + jj*nwidth + kk*nlength] = 255;
+				else if (S[0] < 0.0)
+					OutImage[ii + jj*nwidth + kk*nlength] = 0;
+				else
+					OutImage[ii + jj*nwidth + kk*nlength] = (unsigned char)(int)(S[0] + 0.5);
+			}
 		}
 
 	if (createMem)
@@ -3339,16 +3339,16 @@ void ResizeImage(float *Image, float *OutImage, int width, int height, int nchan
 	for (int kk = 0; kk < nchannels; kk++)
 		for (int jj = 0; jj < nheight; jj++)
 		{
-		for (int ii = 0; ii<nwidth; ii++)
-		{
-			Get_Value_Spline(InPara + kk*length, width, height, 1.0*ii / Rfactor, 1.0*jj / Rfactor, S, -1, InterpAlgo);
-			if (S[0]>255.0)
-				OutImage[ii + jj*nwidth + kk*nlength] = 255;
-			else if (S[0] < 0.0)
-				OutImage[ii + jj*nwidth + kk*nlength] = 0;
-			else
-				OutImage[ii + jj*nwidth + kk*nlength] = (float)S[0];
-		}
+			for (int ii = 0; ii<nwidth; ii++)
+			{
+				Get_Value_Spline(InPara + kk*length, width, height, 1.0*ii / Rfactor, 1.0*jj / Rfactor, S, -1, InterpAlgo);
+				if (S[0]>255.0)
+					OutImage[ii + jj*nwidth + kk*nlength] = 255;
+				else if (S[0] < 0.0)
+					OutImage[ii + jj*nwidth + kk*nlength] = 0;
+				else
+					OutImage[ii + jj*nwidth + kk*nlength] = (float)S[0];
+			}
 		}
 
 	if (createMem)
@@ -3373,16 +3373,16 @@ void ResizeImage(double *Image, double *OutImage, int width, int height, int nch
 	for (int kk = 0; kk < nchannels; kk++)
 		for (int jj = 0; jj < nheight; jj++)
 		{
-		for (int ii = 0; ii<nwidth; ii++)
-		{
-			Get_Value_Spline(InPara + kk*length, width, height, 1.0*ii / Rfactor, 1.0*jj / Rfactor, S, -1, InterpAlgo);
-			if (S[0]>255.0)
-				OutImage[ii + jj*nwidth + kk*nlength] = 255;
-			else if (S[0] < 0.0)
-				OutImage[ii + jj*nwidth + kk*nlength] = 0;
-			else
-				OutImage[ii + jj*nwidth + kk*nlength] = S[0];
-		}
+			for (int ii = 0; ii<nwidth; ii++)
+			{
+				Get_Value_Spline(InPara + kk*length, width, height, 1.0*ii / Rfactor, 1.0*jj / Rfactor, S, -1, InterpAlgo);
+				if (S[0]>255.0)
+					OutImage[ii + jj*nwidth + kk*nlength] = 255;
+				else if (S[0] < 0.0)
+					OutImage[ii + jj*nwidth + kk*nlength] = 0;
+				else
+					OutImage[ii + jj*nwidth + kk*nlength] = S[0];
+			}
 		}
 
 	if (createMem)
@@ -3424,19 +3424,19 @@ void ConvertToHeatMap(double *Map, unsigned char *ColorMap, int width, int heigh
 		for (jj = 0; jj < height; jj++)
 			for (ii = 0; ii < width; ii++)
 			{
-			if (mask[ii + jj*width])
-			{
-				ColorMap[3 * ii + 3 * jj*width] = 0;
-				ColorMap[3 * ii + 3 * jj*width + 1] = 0;
-				ColorMap[3 * ii + 3 * jj*width + 2] = 0;
-			}
-			else
-			{
-				gray = Map[ii + jj*width];
-				ColorMap[3 * ii + 3 * jj*width] = (unsigned char)(int)(255.0*red(gray) + 0.5);
-				ColorMap[3 * ii + 3 * jj*width + 1] = (unsigned char)(int)(255.0*green(gray) + 0.5);
-				ColorMap[3 * ii + 3 * jj*width + 2] = (unsigned char)(int)(255.0*blue(gray) + 0.5);
-			}
+				if (mask[ii + jj*width])
+				{
+					ColorMap[3 * ii + 3 * jj*width] = 0;
+					ColorMap[3 * ii + 3 * jj*width + 1] = 0;
+					ColorMap[3 * ii + 3 * jj*width + 2] = 0;
+				}
+				else
+				{
+					gray = Map[ii + jj*width];
+					ColorMap[3 * ii + 3 * jj*width] = (unsigned char)(int)(255.0*red(gray) + 0.5);
+					ColorMap[3 * ii + 3 * jj*width + 1] = (unsigned char)(int)(255.0*green(gray) + 0.5);
+					ColorMap[3 * ii + 3 * jj*width + 2] = (unsigned char)(int)(255.0*blue(gray) + 0.5);
+				}
 			}
 	}
 	else
@@ -3444,10 +3444,10 @@ void ConvertToHeatMap(double *Map, unsigned char *ColorMap, int width, int heigh
 		for (jj = 0; jj < height; jj++)
 			for (ii = 0; ii < width; ii++)
 			{
-			gray = Map[ii + jj*width];
-			ColorMap[3 * ii + 3 * jj*width] = (unsigned char)(int)(255.0*red(gray) + 0.5);
-			ColorMap[3 * ii + 3 * jj*width + 1] = (unsigned char)(int)(255.0*green(gray) + 0.5);
-			ColorMap[3 * ii + 3 * jj*width + 2] = (unsigned char)(int)(255.0*blue(gray) + 0.5);
+				gray = Map[ii + jj*width];
+				ColorMap[3 * ii + 3 * jj*width] = (unsigned char)(int)(255.0*red(gray) + 0.5);
+				ColorMap[3 * ii + 3 * jj*width + 1] = (unsigned char)(int)(255.0*green(gray) + 0.5);
+				ColorMap[3 * ii + 3 * jj*width + 2] = (unsigned char)(int)(255.0*blue(gray) + 0.5);
 			}
 	}
 
@@ -4663,7 +4663,7 @@ void Rotation2Quaternion(double *R, double *q)
 		qz = r13*r23 / d;
 	}
 
-	q[0]= qw, 	q[1]= qx, q[2] = qy, q[3] = qz;
+	q[0] = qw, q[1] = qx, q[2] = qy, q[3] = qz;
 
 	normalize(q, 4);
 }
@@ -4697,11 +4697,11 @@ void QuaternionLinearInterp(double *quad1, double *quad2, double *quadi, double 
 	else
 	{
 		double phi = acos(C_phi);
-		double  S_phi = sin(phi), S_1uphi = sin((1.0 - u)*phi) / S_phi, S_uphi = sin(u*phi)/ S_phi;
+		double  S_phi = sin(phi), S_1uphi = sin((1.0 - u)*phi) / S_phi, S_uphi = sin(u*phi) / S_phi;
 		for (int ii = 0; ii < 4; ii++)
 			quadi[ii] = S_1uphi*quad1[ii] + S_uphi*quad2[ii];
 		normalize(quadi, 4);
-		if (dotProduct(quad1, quadi)<0.0)
+		if (dotProduct(quad1, quadi) < 0.0)
 			for (int ii = 0; ii < 4; ii++)
 				quadi[ii] = -quadi[ii];
 	}

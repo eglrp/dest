@@ -94,6 +94,16 @@ struct Trajectory2D
 	vector<float>angle;
 };
 
+struct ImgARayCenter
+{
+	Point2d imgpt;
+	double ray[3], cc[3], d;
+};
+struct XYZD
+{
+	Point3d xyz;
+	double d;
+};
 struct Pmat
 {
 	double P[12];

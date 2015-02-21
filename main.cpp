@@ -3620,7 +3620,7 @@ struct SyncReconErrorCeres2 {
 
 		residuals[0] = sqrt((difX*difX + difY*difY + difZ*difZ) / abs(t2 - t1 + (T)epsilon));
 		if (isnan(residuals[0]) || isinf(residuals[0]))
-			int a= 0;
+			int a = 0;
 
 		return true;
 	}
@@ -3654,58 +3654,43 @@ double SyncReconError(double *depth, double *timeStamp1, double *timeStamp2, dou
 }
 int TestLeastActionConstraint3(int nCams, double stdev, int actionID)
 {
+	srand(time(NULL));
+	bool save3D = false;
 	int gtOff[] = { 0, 3, 1, 9, 8 };
-	double currentOffset[5] = { 0.0, 3.0, 1.0, 9.0, 8.0 };
+	double currentOffset[5] = { 0.0, 6.0, 0.5, 7.0, 8.0 };
 
-	int nRep = 1;
+	const int ntracks = 13;
+	const double Tscale = 1000.0, ialpha = 0.02, rate = 10, eps = 1.0e0;
+
 	char Fname[200];
-	vector<char*> str;
-	str.push_back("s"), str.push_back("f"), str.push_back("d");
+	vector<char*> str; str.push_back("s"), str.push_back("f"), str.push_back("d");
 	VideoData AllVideoInfo;
 	if (ReadVideoData("E:/Phuong", AllVideoInfo, 5, 1, 500) == 1)
 		return 1;
 	int nframes = max(MaxnFrame, 3000);
-	double P[12];
+	double P[12], Cost = 0.0;
 
-	srand(time(NULL));
-	const int ntracks = 1, BruteForceTimeWindow = 10;
-	const double Tscale = 1000.0, ialpha = 0.02; //1/50
-
-	vector<Point2d> uv;
-	vector<int> ViewerList;
-	vector<XYZD> XYZ, XYZBK, Traj;
-	vector<ImgARayCenter> Traj2D;
-	vector<double>Time;
-	Point3d XYZAll[2000];
-
-	//******************
 	int currentFrame[5], PerCam_nf[5], SortID[5];
 	double currentOffsetBK[5];
-	//******************
 
+
+	vector<double*> AllDepth(ntracks);
 	vector<int>VectorCamID, VectorFrameID;
-	vector<ImgARayCenter> *PerCam_UV_All = new vector<ImgARayCenter>[nCams];
-	vector<ImgARayCenter> *PerCam_UV = new vector<ImgARayCenter>[nCams];
-	vector<XYZD> *PerCam_XYZ = new vector<XYZD>[nCams];
-
-	const double eps = 1.0e0, rate = 10;
-	const int nCostEdgeLength = 2 * BruteForceTimeWindow + 1, nCostSize = pow(2 * BruteForceTimeWindow + 1, (nCams - 1));
-	double *AllCost = new double[nCostSize];
+	vector<ImgARayCenter> *PerCam_UV_All = new vector<ImgARayCenter>[nCams], *PerCam_UV = new vector<ImgARayCenter>[nCams], Traj2DAll[ntracks];
+	vector<XYZD> *PerCam_XYZ = new vector<XYZD>[nCams], XYZ, XYZBK;
 
 	//Make sure that no gtOff is smaller than 0
 	for (int ii = 0; ii < nCams; ii++)
 		if (rate*ii + gtOff[ii] < 0)
 			gtOff[ii] += rate;
 
-	for (int ii = 0; ii < nCostSize; ii++)
-		AllCost[ii] = 0.0;
-	for (int trackID = 1; trackID <= ntracks; trackID++)
+	ceres::Problem problem;
+	for (int trackID = 0; trackID < ntracks; trackID++)
 	{
 		//Read 3D
 		double x, y, z;
 		XYZ.clear();
-		sprintf(Fname, "C:/temp/Sim/%s%d.txt", "s", trackID);
-		FILE *fp = fopen(Fname, "r");
+		sprintf(Fname, "C:/temp/Sim/%s%d.txt", "f", trackID + 1); FILE *fp = fopen(Fname, "r");
 		while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
 		{
 			XYZD t; t.xyz.x = x, t.xyz.y = y, t.xyz.z = z, t.d = 0.0;
@@ -3715,7 +3700,6 @@ int TestLeastActionConstraint3(int nCams, double stdev, int actionID)
 		int nf = XYZ.size();
 
 		//Generate 2D points
-		ViewerList.clear();
 		for (int jj = 0; jj < nCams; jj++)
 		{
 			int videoID = jj*nframes;
@@ -3746,9 +3730,7 @@ int TestLeastActionConstraint3(int nCams, double stdev, int actionID)
 				normalize(ptEle.ray);
 
 				//depth
-				double depth1 = (XYZ[ii].xyz.x - ptEle.cc[0]) / ptEle.ray[0];
-				double depth2 = (XYZ[ii].xyz.y - ptEle.cc[1]) / ptEle.ray[1];
-				double depth3 = (XYZ[ii].xyz.z - ptEle.cc[2]) / ptEle.ray[2];
+				double depth1 = (XYZ[ii].xyz.x - ptEle.cc[0]) / ptEle.ray[0], depth2 = (XYZ[ii].xyz.y - ptEle.cc[1]) / ptEle.ray[1], depth3 = (XYZ[ii].xyz.z - ptEle.cc[2]) / ptEle.ray[2];
 
 				ptEle.d = (depth1 + depth2 + depth3) / 3;
 				if (abs(ptEle.d - depth1) + abs(ptEle.d - depth2) + abs(ptEle.d - depth3) > 0.01)
@@ -3757,29 +3739,16 @@ int TestLeastActionConstraint3(int nCams, double stdev, int actionID)
 			}
 		}
 
-		//Assign 2D to cameras
-		for (int ii = 0; ii < nCams; ii++)
-		{
-			PerCam_UV[ii].clear();
-			for (int jj = 0; jj < nf; jj += rate)
-			{
-				int tid = jj + gtOff[ii];
-				if (tid >= nf || tid < 0)
-					continue;
-				PerCam_UV[ii].push_back(PerCam_UV_All[ii][tid]);
-			}
-		}
-
 		//Add noise to 3D data:
 		XYZBK.clear();
 		for (int fid = 0; fid < nf; fid++)
 		{
 			XYZBK.push_back(XYZ[fid]);
-			//XYZBK[fid].d += max(min(gaussian_noise(0.0, stdev), 3.0*stdev), -3.0*stdev);
-			//XYZBK[fid].xyz.x += max(min(gaussian_noise(0.0, stdev), 3.0*stdev), -3.0*stdev);
-			//XYZBK[fid].xyz.y += max(min(gaussian_noise(0.0, stdev), 3.0*stdev), -3.0*stdev);
-			//XYZBK[fid].xyz.z += max(min(gaussian_noise(0.0, stdev), 3.0*stdev), -3.0*stdev);
+			XYZBK[fid].xyz.x += max(min(gaussian_noise(0.0, stdev), 3.0*stdev), -3.0*stdev);
+			XYZBK[fid].xyz.y += max(min(gaussian_noise(0.0, stdev), 3.0*stdev), -3.0*stdev);
+			XYZBK[fid].xyz.z += max(min(gaussian_noise(0.0, stdev), 3.0*stdev), -3.0*stdev);
 		}
+
 		for (int camID = 0; camID < nCams; camID++)
 		{
 			int videoID = camID*nframes;
@@ -3800,15 +3769,28 @@ int TestLeastActionConstraint3(int nCams, double stdev, int actionID)
 
 				double depth = (depth1 + depth2 + depth3) / 3;
 				double depth_ = PerCam_UV_All[camID][fid].d;
-				if (abs(depth - depth_) > 10)
-					printf("Depth init error\n");
-				if (abs(depth - depth_) > 0.001)
-					int a = 0;
+				if (abs(depth - depth_) > 10.0)
+					printf("Depth init warning\n");
 				PerCam_UV_All[camID][fid].d = depth;
+			}
+		}
+		//Assign 2D to cameras
+		for (int ii = 0; ii < nCams; ii++)
+		{
+			PerCam_UV[ii].clear();
+			for (int jj = 0; jj < nf; jj += rate)
+			{
+				int tid = jj + gtOff[ii];
+				if (tid >= nf || tid < 0)
+					continue;
+				PerCam_UV[ii].push_back(PerCam_UV_All[ii][tid]);
 			}
 		}
 
 		//Assign 3D to cameras
+		if (save3D)
+			sprintf(Fname, "C:/temp/GT_xyz_%d.txt", trackID + 1), fp = fopen(Fname, "w+");
+
 		for (int ii = 0; ii < nCams; ii++)
 		{
 			PerCam_XYZ[ii].clear();
@@ -3818,19 +3800,20 @@ int TestLeastActionConstraint3(int nCams, double stdev, int actionID)
 				if (tid >= nf || tid < 0)
 					continue;
 				PerCam_XYZ[ii].push_back(XYZBK[tid]);
+				if (save3D)
+					fprintf(fp, "%f %f %f %d\n", XYZBK[tid].xyz.x, XYZBK[tid].xyz.y, XYZBK[tid].xyz.z, tid);
 			}
 		}
+		if (save3D)
+			fclose(fp);
 		for (int ii = 0; ii < nCams; ii++)
 			PerCam_nf[ii] = PerCam_XYZ[ii].size();
 
 		//Time alignment:find the order of the streams
-		Traj.clear(); Traj2D.clear(), VectorCamID.clear(), VectorFrameID.clear(), Time.clear();
+		VectorCamID.clear(), VectorFrameID.clear();
 		currentOffset[0] = 0;
 		for (int jj = 0; jj < nCams; jj++)
-		{
-			SortID[jj] = jj;
-			currentOffsetBK[jj] = currentOffset[jj];
-		}
+			SortID[jj] = jj, currentOffsetBK[jj] = currentOffset[jj];
 		Quick_Sort_Double(currentOffsetBK, SortID, 0, nCams - 1);
 
 		//Assemble trajactory and time from all Cameras
@@ -3876,9 +3859,7 @@ int TestLeastActionConstraint3(int nCams, double stdev, int actionID)
 
 					VectorFrameID.push_back(currentFrame[camID]);
 					VectorCamID.push_back(camID);
-					Time.push_back(currentTime);
-					Traj.push_back(PerCam_XYZ[camID][currentFrame[camID]]);
-					Traj2D.push_back(PerCam_UV[camID][currentFrame[camID]]);
+					Traj2DAll[trackID].push_back(PerCam_UV[camID][currentFrame[camID]]);
 					currentFrame[camID]++;
 				}
 
@@ -3893,78 +3874,97 @@ int TestLeastActionConstraint3(int nCams, double stdev, int actionID)
 				}
 			}
 		}
-		double iCost = ComputeActionEnergy(Traj, Time, eps);
 
-		ceres::Problem problem;
-
-		int npts = Traj2D.size();
-		double *Depth = new double[npts];
-		double *Time = new double[npts];
+		int npts = Traj2DAll[trackID].size();
+		AllDepth[trackID] = new double[npts];
 		for (int ll = 0; ll < npts; ll++)
-			Depth[ll] = Traj2D[ll].d;
+			AllDepth[trackID][ll] = Traj2DAll[trackID][ll].d;
 
-		double Cost = 0.0, costi;
+		double costi;
 		for (int ll = 0; ll < npts - 1; ll++)
 		{
 			int camID1 = VectorCamID[ll], camID2 = VectorCamID[ll + 1];
 			int frameID1 = VectorFrameID[ll], frameID2 = VectorFrameID[ll + 1];
 
-			costi = SyncReconError(&Depth[ll], &currentOffset[camID1], &currentOffset[camID2], Traj2D[ll].ray, Traj2D[ll + 1].ray, Traj2D[ll].cc, Traj2D[ll + 1].cc, frameID1, frameID2, ialpha, Tscale, rate, eps);
+			costi = SyncReconError(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, frameID1, frameID2, ialpha, Tscale, rate, eps);
 			Cost += costi;
-
-			ceres::CostFunction* cost_function = SyncReconErrorCeres::Create(Traj2D[ll].ray, Traj2D[ll + 1].ray, Traj2D[ll].cc, Traj2D[ll + 1].cc, VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
-			problem.AddResidualBlock(cost_function, NULL, &Depth[ll], &Depth[ll+1], &currentOffset[camID1], &currentOffset[camID2]);
-
-			//ceres::CostFunction* cost_function = SyncReconErrorCeres2::Create(Traj2D[ll].ray, Traj2D[ll + 1].ray, Traj2D[ll].cc, Traj2D[ll + 1].cc, frameID1, frameID2, ialpha, Tscale, rate, eps);
-			//problem.AddResidualBlock(cost_function, NULL, &Depth[ll], &Depth[ll + 1], &currentOffset[camID1], &currentOffset[camID2]);
+			double d1 = AllDepth[trackID][ll], d2 = AllDepth[trackID][ll+1];
+			ceres::CostFunction* cost_function = SyncReconErrorCeres::Create(Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
+			problem.AddResidualBlock(cost_function, NULL, &AllDepth[trackID][ll], &AllDepth[trackID][ll + 1], &currentOffset[camID1], &currentOffset[camID2]);
+			//ceres::CostFunction* cost_function = SyncReconErrorCeres2::Create(Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, frameID1, frameID2, ialpha, Tscale, rate, eps);
+			//problem.AddResidualBlock(cost_function, NULL, &AllDepth[trackID][ll], &AllDepth[trackID][ll + 1], &currentOffset[camID1], &currentOffset[camID2]);
 		}
-		problem.SetParameterBlockConstant(&currentOffset[0]);
-		printf("Cost before: %f\n", Cost);
+	}
 
-		//printf("Running optim..\n");
-		ceres::Solver::Options options;
-		options.num_threads = 1;
-		options.max_num_iterations = 50;
-		options.linear_solver_type = ceres::DENSE_SCHUR;
-		options.minimizer_progress_to_stdout = true;
-		options.trust_region_strategy_type = ceres::DOGLEG;
-		options.use_nonmonotonic_steps = true;
-
-		ceres::Solver::Summary summary;
-		ceres::Solve(options, &problem, &summary);
-		std::cout << summary.FullReport() << "\n";
-
-		Cost = 0.0;
-		for (int ll = 0; ll < npts - 1; ll++)
-		{
-			int camID1 = VectorCamID[ll], camID2 = VectorCamID[ll + 1];
-
-			costi = SyncReconError(&Depth[ll], &currentOffset[camID1], &currentOffset[camID2], Traj2D[ll].ray, Traj2D[ll + 1].ray, Traj2D[ll].cc, Traj2D[ll + 1].cc, VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
-			Cost += costi;
-		}
-
-		printf("Cost after: %f\n", Cost);
-		printf("Final results\n");
-		for (int ll = 0; ll < nCams; ll++)
-			printf("%d %f\n", ll, currentOffset[ll]);
-
-		fp = fopen("C:/temp/xyz.txt", "w+");
+	problem.SetParameterBlockConstant(&currentOffset[0]);
+	printf("Cost before: %f\n", Cost);
+	for (int trackID = 0; trackID < ntracks; trackID++)
+	{
+		int npts = Traj2DAll[trackID].size();
+		sprintf(Fname, "C:/temp/B_xyz_%d_%.2f.txt", trackID + 1, stdev);  FILE *fp = fopen(Fname, "w+");
 		for (int ll = 0; ll < npts; ll++)
 		{
-			double X = Depth[ll] * Traj2D[ll].ray[0] + Traj2D[ll].cc[0],
-				Y = Depth[ll] * Traj2D[ll].ray[1] + Traj2D[ll].cc[1],
-				Z = Depth[ll] * Traj2D[ll].ray[2] + Traj2D[ll].cc[2];
+			double d1 = AllDepth[trackID][ll], d2 = AllDepth[trackID][ll + 1];
+			double X = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[0] + Traj2DAll[trackID][ll].cc[0],
+				Y = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[1] + Traj2DAll[trackID][ll].cc[1],
+				Z = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[2] + Traj2DAll[trackID][ll].cc[2];
 
 			fprintf(fp, "%f %f %f\n", X, Y, Z);
 		}
 		fclose(fp);
 	}
 
+	//printf("Running optim..\n");
+	ceres::Solver::Options options;
+	options.num_threads = 4;
+	options.max_num_iterations = 100;
+	options.linear_solver_type = ceres::DENSE_SCHUR;
+	options.minimizer_progress_to_stdout = true;
+	options.trust_region_strategy_type = ceres::DOGLEG;
+	options.use_nonmonotonic_steps = true;
+
+	ceres::Solver::Summary summary;
+	ceres::Solve(options, &problem, &summary);
+	std::cout << summary.FullReport() << "\n";
+
+	Cost = 0.0;
+	for (int trackID = 0; trackID < ntracks; trackID++)
+	{
+		int npts = Traj2DAll[trackID].size();
+		double costi;
+		for (int ll = 0; ll < npts - 1; ll++)
+		{
+			int camID1 = VectorCamID[ll], camID2 = VectorCamID[ll + 1];
+
+			costi = SyncReconError(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
+			Cost += costi;
+		}
+	}
+
+	printf("Cost after: %f\n", Cost);
+	printf("Final results\n");
+	for (int ll = 0; ll < nCams; ll++)
+		printf("%d %f\n", ll, currentOffset[ll]);
+
+	for (int trackID = 0; trackID < ntracks; trackID++)
+	{
+		int npts = Traj2DAll[trackID].size();
+		sprintf(Fname, "C:/temp/A_xyz_%d_%.2f.txt", trackID + 1, stdev);  FILE *fp = fopen(Fname, "w+");
+		for (int ll = 0; ll < npts; ll++)
+		{
+			double X = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[0] + Traj2DAll[trackID][ll].cc[0],
+				Y = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[1] + Traj2DAll[trackID][ll].cc[1],
+				Z = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[2] + Traj2DAll[trackID][ll].cc[2];
+
+			fprintf(fp, "%f %f %f\n", X, Y, Z);
+		}
+		fclose(fp);
+	}
+
+	for (int trackID = 0; trackID < ntracks; trackID++)
+		delete[]AllDepth[trackID];
 	for (int ii = 0; ii < nCams; ii++)
 		PerCam_UV[ii].clear(), PerCam_UV_All[ii].clear(), PerCam_XYZ[ii].clear();
-
-	//delete[]currentOffset, delete[]PerCam_nf, delete[]SortID, delete[]currentOffsetBK;
-	delete[]AllCost;
 	delete[]PerCam_UV, delete[]PerCam_UV_All, delete[]PerCam_XYZ;
 
 	return 0;
@@ -3982,7 +3982,7 @@ int main(int argc, char* argv[])
 		//GenarateTrajectoryInput(Path, 2, 1, 2600, 1, ii, 0, 50.0);
 	}
 
-	TestLeastActionConstraint3(3, 0.0, 1);
+	TestLeastActionConstraint3(4, 0.0, 1);
 
 	/*int actionID[] = { 9 };
 	double stdev[] = { 0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0 };

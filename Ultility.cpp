@@ -304,6 +304,16 @@ double gaussian_noise(double mean, double std)
 	return mean + std * normal_noise;
 }
 
+double Distance2D(Point2d X, Point2d Y)
+{
+	Point2d Dif = X - Y;
+	return sqrt(Dif.x*Dif.x + Dif.y * Dif.y);
+}
+double Distance3D(Point3d X, Point3d Y)
+{
+	Point3d Dif = X - Y;
+	return sqrt(Dif.x*Dif.x + Dif.y * Dif.y + Dif.z *Dif.z);
+}
 double L1norm(vector<double>A)
 {
 	double res = 0.0;
@@ -4414,6 +4424,13 @@ void convertRvectoRmat(double *r, double *R)
 
 	return;
 }
+void SetIntrinisc(CameraData &CamInfo, double *Intrinsic)
+{
+	for (int ii = 0; ii < 5; ii++)
+		CamInfo.intrinsic[ii] = Intrinsic[ii];
+	GetKFromIntrinsic(CamInfo);
+	return;
+}
 void GetIntrinsicFromK(CameraData *AllViewsParas, vector<int> AvailViews)
 {
 	for (int ii = 0; ii < AvailViews.size(); ii++)
@@ -5953,7 +5970,7 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 
 			mat_invert(AllVideoInfo.VideoInfo[frameID + videoID].K, AllVideoInfo.VideoInfo[frameID + videoID].invK, 3);
 			GetIntrinsicFromK(AllVideoInfo.VideoInfo[frameID + videoID]);
-			//mat_invert(AllViewsParas[frameID].K, AllViewsParas[frameID].iK);
+			mat_invert(AllVideoInfo.VideoInfo[frameID + videoID].K, AllVideoInfo.VideoInfo[frameID + videoID].invK);
 
 			AllVideoInfo.VideoInfo[frameID + videoID].LensModel = LensType, AllVideoInfo.VideoInfo[frameID + videoID].threshold = 3.0, AllVideoInfo.VideoInfo[frameID + videoID].ninlierThresh = 40;
 			if (LensType == RADIAL_TANGENTIAL_PRISM)

@@ -4370,6 +4370,28 @@ void ProjectandDistort(Point3d WC, Point2d *pts, double *P, double *camera, doub
 
 	return;
 }
+void ProjectandDistort(vector<Point3d> WC, Point2d *pts, double *P, double *camera, double *distortion, int nviews)
+{
+	int ii, jj, npts = WC.size();
+	double num1, num2, denum;
+
+	for (ii = 0; ii < nviews; ii++)
+	{
+		for (jj = 0; jj < npts; jj++)
+		{
+			num1 = P[ii * 12 + 0] * WC[jj].x + P[ii * 12 + 1] * WC[jj].y + P[ii * 12 + 2] * WC[jj].z + P[ii * 12 + 3];
+			num2 = P[ii * 12 + 4] * WC[jj].x + P[ii * 12 + 5] * WC[jj].y + P[ii * 12 + 6] * WC[jj].z + P[ii * 12 + 7];
+			denum = P[ii * 12 + 8] * WC[jj].x + P[ii * 12 + 9] * WC[jj].y + P[ii * 12 + 10] * WC[jj].z + P[ii * 12 + 11];
+
+			pts[ii*npts + jj].x = num1 / denum, pts[ii*npts + jj].y = num2 / denum;
+		}
+		if (camera != NULL)
+			for (jj = 0; jj < npts; jj++)
+				LensDistortionPoint(&pts[ii*npts + jj], camera + ii * 9, distortion + ii * 7);
+	}
+
+	return;
+}
 void Stereo_Triangulation(Point2d *pts1, Point2d *pts2, double *P1, double *P2, Point3d *WC, int npts)
 {
 	int ii;

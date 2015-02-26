@@ -37,7 +37,8 @@ int visualizationDriver(char *Path, int nViews, int StartTime, int StopTime, boo
 void SaveCurrentSfmGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, Point3d *All3D, Point3i *AllColor, int npts);
 void SaveCurrentSfmGL2(char *path, CameraData *AllViewParas, vector<int>AvailViews, vector<Point3d>All3D, vector<Point3i>AllColor);
 void ReadCurrentSfmGL(char *path, bool hasColor, bool hasNormal);
-void ReadCurrent3DGL(char *path, bool hasColor, bool hasNormal, int timeID, bool setCoordinate);
+bool ReadCurrent3DGL(char *path, bool hasColor, bool hasNormal, int timeID, bool setCoordinate);
+bool ReadCurrent3DGL2(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
 void ReadCurrentTrajectory(char *path, int timeID);
 void ReadCurrentTrajectory2(char *path, int timeID);
 void ReadCurrentTrajectory3(char *path, int timeID);

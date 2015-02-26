@@ -106,6 +106,8 @@ bool IsFiniteNumber(double x);
 double UniformNoise(double High, double Low);
 double gaussian_noise(double mean, double std);
 
+double Distance2D(Point2d X, Point2d Y);
+double Distance3D(Point3d X, Point3d Y);
 double L1norm(vector<double>A);
 double L2norm(double *A, int dim);
 float MeanArray(float *data, int length);
@@ -512,6 +514,7 @@ void Save3DPoints(char *Path, Point3d *All3D, vector<int>Selected3DIndex);
 void DisplayMatrix(char *Fname, Mat m);
 
 void convertRvectoRmat(double *r, double *R);
+void SetIntrinisc(CameraData &CamInfo, double *Intrinsic);
 void GetIntrinsicFromK(CameraData *AllViewsParas, vector<int> AvailViews);
 void GetIntrinsicFromK(CameraData *AllViewsParas, int nviews);
 void GetKFromIntrinsic(CameraData *AllViewsParas, vector<int> AvailViews);

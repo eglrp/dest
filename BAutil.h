@@ -5,7 +5,7 @@
 #define GLOG_NO_ABBREVIATED_SEVERITIES
 #define NOMINMAX
 
-#include <Windows.h>
+//#include <Windows.h>
 #include <stdio.h>
 
 #include <fstream>
@@ -20,7 +20,7 @@
 #include "ceres/ceres.h"
 #include "ceres/types.h"
 #include "ceres/rotation.h"
-#include "gflags/gflags.h"
+//#include "gflags/gflags.h"
 #include "glog/logging.h"
 
 using namespace std;

@@ -39,6 +39,7 @@ void SaveCurrentSfmGL2(char *path, CameraData *AllViewParas, vector<int>AvailVie
 void ReadCurrentSfmGL(char *path, bool hasColor, bool hasNormal);
 bool ReadCurrent3DGL(char *path, bool hasColor, bool hasNormal, int timeID, bool setCoordinate);
 bool ReadCurrent3DGL2(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
+bool ReadCurrent3DGL3(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
 void ReadCurrentTrajectory(char *path, int timeID);
 void ReadCurrentTrajectory2(char *path, int timeID);
 void ReadCurrentTrajectory3(char *path, int timeID);

@@ -228,9 +228,9 @@ namespace BA
 	}
 	void setCeresOption(const int nCameras, ceres::Solver::Options &options)
 	{
-		SYSTEM_INFO sysinfo;
-		GetSystemInfo(&sysinfo);
-		int nCPUs = sysinfo.dwNumberOfProcessors;
+		//SYSTEM_INFO sysinfo;
+		//GetSystemInfo(&sysinfo);
+		int nCPUs = omp_get_max_threads();
 
 		options.num_threads = nCPUs;
 		options.num_linear_solver_threads = nCPUs;

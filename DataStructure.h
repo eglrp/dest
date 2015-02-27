@@ -96,9 +96,10 @@ struct Trajectory2D
 
 struct ImgPtEle
 {
-	Point2d imgpt;
+	Point2d pt2D;
+	Point3d pt3D;
 	double ray[3], cc[3], d;
-	double P[12];
+	double P[12], Q[6], u[2];//Jack notation
 };
 struct XYZD
 {
@@ -181,9 +182,9 @@ struct TrajectoryData
 struct VisualizationManager
 {
 	Point3d g_trajactoryCenter;
-	vector<Point3d> PointPosition, PointPosition2;
-	vector<Point3f> PointColor, PointColor2;
-	vector<Point3d>PointNormal, PointNormal2;
+	vector<Point3d> PointPosition, PointPosition2, PointPosition3;
+	vector<Point3f> PointColor, PointColor2, PointColor3;
+	vector<Point3d>PointNormal, PointNormal2, PointNormal3;
 	vector<CamInfo> glCameraInfo;
 	vector<CamInfo> *glCameraPoseInfo;
 	vector<Trajectory3D* > Traject3D;

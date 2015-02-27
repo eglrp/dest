@@ -18,7 +18,7 @@
 #include "glog/logging.h"
 #include "ceres/types.h"
 #include "ceres/rotation.h"
-#include "gflags/gflags.h"
+//#include "gflags/gflags.h"
 #include "precomp.hpp"
 #include "_modelest.h"
 

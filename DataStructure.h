@@ -98,8 +98,8 @@ struct ImgPtEle
 {
 	Point2d pt2D;
 	Point3d pt3D;
-	double ray[3], cc[3], d;
-	double P[12], Q[6], u[2];//Jack notation
+	double ray[3], C[3], d;
+	double K[9], R[9], P[12], Q[6], u[2];//Jack notation
 };
 struct XYZD
 {
@@ -187,6 +187,7 @@ struct VisualizationManager
 	vector<Point3d>PointNormal, PointNormal2, PointNormal3;
 	vector<CamInfo> glCameraInfo;
 	vector<CamInfo> *glCameraPoseInfo;
+	vector<Point3d> *catPointPosition, *catPointPosition3;
 	vector<Trajectory3D* > Traject3D;
 	vector<int> Track3DLength;
 	vector<Trajectory3D* > Traject3D2;

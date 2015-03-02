@@ -49,6 +49,7 @@ void ReadCurrentTrajectory5(char *path, int timeID);
 void SaveCurrenPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID);
 void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime = 0);
 void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime);
+int screenShot(char *Fname, int width, int height, bool color);
 
 #endif
 

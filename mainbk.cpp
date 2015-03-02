@@ -3066,7 +3066,7 @@ int TestLeastActionConstraint(int nCams, double stdev, int actionID, int nRep = 
 	vector<char*> str;
 	str.push_back("s"), str.push_back("f"), str.push_back("d");
 	VideoData AllVideoInfo;
-	if (ReadVideoData("C:/temp/Sim", AllVideoInfo, 5, 1, 500) == 1)
+	if (ReadVideoData("E:/Phuong", AllVideoInfo, 5, 1, 500) == 1)
 		return 1;
 	int nframes = max(MaxnFrame, 3000);
 	double P[12];
@@ -3110,12 +3110,12 @@ int TestLeastActionConstraint(int nCams, double stdev, int actionID, int nRep = 
 			gtOff[1] = off;
 			for (int ii = 0; ii < nCostSize; ii++)
 				AllCost[ii] = 0.0;
-			for (int trackID = 0; trackID < ntracks; trackID++)
+			for (int trackID = 1; trackID <= ntracks; trackID++)
 			{
 				//Read 3D
 				double x, y, z;
 				XYZ.clear();
-				sprintf(Fname, "C:/temp/Sim/3DTracks/%d.txt", trackID);
+				sprintf(Fname, "C:/temp/Sim/%s%d.txt", str[strID], trackID);
 				FILE *fp = fopen(Fname, "r");
 				while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
 					XYZ.push_back(Point3d(x, y, z));
@@ -3300,7 +3300,7 @@ int TestLeastActionConstraint(int nCams, double stdev, int actionID, int nRep = 
 			for (int kk = 1; kk < nCams; kk++)
 				currentOffset[kk] = -BruteForceTimeWindow;
 
-			sprintf(Fname, "C:/temp/%d_cost_%d_%.1f.txt", gtOff[1], nCams, stdev);  FILE *fp = fopen(Fname, "w+");
+			sprintf(Fname, "C:/temp/%d_cost_%d_%f.txt", gtOff[1], nCams, stdev);  FILE *fp = fopen(Fname, "w+");
 			while (true)
 			{
 				for (int kk = 1; kk < nCams; kk++)
@@ -3816,35 +3816,10 @@ struct SyncReconErrorCeres {
 		return true;
 	}
 
-	template <typename T>	bool operator()(const T* const depth1, const T* const depth2, const T* const timeStamp, T* residuals) 	const
-	{
-		T X = (T)(depth1[0] * rayDirect1[0] + center1[0]),
-			Y = (T)(depth1[0] * rayDirect1[1] + center1[1]),
-			Z = (T)(depth1[0] * rayDirect1[2] + center1[2]);
-
-		T X2 = (T)(depth2[0] * rayDirect2[0] + center2[0]),
-			Y2 = (T)(depth2[0] * rayDirect2[1] + center2[1]),
-			Z2 = (T)(depth2[0] * rayDirect2[2] + center2[2]);
-
-		T difX = X2 - X, difY = Y2 - Y, difZ = Z2 - Z;
-		T  t1 = (T)((timeStamp[0] + timeStep*frameID1) * ialpha*Tscale);
-		T  t2 = (T)((timeStamp[0] + timeStep*frameID2) * ialpha*Tscale);
-
-		residuals[0] = sqrt((difX*difX + difY*difY + difZ*difZ) / abs(t2 - t1 + (T)epsilon));
-
-		return true;
-	}
-
 	static ceres::CostFunction* Create(double *ray1, double *ray2, double *center1, double *center2, int frameID1, int frameID2, double ialpha, double Tscale, double timeStep, double epsilon)
 	{
 		return (new ceres::AutoDiffCostFunction<SyncReconErrorCeres, 1, 1, 1, 1, 1>(new SyncReconErrorCeres(ray1, ray2, center1, center2, frameID1, frameID2, ialpha, Tscale, timeStep, epsilon)));
 	}
-
-	static ceres::CostFunction* Create2(double *ray1, double *ray2, double *center1, double *center2, int frameID1, int frameID2, double ialpha, double Tscale, double timeStep, double epsilon)
-	{
-		return (new ceres::AutoDiffCostFunction<SyncReconErrorCeres, 1, 1, 1, 1>(new SyncReconErrorCeres(ray1, ray2, center1, center2, frameID1, frameID2, ialpha, Tscale, timeStep, epsilon)));
-	}
-
 
 	int frameID1, frameID2;
 	double *rayDirect1, *rayDirect2, *center1, *center2, ialpha, Tscale, timeStep, epsilon;
@@ -4036,15 +4011,15 @@ int TestLeastActionConstraint3(char *Path, int nCams, double stdev, int actionID
 				mat_mul(iR, tt, ttt, 3, 3, 1);
 
 				for (int ll = 0; ll < 3; ll++)
-					PerCamUV_All[camID][frameID].C[ll] = AllVideoInfo.VideoInfo[camID*nframes + frameID].camCenter[ll],
-					PerCamUV_All[camID][frameID].ray[ll] = PerCamUV_All[camID][frameID].C[ll] - ttt[ll];
+					PerCamUV_All[camID][frameID].cc[ll] = AllVideoInfo.VideoInfo[camID*nframes + frameID].camCenter[ll],
+					PerCamUV_All[camID][frameID].ray[ll] = PerCamUV_All[camID][frameID].cc[ll] - ttt[ll];
 
 				normalize(PerCamUV_All[camID][frameID].ray);
 
 				//depth
-				double lamda[3] = { (XYZ[frameID].xyz.x - PerCamUV_All[camID][frameID].C[0]) / PerCamUV_All[camID][frameID].ray[0],
-					(XYZ[frameID].xyz.y - PerCamUV_All[camID][frameID].C[1]) / PerCamUV_All[camID][frameID].ray[1],
-					(XYZ[frameID].xyz.z - PerCamUV_All[camID][frameID].C[2]) / PerCamUV_All[camID][frameID].ray[2] };
+				double lamda[3] = { (XYZ[frameID].xyz.x - PerCamUV_All[camID][frameID].cc[0]) / PerCamUV_All[camID][frameID].ray[0],
+					(XYZ[frameID].xyz.y - PerCamUV_All[camID][frameID].cc[1]) / PerCamUV_All[camID][frameID].ray[1],
+					(XYZ[frameID].xyz.z - PerCamUV_All[camID][frameID].cc[2]) / PerCamUV_All[camID][frameID].ray[2] };
 
 				//Find the direction with largest value--> to avoid direction with super small magnitude which leads to inf depth
 				int index[3] = { 0, 1, 2 };
@@ -4107,10 +4082,10 @@ int TestLeastActionConstraint3(char *Path, int nCams, double stdev, int actionID
 					ImgPtEle ptEle;
 					ptEle.pt2D.x = PerCamUV_All[camID][frameID].pt2D.x, ptEle.pt2D.y = PerCamUV_All[camID][frameID].pt2D.y;
 					for (int ii = 0; ii < 3; ii++)
-						ptEle.C[ii] = PerCamUV_All[camID][frameID].C[ii], ptEle.ray[ii] = PerCamUV_All[camID][frameID].ray[ii];
+						ptEle.cc[ii] = PerCamUV_All[camID][frameID].cc[ii], ptEle.ray[ii] = PerCamUV_All[camID][frameID].ray[ii];
 
 					//depth
-					double lamda[3] = { (XYZBK[frameID].xyz.x - ptEle.C[0]) / ptEle.ray[0], (XYZBK[frameID].xyz.y - ptEle.C[1]) / ptEle.ray[1], (XYZBK[frameID].xyz.z - ptEle.C[2]) / ptEle.ray[2] };
+					double lamda[3] = { (XYZBK[frameID].xyz.x - ptEle.cc[0]) / ptEle.ray[0], (XYZBK[frameID].xyz.y - ptEle.cc[1]) / ptEle.ray[1], (XYZBK[frameID].xyz.z - ptEle.cc[2]) / ptEle.ray[2] };
 
 					//Find the direction with largest value--> to avoid direction with super small magnitude which leads to inf depth
 					int index[3] = { 0, 1, 2 };
@@ -4157,10 +4132,10 @@ int TestLeastActionConstraint3(char *Path, int nCams, double stdev, int actionID
 			 int camID = triangulatedList[jj];
 			 ptEle.pt2D = PerCam_UV[camID][frameID].pt2D;
 			 for (int ii = 0; ii < 3; ii++)
-			 ptEle.C[ii] = PerCam_UV[camID][frameID].C[ii], ptEle.ray[ii] = PerCam_UV[camID][frameID].ray[ii];
+			 ptEle.cc[ii] = PerCam_UV[camID][frameID].cc[ii], ptEle.ray[ii] = PerCam_UV[camID][frameID].ray[ii];
 
 			 //depth
-			 double lamda[3] = { (P3D.x - ptEle.C[0]) / ptEle.ray[0], (P3D.y - ptEle.C[1]) / ptEle.ray[1], (P3D.z - ptEle.C[2]) / ptEle.ray[2] };
+			 double lamda[3] = { (P3D.x - ptEle.cc[0]) / ptEle.ray[0], (P3D.y - ptEle.cc[1]) / ptEle.ray[1], (P3D.z - ptEle.cc[2]) / ptEle.ray[2] };
 			 int index[3] = { 0, 1, 2 };
 			 double rayDirect[3] = { abs(ptEle.ray[0]), abs(ptEle.ray[1]), abs(ptEle.ray[2]) };
 			 Quick_Sort_Double(rayDirect, index, 0, 2);
@@ -4292,10 +4267,10 @@ int TestLeastActionConstraint3(char *Path, int nCams, double stdev, int actionID
 			int camID1 = VectorCamID[ll], camID2 = VectorCamID[ll + 1];
 			int frameID1 = VectorFrameID[ll], frameID2 = VectorFrameID[ll + 1];
 
-			costi = SyncReconError(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].C, Traj2DAll[trackID][ll + 1].C, frameID1, frameID2, ialpha, Tscale, rate, eps);
+			costi = SyncReconError(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, frameID1, frameID2, ialpha, Tscale, rate, eps);
 			Cost += costi;
 
-			ceres::CostFunction* cost_function = SyncReconErrorCeres::Create(Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].C, Traj2DAll[trackID][ll + 1].C, VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
+			ceres::CostFunction* cost_function = SyncReconErrorCeres::Create(Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
 			problem.AddResidualBlock(cost_function, NULL, &AllDepth[trackID][ll], &AllDepth[trackID][ll + 1], &currentOffset[camID1], &currentOffset[camID2]);
 		}
 
@@ -4305,16 +4280,16 @@ int TestLeastActionConstraint3(char *Path, int nCams, double stdev, int actionID
 		int camID1 = VectorCamID[ll], camID2 = VectorCamID[ll + 1], camID3 = VectorCamID[ll + 2];
 		int frameID1 = VectorFrameID[ll], frameID2 = VectorFrameID[ll + 1], frameID3 = VectorFrameID[ll + 2];
 
-		//costi = SyncReconError(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].C, Traj2DAll[trackID][ll + 1].C, frameID1, frameID2, ialpha, Tscale, rate, eps);
+		//costi = SyncReconError(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, frameID1, frameID2, ialpha, Tscale, rate, eps);
 
 		costi2 = SyncReconError2(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], &currentOffset[camID3],
 		Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll + 2].ray,
-		Traj2DAll[trackID][ll].C, Traj2DAll[trackID][ll + 1].C, Traj2DAll[trackID][ll + 2].C,
+		Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, Traj2DAll[trackID][ll + 2].cc,
 		frameID1, frameID2, frameID3, ialpha, Tscale, rate, eps);
 		Cost2 += costi2;
 
 		ceres::CostFunction* cost_function = SyncReconErrorCeres2::Create(Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll + 2].ray,
-		Traj2DAll[trackID][ll].C, Traj2DAll[trackID][ll + 1].C, Traj2DAll[trackID][ll + 2].C,
+		Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, Traj2DAll[trackID][ll + 2].cc,
 		VectorFrameID[ll], VectorFrameID[ll + 1], VectorFrameID[ll + 2],
 		ialpha, Tscale, rate, eps);
 		problem.AddResidualBlock(cost_function, NULL, &AllDepth[trackID][ll], &AllDepth[trackID][ll + 1], &AllDepth[trackID][ll + 2], &currentOffset[camID1], &currentOffset[camID2], &currentOffset[camID3]);
@@ -4345,9 +4320,9 @@ int TestLeastActionConstraint3(char *Path, int nCams, double stdev, int actionID
 		sprintf(Fname, "%s/B_xyz_%d_%.2f.txt", Path, trackID, stdev);  FILE *fp = fopen(Fname, "w+");
 		for (int ll = 0; ll < npts; ll++)
 		{
-			double X = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[0] + Traj2DAll[trackID][ll].C[0],
-				Y = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[1] + Traj2DAll[trackID][ll].C[1],
-				Z = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[2] + Traj2DAll[trackID][ll].C[2];
+			double X = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[0] + Traj2DAll[trackID][ll].cc[0],
+				Y = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[1] + Traj2DAll[trackID][ll].cc[1],
+				Z = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[2] + Traj2DAll[trackID][ll].cc[2];
 
 			fprintf(fp, "%f %f %f\n", X, Y, Z);
 		}
@@ -4375,7 +4350,7 @@ int TestLeastActionConstraint3(char *Path, int nCams, double stdev, int actionID
 		{
 			int camID1 = VectorCamID[ll], camID2 = VectorCamID[ll + 1];
 
-			costi = SyncReconError(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].C, Traj2DAll[trackID][ll + 1].C, VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
+			costi = SyncReconError(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
 			Cost += costi;
 		}
 	}
@@ -4391,9 +4366,9 @@ int TestLeastActionConstraint3(char *Path, int nCams, double stdev, int actionID
 		sprintf(Fname, "%s/A_xyz_%d_%.2f.txt", Path, trackID, stdev);  FILE *fp = fopen(Fname, "w+");
 		for (int ll = 0; ll < npts; ll++)
 		{
-			double X = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[0] + Traj2DAll[trackID][ll].C[0],
-				Y = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[1] + Traj2DAll[trackID][ll].C[1],
-				Z = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[2] + Traj2DAll[trackID][ll].C[2];
+			double X = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[0] + Traj2DAll[trackID][ll].cc[0],
+				Y = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[1] + Traj2DAll[trackID][ll].cc[1],
+				Z = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[2] + Traj2DAll[trackID][ll].cc[2];
 
 			fprintf(fp, "%f %f %f\n", X, Y, Z);
 		}
@@ -4473,36 +4448,231 @@ struct IdealReprojectionCeres {
 
 	double observed_x, observed_y, *P, lamda;
 };
-void LeastActionOptimDT(char *Path, vector<double*> &All3D_Before, vector<double*> &All3D_After, vector<double*> &AllDepth, vector<ImgPtEle> *PerCam_UV, vector<int> &PointsPerTrack, double *currentOffset, bool fixedTime, bool fixed3D, bool non_monotonicDescent, int nCams, double Tscale, double ialpha, double rate, double eps)
+int TestLeastActionConstraint4(char *Path, int nCams, double stdev, int actionID)
 {
-	if (fixedTime)
-		printf("Optimize for 3D\n");
-	else if (fixed3D)
-		printf("Optimize for time\n");
-	else if (!fixedTime && !fixed3D)
-		printf("Joint space-time optimization\n");
-	else
-		printf("Weird\n");
+	const int maxnCams = 5;
+	srand(time(NULL));
+	bool save3D = true, fix3D = false, fixedTime = true, non_monotonicDescent = true;
+	int gtOff[] = { 0, 2, 3, 5, 9 };
+	double currentOffset[5] = { 0, 2, 3, 5, 9 };
 
-	const int maxnCams = 5, ntracks = 13;
-	double ActionCost = 0.0, ProjCost = 0.0, costi;
+	const int ntracks = 13;
+	const double Tscale = 1000.0, ialpha = 1.0 / 120, rate = 10, eps = 1.0e-1, lamda = 1.0;
+
+	char Fname[200];
+	VideoData AllVideoInfo;
+	if (ReadVideoData(Path, AllVideoInfo, nCams, 0, 3000) == 1)
+		return 1;
+	int nframes = max(MaxnFrame, 3000);
+	double ActionCost = 0.0, ProjCost = 0.0, costi, x, y, z;
 
 	int currentFrame[maxnCams], PerCam_nf[maxnCams], SortID[maxnCams];
-	double currentOffsetBK[maxnCams];
+	double currentOffsetBK[maxnCams], Pmat[12 * maxnCams], A[6 * maxnCams], B[2 * maxnCams];
 
+	Point2d ImgPts[maxnCams];
+	Point3d P3D;
+	ImgPtEle ptEle;
 	vector<int>triangulatedList;
-	vector<int> *VectorCamID = new vector<int>[ntracks], *VectorFrameID = new vector<int>[ntracks];
-	vector<double>AllError3D, VectorTime;
-	vector<ImgPtEle> Traj2DAll[ntracks];
+
+	vector<double>AllError3D;
+	vector<double*> Allpt3D(ntracks);
+	vector<int>VectorCamID, VectorFrameID;
+	vector<double>VectorTime;
+	vector<ImgPtEle> *PerCamUV_All = new vector<ImgPtEle>[nCams], *PerCam_UV = new vector<ImgPtEle>[nCams], Traj2DAll[ntracks];
+	vector<XYZD> *PerCam_XYZ = new vector<XYZD>[nCams], XYZ, XYZBK;
+
+	//Make sure that no gtOff is smaller than 0
+	for (int ii = 0; ii < nCams; ii++)
+		if (rate*ii + gtOff[ii] < 0)
+			gtOff[ii] += rate;
 
 	ceres::Problem problem;
 	for (int trackID = 0; trackID < ntracks; trackID++)
 	{
+		//Read 3D
+		XYZ.clear();
+		sprintf(Fname, "%s/3DTracks/%d.txt", Path, trackID); FILE *fp = fopen(Fname, "r");
+		while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
+		{
+			XYZD t; t.xyz.x = x, t.xyz.y = y, t.xyz.z = z, t.d = 0.0;
+			XYZ.push_back(t);
+		}
+		fclose(fp);
+		int nf = XYZ.size();
+
+		//Read 2D Points
 		for (int camID = 0; camID < nCams; camID++)
-			PerCam_nf[camID] = PerCam_UV[camID*ntracks + trackID].size();
+		{
+			PerCamUV_All[camID].clear();
+			sprintf(Fname, "%s/2DTracks/%d_%d.txt", Path, camID, trackID); fp = fopen(Fname, "r");
+			while (fscanf(fp, "%lf %lf ", &x, &y) != EOF)
+			{
+				ptEle.pt2D.x = x, ptEle.pt2D.y = y;
+				PerCamUV_All[camID].push_back(ptEle);
+			}
+			fclose(fp);
+		}
+
+		//Get P
+		for (int camID = 0; camID < nCams; camID++)
+		{
+			for (int frameID = 0; frameID < nf; frameID++)
+			{
+				for (int kk = 0; kk < 12; kk++)
+					PerCamUV_All[camID][frameID].P[kk] = AllVideoInfo.VideoInfo[camID*nframes + frameID].P[kk];
+				PerCamUV_All[camID][frameID].pt3D = XYZ[frameID].xyz;
+			}
+		}
+
+		//Check if 2D is ok
+		for (int frameID = 0; frameID < nf; frameID++)
+		{
+			double TpreprojErr = 0.0, preprojErr;
+			for (int camID = 0; camID < nCams; camID++)
+			{
+				ProjectandDistort(XYZ[frameID].xyz, ImgPts, AllVideoInfo.VideoInfo[camID*nframes + frameID].P);
+				preprojErr = Distance2D(PerCamUV_All[camID][frameID].pt2D, ImgPts[0]);
+				TpreprojErr += preprojErr;
+			}
+			if (TpreprojErr / nCams > 30.0)
+				printf("3D-2D projection warning\n");
+		}
+
+		//Assign 2D to cameras
+		int maxPerCamFrames = 0;
+		for (int camID = 0; camID < nCams; camID++)
+		{
+			PerCam_UV[camID].clear();
+			for (int frameID = 0; frameID < nf; frameID += rate)
+			{
+				int tid = frameID + gtOff[camID];
+				if (tid >= nf || tid < 0)
+					continue;
+				PerCam_UV[camID].push_back(PerCamUV_All[camID][tid]);
+			}
+			if (PerCam_UV[camID].size() > maxPerCamFrames)
+				maxPerCamFrames = PerCam_UV[camID].size();
+		}
+
+		//Add noise to 3d data 
+		if (1)
+		{
+			XYZBK.clear();
+			for (int frameID = 0; frameID < nf; frameID++)
+			{
+				XYZBK.push_back(XYZ[frameID]);
+				XYZBK[frameID].xyz.x += max(min(gaussian_noise(0.0, stdev), 3.0*stdev), -3.0*stdev);
+				XYZBK[frameID].xyz.y += max(min(gaussian_noise(0.0, stdev), 3.0*stdev), -3.0*stdev);
+				XYZBK[frameID].xyz.z += max(min(gaussian_noise(0.0, stdev), 3.0*stdev), -3.0*stdev);
+			}
+
+			for (int frameID = 0; frameID < nf; frameID++)
+				for (int camID = 0; camID < nCams; camID++)
+					PerCamUV_All[camID][frameID].pt3D = XYZBK[frameID].xyz;
+		}
+		else
+		{
+			;/*//Triangulate to get depth from badly syn cameras
+			 for (int frameID = 0; frameID < maxPerCamFrames; frameID++)
+			 {
+			 triangulatedList.clear();
+			 int triangulatable = 0;
+			 for (int camID = 0; camID < nCams; camID++)
+			 {
+			 if (PerCam_UV[camID].size() > frameID)
+			 {
+			 for (int ii = 0; ii < 12; ii++)
+			 Pmat[triangulatable * 12 + ii] = PerCam_UV[camID][frameID].P[ii];
+			 ImgPts[triangulatable] = PerCam_UV[camID][frameID].pt2D;
+			 triangulatedList.push_back(camID);
+			 triangulatable++;
+			 }
+			 }
+
+			 if (triangulatable == 0)
+			 continue;
+			 if (triangulatable == 1)
+			 PerCam_UV[triangulatedList[0]][frameID].d = PerCam_UV[triangulatedList[0]][frameID - 1].d;
+			 else
+			 {
+			 NviewTriangulation(ImgPts, Pmat, &P3D, triangulatable, 1, NULL, A, B);
+
+			 for (int jj = 0; jj < triangulatable; jj++)
+			 {
+			 int camID = triangulatedList[jj];
+			 ptEle.pt2D = PerCam_UV[camID][frameID].pt2D;
+			 for (int ii = 0; ii < 3; ii++)
+			 ptEle.cc[ii] = PerCam_UV[camID][frameID].cc[ii], ptEle.ray[ii] = PerCam_UV[camID][frameID].ray[ii];
+
+			 //depth
+			 double lamda[3] = { (P3D.x - ptEle.cc[0]) / ptEle.ray[0], (P3D.y - ptEle.cc[1]) / ptEle.ray[1], (P3D.z - ptEle.cc[2]) / ptEle.ray[2] };
+			 int index[3] = { 0, 1, 2 };
+			 double rayDirect[3] = { abs(ptEle.ray[0]), abs(ptEle.ray[1]), abs(ptEle.ray[2]) };
+			 Quick_Sort_Double(rayDirect, index, 0, 2);
+			 double depth = lamda[index[2]];
+
+			 Point3d GT_P3D(PerCam_UV[camID][frameID].d*ptEle.ray[0], PerCam_UV[camID][frameID].d*ptEle.ray[1], PerCam_UV[camID][frameID].d*ptEle.ray[2]);
+			 Point3d Tri_P3D(depth*ptEle.ray[0], depth*ptEle.ray[1], depth*ptEle.ray[2]);
+
+			 //PerCam_UV[camID][frameID].d = depth;
+			 double Error3D = Distance3D(GT_P3D, Tri_P3D);
+			 AllError3D.push_back(Error3D);
+			 if (Error3D > 100.0)
+			 printf("Depth init warning\n");
+			 }
+			 }
+			 }*/
+		}
+
+		//Tell me how bad reprojection error is
+		for (int frameID = 0; frameID < nf; frameID++)
+		{
+			double TpreprojErr = 0.0, preprojErr;
+			for (int camID = 0; camID < nCams; camID++)
+			{
+				ProjectandDistort(PerCamUV_All[camID][frameID].pt3D, ImgPts, AllVideoInfo.VideoInfo[camID*nframes + frameID].P);
+				preprojErr = Distance2D(PerCamUV_All[camID][frameID].pt2D, ImgPts[0]);
+				TpreprojErr += preprojErr;
+			}
+			if (TpreprojErr / nCams > 30.0)
+				printf("3D-2D projection warning\n");
+		}
+
+		//Update depth values
+		for (int camID = 0; camID < nCams; camID++)
+		{
+			PerCam_UV[camID].clear();
+			for (int frameID = 0; frameID < nf; frameID += rate)
+			{
+				int tid = frameID + gtOff[camID];
+				if (tid >= nf || tid < 0)
+					continue;
+				PerCam_UV[camID].push_back(PerCamUV_All[camID][tid]);
+			}
+		}
+
+		//In case GT 3D is needed
+		if (save3D)
+		{
+			sprintf(Fname, "%s/GT_xyz_%d.txt", Path, trackID), fp = fopen(Fname, "w+");
+			for (int ii = 0; ii < nCams; ii++)
+			{
+				for (int jj = 0; jj < nf; jj += rate)
+				{
+					int tid = jj + gtOff[ii];
+					if (tid >= nf || tid < 0)
+						continue;
+					fprintf(fp, "%f %f %f %d\n", XYZ[tid].xyz.x, XYZ[tid].xyz.y, XYZ[tid].xyz.z, tid);
+				}
+			}
+			fclose(fp);
+		}
+
+		for (int ii = 0; ii < nCams; ii++)
+			PerCam_nf[ii] = PerCam_UV[ii].size();
 
 		//Time alignment:find the order of the streams
-		VectorTime.clear();
+		VectorCamID.clear(), VectorFrameID.clear(), VectorTime.clear();
 		currentOffset[0] = 0;
 		for (int jj = 0; jj < nCams; jj++)
 			SortID[jj] = jj, currentOffsetBK[jj] = currentOffset[jj];
@@ -4550,8 +4720,213 @@ void LeastActionOptimDT(char *Path, vector<double*> &All3D_Before, vector<double
 					}
 
 					VectorTime.push_back(currentTime);
-					VectorFrameID[trackID].push_back(currentFrame[camID]);
-					VectorCamID[trackID].push_back(camID);
+					VectorFrameID.push_back(currentFrame[camID]);
+					VectorCamID.push_back(camID);
+					Traj2DAll[trackID].push_back(PerCam_UV[camID][currentFrame[camID]]);
+					currentFrame[camID]++;
+				}
+
+				int nStreamEnd = 0;
+				for (int ii = 0; ii < nCams; ii++)
+					if (currentFrame[ii] >= PerCam_nf[ii])
+						nStreamEnd++;
+				if (nStreamEnd == nCams)
+				{
+					doneAdding = true;
+					break;
+				}
+			}
+		}
+
+		int npts = Traj2DAll[trackID].size();
+		VectorTime;
+		Allpt3D[trackID] = new double[3 * npts];
+		for (int ll = 0; ll < npts; ll++)
+			Allpt3D[trackID][3 * ll] = Traj2DAll[trackID][ll].pt3D.x, Allpt3D[trackID][3 * ll + 1] = Traj2DAll[trackID][ll].pt3D.y, Allpt3D[trackID][3 * ll + 2] = Traj2DAll[trackID][ll].pt3D.z;
+
+		//1st order approx of v
+		for (int ll = 0; ll < npts - 1; ll++)
+		{
+			int camID1 = VectorCamID[ll], camID2 = VectorCamID[ll + 1];
+			int frameID1 = VectorFrameID[ll], frameID2 = VectorFrameID[ll + 1];
+
+			costi = LeastActionError(&Allpt3D[trackID][3 * ll], &Allpt3D[trackID][3 * ll + 3], &currentOffset[camID1], &currentOffset[camID2], VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
+			ActionCost += costi;
+
+			ProjectandDistort(Point3d(Allpt3D[trackID][3 * ll], Allpt3D[trackID][3 * ll + 1], Allpt3D[trackID][3 * ll + 2]), ImgPts, Traj2DAll[trackID][ll].P);
+			costi = sqrt(pow(Traj2DAll[trackID][ll].pt2D.x - ImgPts[0].x, 2) + pow(Traj2DAll[trackID][ll].pt2D.y - ImgPts[0].y, 2))*lamda*lamda;
+			ProjCost += costi;
+
+			ProjectandDistort(Point3d(Allpt3D[trackID][3 * ll + 3], Allpt3D[trackID][3 * ll + 4], Allpt3D[trackID][3 * ll + 5]), ImgPts, Traj2DAll[trackID][ll + 1].P);
+			costi = sqrt(pow(Traj2DAll[trackID][ll + 1].pt2D.x - ImgPts[0].x, 2) + pow(Traj2DAll[trackID][ll + 1].pt2D.y - ImgPts[0].y, 2))*lamda*lamda;
+			ProjCost += costi;
+
+			ceres::CostFunction* cost_function = LeastActionCostCeres::Create(VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
+			problem.AddResidualBlock(cost_function, NULL, &Allpt3D[trackID][3 * ll], &Allpt3D[trackID][3 * (ll + 1)], &currentOffset[camID1], &currentOffset[camID2]);
+
+			ceres::CostFunction* cost_function2 = IdealReprojectionCeres::Create(Traj2DAll[trackID][ll].P, Traj2DAll[trackID][ll].pt2D, lamda);
+			problem.AddResidualBlock(cost_function2, NULL, Allpt3D[trackID] + 3 * ll);
+
+			ceres::CostFunction* cost_function3 = IdealReprojectionCeres::Create(Traj2DAll[trackID][ll + 1].P, Traj2DAll[trackID][ll + 1].pt2D, lamda);
+			problem.AddResidualBlock(cost_function3, NULL, Allpt3D[trackID] + 3 * ll + 3);
+		}
+	}
+	//for (int camID = 1; camID < nCams; camID++)
+	//	problem.SetParameterLowerBound(&currentOffset[camID], 0, 0.0), problem.SetParameterUpperBound(&currentOffset[camID], 0, rate);
+
+	problem.SetParameterBlockConstant(&currentOffset[0]);
+	if (fixedTime)
+		for (int camID = 1; camID < nCams; camID++)
+			problem.SetParameterBlockConstant(&currentOffset[camID]);
+
+	if (fix3D)
+	{
+		for (int trackID = 0; trackID < ntracks; trackID++)
+		{
+			int npts = Traj2DAll[trackID].size();
+			for (int ll = 0; ll < npts; ll++)
+				problem.SetParameterBlockConstant(&Allpt3D[trackID][3 * ll]);
+		}
+	}
+
+	printf("ActionCost and ProjCost before: %f %f\n", ActionCost, ProjCost);
+	for (int trackID = 0; trackID < ntracks; trackID++)
+	{
+		int npts = Traj2DAll[trackID].size();
+		sprintf(Fname, "%s/B_xyz_%d_%.2f.txt", Path, trackID, stdev);  FILE *fp = fopen(Fname, "w+");
+		for (int ll = 0; ll < npts; ll++)
+			fprintf(fp, "%f %f %f\n", Allpt3D[trackID][3 * ll], Allpt3D[trackID][3 * ll + 1], Allpt3D[trackID][3 * ll + 2]);
+		fclose(fp);
+	}
+
+	ceres::Solver::Options options;
+	options.num_threads = 4;
+	options.max_num_iterations = 100;
+	options.linear_solver_type = ceres::DENSE_SCHUR;
+	options.minimizer_progress_to_stdout = true;
+	options.trust_region_strategy_type = ceres::DOGLEG;
+	options.use_nonmonotonic_steps = non_monotonicDescent;
+
+	ceres::Solver::Summary summary;
+	ceres::Solve(options, &problem, &summary);
+	std::cout << summary.FullReport() << "\n";
+
+	ActionCost = 0.0, ProjCost = 0.0;
+	for (int trackID = 0; trackID < ntracks; trackID++)
+	{
+		int npts = Traj2DAll[trackID].size();
+		double costi;
+		for (int ll = 0; ll < npts - 1; ll++)
+		{
+			int camID1 = VectorCamID[ll], camID2 = VectorCamID[ll + 1];
+
+			costi = LeastActionError(&Allpt3D[trackID][3 * ll], &Allpt3D[trackID][3 * ll + 3], &currentOffset[camID1], &currentOffset[camID2], VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
+			ActionCost += costi;
+
+			ProjectandDistort(Point3d(Allpt3D[trackID][3 * ll], Allpt3D[trackID][3 * ll + 1], Allpt3D[trackID][3 * ll + 2]), ImgPts, Traj2DAll[trackID][ll].P);
+			costi = sqrt(pow(Traj2DAll[trackID][ll].pt2D.x - ImgPts[0].x, 2) + pow(Traj2DAll[trackID][ll].pt2D.y - ImgPts[0].y, 2))*lamda*lamda;
+			ProjCost += costi;
+
+			ProjectandDistort(Point3d(Allpt3D[trackID][3 * ll + 3], Allpt3D[trackID][3 * ll + 4], Allpt3D[trackID][3 * ll + 5]), ImgPts, Traj2DAll[trackID][ll + 1].P);
+			costi = sqrt(pow(Traj2DAll[trackID][ll + 1].pt2D.x - ImgPts[0].x, 2) + pow(Traj2DAll[trackID][ll + 1].pt2D.y - ImgPts[0].y, 2))*lamda*lamda;
+			ProjCost += costi;
+		}
+	}
+
+	printf("ActionCost and ProjCost after: %f %f\n", ActionCost, ProjCost);
+	printf("Final results\n");
+	for (int ll = 0; ll < nCams; ll++)
+		printf("%d %f\n", ll, currentOffset[ll]);
+
+	for (int trackID = 0; trackID < ntracks; trackID++)
+	{
+		int npts = Traj2DAll[trackID].size();
+		sprintf(Fname, "%s/A_xyz_%d_%.2f.txt", Path, trackID, stdev);  FILE *fp = fopen(Fname, "w+");
+		for (int ll = 0; ll < npts; ll++)
+			fprintf(fp, "%f %f %f\n", Allpt3D[trackID][3 * ll], Allpt3D[trackID][3 * ll + 1], Allpt3D[trackID][3 * ll + 2]);
+		fclose(fp);
+	}
+
+	for (int trackID = 0; trackID < ntracks; trackID++)
+		delete[]Allpt3D[trackID];
+	for (int ii = 0; ii < nCams; ii++)
+		PerCam_UV[ii].clear(), PerCam_XYZ[ii].clear();
+	delete[]PerCam_UV, delete[]PerCam_XYZ;
+
+	return 0;
+}
+
+void LeastActionOptimDT(char *Path, vector<double*> &All3D_Before, vector<double*> &All3D_After, vector<double*> &AllDepth, vector<ImgPtEle> *PerCam_UV, vector<int> &PointsPerTrack, double *currentOffset, bool fixedTime, bool fixed3D, bool non_monotonicDescent, int nCams, double Tscale, double ialpha, double rate, double eps)
+{
+	const int maxnCams = 5, ntracks = 13;
+
+	char Fname[200];
+	double ActionCost = 0.0, ProjCost = 0.0, costi;
+
+	int currentFrame[maxnCams], PerCam_nf[maxnCams], SortID[maxnCams];
+	double currentOffsetBK[maxnCams];
+
+	vector<int>triangulatedList, VectorCamID, VectorFrameID;
+	vector<double>AllError3D, VectorTime;
+	vector<ImgPtEle> Traj2DAll[ntracks];
+
+	ceres::Problem problem;
+	for (int trackID = 0; trackID < ntracks; trackID++)
+	{
+		for (int camID = 0; camID < nCams; camID++)
+			PerCam_nf[camID] = PerCam_UV[camID*ntracks + trackID].size();
+
+		//Time alignment:find the order of the streams
+		VectorCamID.clear(), VectorFrameID.clear(), VectorTime.clear();
+		currentOffset[0] = 0;
+		for (int jj = 0; jj < nCams; jj++)
+			SortID[jj] = jj, currentOffsetBK[jj] = currentOffset[jj];
+		Quick_Sort_Double(currentOffsetBK, SortID, 0, nCams - 1);
+
+		//Assemble trajactory and time from all Cameras
+		for (int jj = 0; jj < nCams; jj++)
+			currentFrame[jj] = 0;
+		vector<int> availStream;
+		availStream.push_back(SortID[0]), availStream.push_back(SortID[1]);
+
+		double currentTime;
+		vector<int>::iterator it;
+		bool allOverlapped = false, doneAdding = false;
+		while (!doneAdding)
+		{
+			int camID, NextCamID = availStream[availStream.size() - 1];
+			bool reachedNewStream = false;
+
+			//Add 3D and T in the streamlist to global stream until new stream is seen
+			while (!reachedNewStream)
+			{
+				int nstream = availStream.size() - (allOverlapped ? 0 : 1);
+				for (int ii = 0; ii < nstream; ii++)
+				{
+					camID = SortID[ii];
+					if (currentFrame[camID] >= PerCam_nf[camID])
+						continue;
+
+					currentTime = 1.0*currentOffset[camID] * ialpha*Tscale + 1.0*currentFrame[camID] * ialpha*Tscale*rate;
+					if (!allOverlapped && currentTime >= 1.0*currentOffset[NextCamID] * ialpha*Tscale)
+					{
+						reachedNewStream = true;
+						if (nCams > nstream + 1)
+							availStream.push_back(SortID[nstream + 1]);
+						else
+							allOverlapped = true;
+
+						//re-sort the order 
+						nstream = availStream.size() - (allOverlapped ? 0 : 1);
+						for (int jj = 0; jj < nstream; jj++)
+							currentOffsetBK[jj] = currentOffset[SortID[jj]] + currentFrame[SortID[jj]] * rate;
+						Quick_Sort_Double(currentOffsetBK, SortID, 0, nstream - 1);
+						break;
+					}
+
+					VectorTime.push_back(currentTime);
+					VectorFrameID.push_back(currentFrame[camID]);
+					VectorCamID.push_back(camID);
 					Traj2DAll[trackID].push_back(PerCam_UV[camID*ntracks + trackID][currentFrame[camID]]);
 					currentFrame[camID]++;
 				}
@@ -4569,6 +4944,7 @@ void LeastActionOptimDT(char *Path, vector<double*> &All3D_Before, vector<double
 		}
 
 		int npts = Traj2DAll[trackID].size();
+		VectorTime;
 		if (AllDepth[trackID] == NULL)
 			AllDepth[trackID] = new double[npts];
 		if (All3D_Before[trackID] == NULL)
@@ -4579,55 +4955,22 @@ void LeastActionOptimDT(char *Path, vector<double*> &All3D_Before, vector<double
 		for (int ll = 0; ll < npts; ll++)
 			AllDepth[trackID][ll] = Traj2DAll[trackID][ll].d;
 
-		/*char Fname[200];  sprintf(Fname, "C:/temp/Sim/i%d.txt", trackID); FILE *fp = fopen(Fname, "w+");
-		fprintf(fp, "nProjections: %d\nnPoints: %d\n", npts, 1);
-		for (int ll = 0; ll < npts; ll++)
-		{
-		fprintf(fp, "%d_%d %d\n", trackID, ll, ll);
-		fprintf(fp, "%f %f %f\n", Traj2DAll[trackID][ll].C[0], Traj2DAll[trackID][ll].C[1], Traj2DAll[trackID][ll].C[2]);
-		for (int jj = 0; jj < 3; jj++)
-		{
-		for (int ii = 0; ii < 3; ii++)
-		{
-		fprintf(fp, "%f ", Traj2DAll[trackID][ll].R[jj * 3 + ii]);
-		}
-		fprintf(fp, "\n");
-		}
-		for (int jj = 0; jj < 3; jj++)
-		{
-		for (int ii = 0; ii < 3; ii++)
-		{
-		fprintf(fp, "%f ", Traj2DAll[trackID][ll].K[jj*3+ii]);
-		}
-		fprintf(fp, "\n");
-		}
-		fprintf(fp, "%f %f\n", Traj2DAll[trackID][ll].pt2D.x, Traj2DAll[trackID][ll].pt2D.y);
-		}
-		fclose(fp);*/
-
 		//1st order approx of v
 		for (int ll = 0; ll < npts - 1; ll++)
 		{
-			int camID1 = VectorCamID[trackID][ll], camID2 = VectorCamID[trackID][ll + 1];
-			int frameID1 = VectorFrameID[trackID][ll], frameID2 = VectorFrameID[trackID][ll + 1];
+			int camID1 = VectorCamID[ll], camID2 = VectorCamID[ll + 1];
+			int frameID1 = VectorFrameID[ll], frameID2 = VectorFrameID[ll + 1];
 
-			costi = SyncReconError(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].C, Traj2DAll[trackID][ll + 1].C, frameID1, frameID2, ialpha, Tscale, rate, eps);
+			costi = SyncReconError(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, frameID1, frameID2, ialpha, Tscale, rate, eps);
 			ActionCost += costi;
-			if (camID1 == camID2)
-			{
-				ceres::CostFunction* cost_function = SyncReconErrorCeres::Create2(Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].C, Traj2DAll[trackID][ll + 1].C, VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, rate, eps);
-				problem.AddResidualBlock(cost_function, NULL, &AllDepth[trackID][ll], &AllDepth[trackID][ll + 1], &currentOffset[camID1]);
-			}
-			else
-			{
-				ceres::CostFunction* cost_function = SyncReconErrorCeres::Create(Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].C, Traj2DAll[trackID][ll + 1].C, VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, rate, eps);
-				problem.AddResidualBlock(cost_function, NULL, &AllDepth[trackID][ll], &AllDepth[trackID][ll + 1], &currentOffset[camID1], &currentOffset[camID2]);
-			}
+
+			ceres::CostFunction* cost_function = SyncReconErrorCeres::Create(Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
+			problem.AddResidualBlock(cost_function, NULL, &AllDepth[trackID][ll], &AllDepth[trackID][ll + 1], &currentOffset[camID1], &currentOffset[camID2]);
 		}
 	}
 	printf("Cost before: %f\n", ActionCost);
 	for (int camID = 1; camID < nCams; camID++)
-		problem.SetParameterLowerBound(&currentOffset[camID], 0, 0.0), problem.SetParameterUpperBound(&currentOffset[camID], 0, 15);// rate);
+		problem.SetParameterLowerBound(&currentOffset[camID], 0, 0.0), problem.SetParameterUpperBound(&currentOffset[camID], 0, rate);
 
 	problem.SetParameterBlockConstant(&currentOffset[0]);
 	if (fixedTime)
@@ -4650,16 +4993,16 @@ void LeastActionOptimDT(char *Path, vector<double*> &All3D_Before, vector<double
 		PointsPerTrack.push_back(npts);
 		for (int ll = 0; ll < npts; ll++)
 		{
-			All3D_Before[trackID][3 * ll] = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[0] + Traj2DAll[trackID][ll].C[0],
-				All3D_Before[trackID][3 * ll + 1] = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[1] + Traj2DAll[trackID][ll].C[1],
-				All3D_Before[trackID][3 * ll + 2] = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[2] + Traj2DAll[trackID][ll].C[2];
+			All3D_Before[trackID][3 * ll] = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[0] + Traj2DAll[trackID][ll].cc[0],
+				All3D_Before[trackID][3 * ll + 1] = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[1] + Traj2DAll[trackID][ll].cc[1],
+				All3D_Before[trackID][3 * ll + 2] = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[2] + Traj2DAll[trackID][ll].cc[2];
 		}
 	}
 
 	ceres::Solver::Options options;
 	options.num_threads = 4;
-	options.max_num_iterations = 100;
-	options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
+	options.max_num_iterations = 50;
+	options.linear_solver_type = ceres::DENSE_SCHUR;
 	options.minimizer_progress_to_stdout = true;
 	options.trust_region_strategy_type = ceres::DOGLEG;
 	options.use_nonmonotonic_steps = non_monotonicDescent;
@@ -4675,29 +5018,25 @@ void LeastActionOptimDT(char *Path, vector<double*> &All3D_Before, vector<double
 		double costi;
 		for (int ll = 0; ll < npts - 1; ll++)
 		{
-			int camID1 = VectorCamID[trackID][ll], camID2 = VectorCamID[trackID][ll + 1];
+			int camID1 = VectorCamID[ll], camID2 = VectorCamID[ll + 1];
 
-			costi = SyncReconError(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray,
-				Traj2DAll[trackID][ll].C, Traj2DAll[trackID][ll + 1].C, VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, rate, eps);
+			costi = SyncReconError(&AllDepth[trackID][ll], &currentOffset[camID1], &currentOffset[camID2], Traj2DAll[trackID][ll].ray, Traj2DAll[trackID][ll + 1].ray, Traj2DAll[trackID][ll].cc, Traj2DAll[trackID][ll + 1].cc, VectorFrameID[ll], VectorFrameID[ll + 1], ialpha, Tscale, rate, eps);
 			ActionCost += costi;
 		}
 	}
 	printf("Cost after: %f\n", ActionCost);
 
-	//Save results to 3D data and depth
+	//Save results to 3D data
 	for (int trackID = 0; trackID < ntracks; trackID++)
 	{
 		for (int ll = 0; ll < PointsPerTrack[trackID]; ll++)
 		{
-			int camID = VectorCamID[trackID][ll], frameID = VectorFrameID[trackID][ll];
-			PerCam_UV[camID*ntracks + trackID][frameID].d = AllDepth[trackID][ll];
-			All3D_After[trackID][3 * ll] = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[0] + Traj2DAll[trackID][ll].C[0],
-				All3D_After[trackID][3 * ll + 1] = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[1] + Traj2DAll[trackID][ll].C[1],
-				All3D_After[trackID][3 * ll + 2] = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[2] + Traj2DAll[trackID][ll].C[2];
+			All3D_After[trackID][3 * ll] = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[0] + Traj2DAll[trackID][ll].cc[0],
+				All3D_After[trackID][3 * ll + 1] = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[1] + Traj2DAll[trackID][ll].cc[1],
+				All3D_After[trackID][3 * ll + 2] = AllDepth[trackID][ll] * Traj2DAll[trackID][ll].ray[2] + Traj2DAll[trackID][ll].cc[2];
 		}
 	}
 
-	delete[]VectorCamID, delete[]VectorFrameID;
 	return;
 }
 void LeastActionOptimXYZT(char *Path, vector<ImgPtEle> *PerCam_UV, double *currentOffset, bool fixedTime, bool fixed3D, bool non_monotonicDescent, int nCams, double Tscale, double ialpha, double rate, double eps, double lamda)
@@ -4904,33 +5243,34 @@ void LeastActionOptimXYZT(char *Path, vector<ImgPtEle> *PerCam_UV, double *curre
 
 	return;
 }
-int TestLeastActionConstraint5(char *Path, int nCams, double stdev)
+int TestLeastActionConstraint5(char *Path, int nCams, double stdev, int actionID)
 {
 	const int maxnCams = 5;
 	srand(time(NULL));
 	bool save3D = true, fixed3D = true, fixedTime = false, non_monotonicDescent = true;
-	int gtOff[] = { 0, 3, 5, 9, 11 };
-	double currentOffset[5] = { 0, 3, 0.5, 0.9, 1.0 };
+	int gtOff[] = { 0, 2, 3, 5, 9 };
+	double currentOffset[5] = { 0, .1, .4, .6, .8 };
 
 	const int ntracks = 13;
 	const double Tscale = 1000.0, ialpha = 1.0 / 120, rate = 10, eps = 1.0e-1, lamda = 1.0;
 
 	char Fname[200];
 	VideoData AllVideoInfo;
-	sprintf(Fname, "%s/Calib", Path);
-	if (ReadVideoData(Fname, AllVideoInfo, nCams, 0, 3000) == 1)
+	if (ReadVideoData(Path, AllVideoInfo, nCams, 0, 3000) == 1)
 		return 1;
 	int nframes = max(MaxnFrame, 3000);
 	double ActionCost = 0.0, TProjCost = 0.0, costi, x, y, z;
-	double P[12], AA[6], bb[2], ccT[3], dd[1], Q[6 * maxnCams], U[2 * maxnCams], AllP[12 * maxnCams], A[6 * maxnCams], B[2 * maxnCams];
+	double P[12], AA[6], bb[2], ccT[3], dd[1], Q[6 * maxnCams], U[2 * maxnCams];
+	//double Pmat[12 * maxnCams], A[6 * maxnCams], B[2 * maxnCams];
 
 	Point2d ImgPts[maxnCams];
 	Point3d P3D;
 	ImgPtEle ptEle;
 	vector<int>triangulatedList;
 
+	vector<double>AllError3D;
 	vector<int>VectorCamID, VectorFrameID;
-	vector<double>VectorTime, AllError3D, AllError2D;
+	vector<double>VectorTime;
 	vector<ImgPtEle> *PerCamUV_All = new vector<ImgPtEle>[nCams], *PerCam_UV = new vector<ImgPtEle>[nCams*ntracks];
 	vector<XYZD> *PerCam_XYZ = new vector<XYZD>[nCams], *XYZ = new vector<XYZD>[ntracks], XYZBK;
 
@@ -4974,9 +5314,6 @@ int TestLeastActionConstraint5(char *Path, int nCams, double stdev)
 					P[kk] = AllVideoInfo.VideoInfo[camID*nframes + frameID].P[kk];
 					PerCamUV_All[camID][frameID].P[kk] = P[kk];
 				}
-				for (int kk = 0; kk < 9; kk++)
-					PerCamUV_All[camID][frameID].K[kk] = AllVideoInfo.VideoInfo[camID*nframes + frameID].K[kk],
-					PerCamUV_All[camID][frameID].R[kk] = AllVideoInfo.VideoInfo[camID*nframes + frameID].R[kk];
 
 				//rayDirection = iR*(lamda*iK*[u,v,1] - T) - C
 				double pcn[3];
@@ -4993,15 +5330,15 @@ int TestLeastActionConstraint5(char *Path, int nCams, double stdev)
 				mat_mul(iR, tt, ttt, 3, 3, 1);
 
 				for (int ll = 0; ll < 3; ll++)
-					PerCamUV_All[camID][frameID].C[ll] = AllVideoInfo.VideoInfo[camID*nframes + frameID].camCenter[ll],
-					PerCamUV_All[camID][frameID].ray[ll] = PerCamUV_All[camID][frameID].C[ll] - ttt[ll];
+					PerCamUV_All[camID][frameID].cc[ll] = AllVideoInfo.VideoInfo[camID*nframes + frameID].camCenter[ll],
+					PerCamUV_All[camID][frameID].ray[ll] = PerCamUV_All[camID][frameID].cc[ll] - ttt[ll];
 
 				normalize(PerCamUV_All[camID][frameID].ray);
 
 				//depth
-				double lamda[3] = { (XYZ[trackID][frameID].xyz.x - PerCamUV_All[camID][frameID].C[0]) / PerCamUV_All[camID][frameID].ray[0],
-					(XYZ[trackID][frameID].xyz.y - PerCamUV_All[camID][frameID].C[1]) / PerCamUV_All[camID][frameID].ray[1],
-					(XYZ[trackID][frameID].xyz.z - PerCamUV_All[camID][frameID].C[2]) / PerCamUV_All[camID][frameID].ray[2] };
+				double lamda[3] = { (XYZ[trackID][frameID].xyz.x - PerCamUV_All[camID][frameID].cc[0]) / PerCamUV_All[camID][frameID].ray[0],
+					(XYZ[trackID][frameID].xyz.y - PerCamUV_All[camID][frameID].cc[1]) / PerCamUV_All[camID][frameID].ray[1],
+					(XYZ[trackID][frameID].xyz.z - PerCamUV_All[camID][frameID].cc[2]) / PerCamUV_All[camID][frameID].ray[2] };
 
 				//Find the direction with largest value--> to avoid direction with super small magnitude which leads to inf depth
 				int index[3] = { 0, 1, 2 };
@@ -5060,9 +5397,9 @@ int TestLeastActionConstraint5(char *Path, int nCams, double stdev)
 			TpreprojErr = 0.0;
 			for (int camID = 0; camID < nCams; camID++)
 			{
-				double X = PerCamUV_All[camID][frameID].d * PerCamUV_All[camID][frameID].ray[0] + PerCamUV_All[camID][frameID].C[0],
-					Y = PerCamUV_All[camID][frameID].d * PerCamUV_All[camID][frameID].ray[1] + PerCamUV_All[camID][frameID].C[1],
-					Z = PerCamUV_All[camID][frameID].d * PerCamUV_All[camID][frameID].ray[2] + PerCamUV_All[camID][frameID].C[2];
+				double X = PerCamUV_All[camID][frameID].d * PerCamUV_All[camID][frameID].ray[0] + PerCamUV_All[camID][frameID].cc[0],
+					Y = PerCamUV_All[camID][frameID].d * PerCamUV_All[camID][frameID].ray[1] + PerCamUV_All[camID][frameID].cc[1],
+					Z = PerCamUV_All[camID][frameID].d * PerCamUV_All[camID][frameID].ray[2] + PerCamUV_All[camID][frameID].cc[2];
 
 				ProjectandDistort(Point3d(X, Y, Z), ImgPts, AllVideoInfo.VideoInfo[camID*nframes + frameID].P);
 				preprojErr = Distance2D(PerCamUV_All[camID][frameID].pt2D, ImgPts[0]);
@@ -5072,23 +5409,8 @@ int TestLeastActionConstraint5(char *Path, int nCams, double stdev)
 				printf("Depth 3D-2D projection warning\n");
 		}
 
-		//Assign 2D to cameras
-		int maxPerCamFrames = 0;
-		for (int camID = 0; camID < nCams; camID++)
-		{
-			for (int frameID = 0; frameID < nf; frameID += rate)
-			{
-				int tid = frameID + gtOff[camID];
-				if (tid >= nf || tid < 0)
-					continue;
-				PerCam_UV[camID*ntracks + trackID].push_back(PerCamUV_All[camID][tid]);
-			}
-			if (PerCam_UV[camID*ntracks + trackID].size() > maxPerCamFrames)
-				maxPerCamFrames = PerCam_UV[camID*ntracks + trackID].size();
-		}
-
 		//Add noise to 3d data 
-		if (0)
+		if (1)
 		{
 			XYZBK.clear();
 			for (int frameID = 0; frameID < nf; frameID++)
@@ -5109,10 +5431,10 @@ int TestLeastActionConstraint5(char *Path, int nCams, double stdev)
 					ImgPtEle ptEle;
 					ptEle.pt2D.x = PerCamUV_All[camID][frameID].pt2D.x, ptEle.pt2D.y = PerCamUV_All[camID][frameID].pt2D.y;
 					for (int ii = 0; ii < 3; ii++)
-						ptEle.C[ii] = PerCamUV_All[camID][frameID].C[ii], ptEle.ray[ii] = PerCamUV_All[camID][frameID].ray[ii];
+						ptEle.cc[ii] = PerCamUV_All[camID][frameID].cc[ii], ptEle.ray[ii] = PerCamUV_All[camID][frameID].ray[ii];
 
 					//depth
-					double lamda[3] = { (XYZBK[frameID].xyz.x - ptEle.C[0]) / ptEle.ray[0], (XYZBK[frameID].xyz.y - ptEle.C[1]) / ptEle.ray[1], (XYZBK[frameID].xyz.z - ptEle.C[2]) / ptEle.ray[2] };
+					double lamda[3] = { (XYZBK[frameID].xyz.x - ptEle.cc[0]) / ptEle.ray[0], (XYZBK[frameID].xyz.y - ptEle.cc[1]) / ptEle.ray[1], (XYZBK[frameID].xyz.z - ptEle.cc[2]) / ptEle.ray[2] };
 
 					//Find the direction with largest value--> to avoid direction with super small magnitude which leads to inf depth
 					int index[3] = { 0, 1, 2 };
@@ -5123,108 +5445,93 @@ int TestLeastActionConstraint5(char *Path, int nCams, double stdev)
 					double depth_ = PerCamUV_All[camID][frameID].d;
 					if (abs(depth - depth_) > 100.0)
 						printf("Depth init warning\n");
-
 					PerCamUV_All[camID][frameID].d = depth;
 					PerCamUV_All[camID][frameID].pt3D = XYZBK[frameID].xyz;
 				}
 			}
-
-			//Update 2D to cameras
-			for (int camID = 0; camID < nCams; camID++)
-			{
-				PerCam_UV[camID*ntracks + trackID].clear();
-				for (int frameID = 0; frameID < nf; frameID += rate)
-				{
-					int tid = frameID + gtOff[camID];
-					if (tid >= nf || tid < 0)
-						continue;
-					PerCam_UV[camID*ntracks + trackID].push_back(PerCamUV_All[camID][tid]);
-				}
-			}
-
-			//Tell me how bad reprojection error is
-			for (int frameID = 0; frameID < nf; frameID++)
-			{
-				costi = 0.0;
-				for (int camID = 0; camID < nCams; camID++)
-				{
-					ProjectandDistort(PerCamUV_All[camID][frameID].pt3D, ImgPts, PerCamUV_All[camID][frameID].P);
-					double preprojErr = Distance2D(PerCamUV_All[camID][frameID].pt2D, ImgPts[0]);
-					costi += preprojErr;
-				}
-				if (costi / nCams > 20.0*(stdev + 1))
-					printf("3D-2D projection warning\n");
-				TProjCost += costi / nCams;
-			}
 		}
 		else
 		{
-			//Triangulate to get depth from badly syn cameras
-			AllError3D.clear();
-			for (int frameID = 0; frameID < maxPerCamFrames; frameID++)
+			;/*//Triangulate to get depth from badly syn cameras
+			 for (int frameID = 0; frameID < maxPerCamFrames; frameID++)
+			 {
+			 triangulatedList.clear();
+			 int triangulatable = 0;
+			 for (int camID = 0; camID < nCams; camID++)
+			 {
+			 if (PerCam_UV[camID].size() > frameID)
+			 {
+			 for (int ii = 0; ii < 12; ii++)
+			 Pmat[triangulatable * 12 + ii] = PerCam_UV[camID][frameID].P[ii];
+			 ImgPts[triangulatable] = PerCam_UV[camID][frameID].pt2D;
+			 triangulatedList.push_back(camID);
+			 triangulatable++;
+			 }
+			 }
+
+			 if (triangulatable == 0)
+			 continue;
+			 if (triangulatable == 1)
+			 PerCam_UV[triangulatedList[0]][frameID].d = PerCam_UV[triangulatedList[0]][frameID - 1].d;
+			 else
+			 {
+			 NviewTriangulation(ImgPts, Pmat, &P3D, triangulatable, 1, NULL, A, B);
+
+			 for (int jj = 0; jj < triangulatable; jj++)
+			 {
+			 int camID = triangulatedList[jj];
+			 ptEle.pt2D = PerCam_UV[camID][frameID].pt2D;
+			 for (int ii = 0; ii < 3; ii++)
+			 ptEle.cc[ii] = PerCam_UV[camID][frameID].cc[ii], ptEle.ray[ii] = PerCam_UV[camID][frameID].ray[ii];
+
+			 //depth
+			 double lamda[3] = { (P3D.x - ptEle.cc[0]) / ptEle.ray[0], (P3D.y - ptEle.cc[1]) / ptEle.ray[1], (P3D.z - ptEle.cc[2]) / ptEle.ray[2] };
+			 int index[3] = { 0, 1, 2 };
+			 double rayDirect[3] = { abs(ptEle.ray[0]), abs(ptEle.ray[1]), abs(ptEle.ray[2]) };
+			 Quick_Sort_Double(rayDirect, index, 0, 2);
+			 double depth = lamda[index[2]];
+
+			 Point3d GT_P3D(PerCam_UV[camID][frameID].d*ptEle.ray[0], PerCam_UV[camID][frameID].d*ptEle.ray[1], PerCam_UV[camID][frameID].d*ptEle.ray[2]);
+			 Point3d Tri_P3D(depth*ptEle.ray[0], depth*ptEle.ray[1], depth*ptEle.ray[2]);
+
+			 //PerCam_UV[camID][frameID].d = depth;
+			 double Error3D = Distance3D(GT_P3D, Tri_P3D);
+			 AllError3D.push_back(Error3D);
+			 if (Error3D > 100.0)
+			 printf("Depth init warning\n");
+			 }
+			 }
+			 }*/
+		}
+
+		//Tell me how bad reprojection error is
+		for (int frameID = 0; frameID < nf; frameID++)
+		{
+			costi = 0.0;
+			for (int camID = 0; camID < nCams; camID++)
 			{
-				triangulatedList.clear();
-				int triangulatable = 0;
-				for (int camID = 0; camID < nCams; camID++)
-				{
-					if (PerCam_UV[camID*ntracks + trackID].size() > frameID)
-					{
-						for (int ii = 0; ii < 12; ii++)
-							AllP[triangulatable * 12 + ii] = PerCam_UV[camID*ntracks + trackID][frameID].P[ii];
-						ImgPts[triangulatable] = PerCam_UV[camID*ntracks + trackID][frameID].pt2D;
-						triangulatedList.push_back(camID);
-						triangulatable++;
-					}
-				}
-
-				if (triangulatable == 0)
-					continue;
-				if (triangulatable == 1)
-					PerCam_UV[triangulatedList[0] * ntracks + trackID][frameID].d = PerCam_UV[triangulatedList[0] * ntracks + trackID][frameID - 1].d;
-				else
-				{
-					NviewTriangulation(ImgPts, AllP, &P3D, triangulatable, 1, NULL, A, B);
-					double pt2d[10], pt3d[3], reProjErr[5];
-					for (int ii = 0; ii < triangulatable; ii++)
-						pt2d[2 * ii] = ImgPts[ii].x, pt2d[2 * ii + 1] = ImgPts[ii].y;
-					pt3d[0] = P3D.x, pt3d[1] = P3D.y, pt3d[2] = P3D.z;
-					NviewTriangulationNonLinear(AllP, pt2d, pt3d, reProjErr, triangulatable);
-					P3D.x = pt3d[0], P3D.y = pt3d[1], P3D.z = pt3d[2];
-
-					for (int jj = 0; jj < triangulatable; jj++)
-					{
-						int camID = triangulatedList[jj];
-						ptEle.pt2D = PerCam_UV[camID*ntracks + trackID][frameID].pt2D;
-						for (int ii = 0; ii < 3; ii++)
-							ptEle.C[ii] = PerCam_UV[camID*ntracks + trackID][frameID].C[ii], ptEle.ray[ii] = PerCam_UV[camID*ntracks + trackID][frameID].ray[ii];
-
-						//depth
-						double lamda[3] = { (P3D.x - ptEle.C[0]) / ptEle.ray[0], (P3D.y - ptEle.C[1]) / ptEle.ray[1], (P3D.z - ptEle.C[2]) / ptEle.ray[2] };
-						int index[3] = { 0, 1, 2 };
-						double rayDirect[3] = { abs(ptEle.ray[0]), abs(ptEle.ray[1]), abs(ptEle.ray[2]) };
-						Quick_Sort_Double(rayDirect, index, 0, 2);
-						double depth = lamda[index[2]];
-
-						Point3d GT_P3D(PerCam_UV[camID*ntracks + trackID][frameID].d*ptEle.ray[0], PerCam_UV[camID*ntracks + trackID][frameID].d*ptEle.ray[1], PerCam_UV[camID*ntracks + trackID][frameID].d*ptEle.ray[2]);
-						Point3d Tri_P3D(depth*ptEle.ray[0], depth*ptEle.ray[1], depth*ptEle.ray[2]);
-
-						PerCam_UV[camID*ntracks + trackID][frameID].pt3D = P3D;
-						PerCam_UV[camID*ntracks + trackID][frameID].d = depth;
-
-						ProjectandDistort(P3D, ImgPts, PerCam_UV[camID*ntracks + trackID][frameID].P);
-						double preprojErr = Distance2D(PerCam_UV[camID*ntracks + trackID][frameID].pt2D, ImgPts[0]);
-						AllError2D.push_back(preprojErr);
-
-						double Error3D = Distance3D(GT_P3D, Tri_P3D);
-						AllError3D.push_back(Error3D);
-						if (Error3D > 100.0)
-							printf("Depth init warning\n");
-					}
-				}
+				ProjectandDistort(PerCamUV_All[camID][frameID].pt3D, ImgPts, AllVideoInfo.VideoInfo[camID*nframes + frameID].P);
+				double preprojErr = Distance2D(PerCamUV_All[camID][frameID].pt2D, ImgPts[0]);
+				costi += preprojErr;
 			}
-			double m3D = MeanArray(AllError3D);
-			double std3D = sqrt(VarianceArray(AllError3D, m3D));
-			printf("Track %d error statistic: (m, std)  = (%.2f %.2f)\n", trackID, m3D, std3D);
+			if (costi / nCams > 20.0*stdev)
+				printf("3D-2D projection warning\n");
+			TProjCost += costi / nCams;
+		}
+
+		//Assign 2D to cameras
+		int maxPerCamFrames = 0;
+		for (int camID = 0; camID < nCams; camID++)
+		{
+			for (int frameID = 0; frameID < nf; frameID += rate)
+			{
+				int tid = frameID + gtOff[camID];
+				if (tid >= nf || tid < 0)
+					continue;
+				PerCam_UV[camID*ntracks + trackID].push_back(PerCamUV_All[camID][tid]);
+			}
+			if (PerCam_UV[camID*ntracks + trackID].size() > maxPerCamFrames)
+				maxPerCamFrames = PerCam_UV[camID*ntracks + trackID].size();
 		}
 
 		//In case GT 3D is needed
@@ -5250,34 +5557,18 @@ int TestLeastActionConstraint5(char *Path, int nCams, double stdev)
 		printf("%d %f\n", ll, currentOffset[ll]);
 
 	vector<int> PointsPerTrack;
-	vector<int *> AllFrameID(ntracks);
 	vector<double*> AllDepth(ntracks), All3D_Before(ntracks), All3D_After(ntracks);
 	for (int trackID = 0; trackID < ntracks; trackID++)
 	{
 		int npts = 0;
 		for (int camID = 0; camID < nCams; camID++)
 			npts += PerCam_UV[camID*ntracks + trackID].size();
-		AllFrameID[trackID] = new int[npts];
 		AllDepth[trackID] = new double[npts];
 		All3D_Before[trackID] = new double[3 * npts];
 		All3D_After[trackID] = new double[3 * npts];
 	}
 
-	/*for (int trackID = 0; trackID < ntracks; trackID++)
-	{
-		sprintf(Fname, "C:/temp/Sim/B_%d.txt", trackID);  FILE *fp = fopen(Fname, "w+");
-		for (int camID = 0; camID < nCams; camID++)
-		{
-			for (int fid = 0; fid < PerCam_UV[camID*ntracks + trackID].size(); fid++)
-			{
-				fprintf(fp, "%.3f %.3f %.3f %.1f\n", PerCam_UV[camID*ntracks + trackID][fid].pt3D.x, PerCam_UV[camID*ntracks + trackID][fid].pt3D.y
-					, PerCam_UV[camID*ntracks + trackID][fid].pt3D.z, 1.0*currentOffset[camID] * ialpha*Tscale + 1.0*fid * ialpha*Tscale*rate);
-			}
-		}
-		fclose(fp);
-	}*/
-
-	fixedTime = true, fixed3D = false;
+	fixedTime = false, fixed3D = true;
 	LeastActionOptimDT(Path, All3D_Before, All3D_After, AllDepth, PerCam_UV, PointsPerTrack, currentOffset, fixedTime, fixed3D, non_monotonicDescent, nCams, Tscale, ialpha, rate, eps);
 
 	printf("Saving results...\n");
@@ -5295,35 +5586,36 @@ int TestLeastActionConstraint5(char *Path, int nCams, double stdev)
 		fclose(fp);
 	}
 
-	/*printf("TIme after 1-iter: \n");
+	printf("TIme after 1-iter: \n");
 	for (int ll = 0; ll < nCams; ll++)
-	printf("%d %f\n", ll, currentOffset[ll]);
+		printf("%d %f\n", ll, currentOffset[ll]);
 
 	fixedTime = true, fixed3D = false;
 	LeastActionOptimDT(Path, All3D_Before, All3D_After, AllDepth, PerCam_UV, PointsPerTrack, currentOffset, fixedTime, fixed3D, non_monotonicDescent, nCams, Tscale, ialpha, rate, eps);
-
 	for (int trackID = 0; trackID < ntracks; trackID++)
 	{
-	int npts = PointsPerTrack[trackID];
-	sprintf(Fname, "%s/A2Track_%d.txt", Path, trackID);  FILE *fp = fopen(Fname, "w+");
-	for (int ll = 0; ll < npts; ll++)
-	fprintf(fp, "%f %f %f\n", All3D_After[trackID][3 * ll], All3D_After[trackID][3 * ll + 1], All3D_After[trackID][3 * ll + 2]);
-	fclose(fp);
+		int npts = PointsPerTrack[trackID];
+		sprintf(Fname, "%s/A2Track_%d.txt", Path, trackID);  FILE *fp = fopen(Fname, "w+");
+		for (int ll = 0; ll < npts; ll++)
+			fprintf(fp, "%f %f %f\n", All3D_After[trackID][3 * ll], All3D_After[trackID][3 * ll + 1], All3D_After[trackID][3 * ll + 2]);
+		fclose(fp);
 	}
 
 	fixedTime = false, fixed3D = false;
 	LeastActionOptimDT(Path, All3D_Before, All3D_After, AllDepth, PerCam_UV, PointsPerTrack, currentOffset, fixedTime, fixed3D, non_monotonicDescent, nCams, Tscale, ialpha, rate, eps);
 	for (int trackID = 0; trackID < ntracks; trackID++)
 	{
-	int npts = PointsPerTrack[trackID];
-	sprintf(Fname, "%s/A3Track_%d.txt", Path, trackID); FILE *fp = fopen(Fname, "w+");
-	for (int ll = 0; ll < npts; ll++)
-	fprintf(fp, "%f %f %f\n", All3D_After[trackID][3 * ll], All3D_After[trackID][3 * ll + 1], All3D_After[trackID][3 * ll + 2]);
-	fclose(fp);
+		int npts = PointsPerTrack[trackID];
+		sprintf(Fname, "%s/A3Track_%d.txt", Path, trackID); FILE *fp = fopen(Fname, "w+");
+		for (int ll = 0; ll < npts; ll++)
+			fprintf(fp, "%f %f %f\n", All3D_After[trackID][3 * ll], All3D_After[trackID][3 * ll + 1], All3D_After[trackID][3 * ll + 2]);
+		fclose(fp);
 	}
 	printf("Final results\n");
 	for (int ll = 0; ll < nCams; ll++)
-	printf("%d %f\n", ll, currentOffset[ll]);*/
+		printf("%d %f\n", ll, currentOffset[ll]);
+
+	//LeastActionOptimXYZ(Path, PerCam_UV, currentOffset, fixedTime, fixed3D, non_monotonicDescent, nCams, Tscale, ialpha, rate, eps, lamda);
 
 	for (int trackID = 0; trackID < ntracks; trackID++)
 		delete[]All3D_Before[trackID], delete[]All3D_After[trackID], delete[]AllDepth[trackID];
@@ -5339,7 +5631,7 @@ int main(int argc, char* argv[])
 {
 	char Path[] = "E:/Phuong", Fname[200], Fname2[200];
 
-	srand(0);// (unsigned int)time(NULL));
+	srand((unsigned int)time(NULL));
 #pragma omp parallel for
 	for (int ii = 1; ii <= 13; ii++)
 	{
@@ -5348,12 +5640,12 @@ int main(int argc, char* argv[])
 		//GenarateTrajectoryInput(Path, 2, 1, 2600, 1, ii, 0, 50.0);
 	}
 
-	int nCams = 2, width = 1920, height = 1080;
+	int nCams = 5, width = 1920, height = 1080;
 	double Intrinsic[5] = { 1000, 1000, 0, 960, 540 }, radius = 300;
 	//SimulateCamerasAnd2DPointsForMoCap("C:/temp/Sim", nCams, 13, Intrinsic, width, height, radius, false, true);
-	visualizationDriver("C:/temp/Sim", nCams, 0, 900, false, false, true, true, false, 0);
+	//visualizationDriver("C:/temp/Sim", nCams, 0, 900, false, false, true, true, false, 0);
 
-	TestLeastActionConstraint5("C:/temp/Sim", nCams, 3.0);
+	TestLeastActionConstraint5("C:/temp/Sim", 5, 10.0, 1);
 	/*if (argc == 2)
 	TestLeastActionConstraint5("C:/temp/Sim", 5, atof(argv[1]), 1);
 	else
@@ -5368,7 +5660,7 @@ int main(int argc, char* argv[])
 	{
 	TestLeastActionConstraint(nCams, stdev[0], actionID[kk], 1);
 	#pragma omp parallel for
-	for (int jj = 1; jj < 0; jj++)
+	for (int jj = 1; jj < 6; jj++)
 	TestLeastActionConstraint(nCams, stdev[jj], actionID[kk], 1000);
 	}
 	}*/

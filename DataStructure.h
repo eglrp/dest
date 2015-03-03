@@ -17,7 +17,7 @@ using namespace std;
 #define LUT  2
 #define LIMIT3D 1e-6
 #define Pi 3.1415926535897932
-#define MaxnFrame 3000
+#define MaxnFrame 7000
 
 struct LKParameters
 {

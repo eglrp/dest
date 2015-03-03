@@ -11,7 +11,7 @@ using namespace cv;
 char *Path;
 static bool g_bButton1Down = false;
 static GLfloat g_ratio;
-static GLfloat g_fViewDistance = 500 * VIEWING_DISTANCE_MIN;
+static GLfloat g_fViewDistance = 3000 * VIEWING_DISTANCE_MIN;
 static GLfloat g_nearPlane = 1.0, g_farPlane = 30000;
 float g_coordAxisLength = 300.f;
 static int g_Width = 1280, g_Height = 1024;
@@ -29,7 +29,7 @@ static float g_lightBright[4] = { 1, 1, 1, 1 };  // Position of light
 GLfloat Red[3] = { 1, 0, 0 }, Green[3] = { 0, 1, 0 }, Blue[3] = { 0, 0, 1 };
 GLfloat PointsCentroid[3], ViewingLoc[3];
 float InitLocFromCentroid[3];
-GLfloat Scale = 0.025f, CameraSize = 20.0f, pointSize = 2.f, normalSize = 20.f, arrowThickness = .1f;
+GLfloat CameraSize = 200.0f, pointSize = 20.f, normalSize = 20.f, arrowThickness = .1f;
 vector<int> PickedPoints;
 vector<int> PickedTraject;
 vector<int> PickCams;
@@ -50,13 +50,13 @@ void Draw_Axes(void)
 	glBegin(GL_LINES);
 	glColor3f(1, 0, 0); // X axis is red.
 	glVertex3f(0, 0, 0);
-	glVertex3f(g_coordAxisLength*Scale, 0, 0);
+	glVertex3f(g_coordAxisLength, 0, 0);
 	glColor3f(0, 1, 0); // Y axis is green.
 	glVertex3f(0, 0, 0);
-	glVertex3f(0, g_coordAxisLength*Scale, 0);
+	glVertex3f(0, g_coordAxisLength, 0);
 	glColor3f(0, 0, 1); // z axis is blue.
 	glVertex3f(0, 0, 0);
-	glVertex3f(0, 0, g_coordAxisLength*Scale);
+	glVertex3f(0, 0, g_coordAxisLength);
 	glEnd();
 
 	glPopMatrix();
@@ -146,14 +146,13 @@ void Arrow(GLdouble x1, GLdouble y1, GLdouble z1, GLdouble x2, GLdouble y2, GLdo
 void RenderGroundPlane()
 {
 	int gridNum = 10;
-	double width = 50;
+	double width = 500;
 	double halfWidth = width / 2;
-	//Point3f origin(0.0f, 0.0f, 0.0f);
 	Point3f origin(-PointsCentroid[0], -PointsCentroid[1], -PointsCentroid[2]);
 	Point3f axis1 = Point3f(1.0f, 0.0f, 0.0f)* width;
 	Point3f axis2 = Point3f(0.0f, 0.0f, 1.0f) * width;
 	glBegin(GL_QUADS);
-	for (int y = -gridNum; y <= 5 * gridNum; ++y)
+	for (int y = -gridNum; y <= gridNum; ++y)
 		for (int x = -gridNum; x <= gridNum; ++x)
 		{
 			if ((x + y) % 2 == 0)
@@ -262,7 +261,7 @@ void RenderObjects()
 			glPopMatrix();
 		}
 	}
-	RenderSkeleton(g_vis.PointPosition, Red);
+	//RenderSkeleton(g_vis.PointPosition, Red);
 
 	if (showInit3D)
 	{
@@ -328,7 +327,7 @@ void RenderObjects()
 	//draw 3d trajectories
 	if (drawPt3DTraject)
 	{
-		for (int pid = 0; pid < g_vis.PointPosition3.size(); pid++)
+		for (int pid = 0; pid < g_vis.PointPosition.size(); pid++)
 		{
 			glPushMatrix();
 			glBegin(GL_LINE_STRIP);
@@ -936,7 +935,7 @@ bool ReadCurrent3DGL(char *path, bool drawPointColor, bool drawPatchNormal, int 
 	if (setCoordinate)
 		PointsCentroid[0] = 0.0f, PointsCentroid[1] = 0.0f, PointsCentroid[2] = 0.f;
 	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	sprintf(Fname, "%s/GT_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/3DPoints/3dGL_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
 		printf("Cannot load %s\n", Fname);
@@ -983,7 +982,7 @@ bool ReadCurrent3DGL2(char *path, bool drawPointColor, bool drawPatchNormal, int
 		g_vis.PointColor2.clear(), g_vis.PointColor2.reserve(10e5);
 
 	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	sprintf(Fname, "%s/B_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/BA_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
 		printf("Cannot load %s\n", Fname);
@@ -1019,7 +1018,7 @@ bool ReadCurrent3DGL3(char *path, bool drawPointColor, bool drawPatchNormal, int
 		g_vis.PointColor3.clear(), g_vis.PointColor3.reserve(10e5);
 
 	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	sprintf(Fname, "%s/B2_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/Ba_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
 		printf("Cannot load %s\n", Fname);
@@ -1177,7 +1176,7 @@ void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime)
 	CamInfo temp;
 	for (int ii = 0; ii < nviews; ii++)
 	{
-		sprintf(Fname, "%s/PinfoGL_%d.txt", path, ii);
+		sprintf(Fname, "%s/Calib/PinfoGL_%d.txt", path, ii);
 		FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 			continue;

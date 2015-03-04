@@ -4949,7 +4949,7 @@ void NviewTriangulationNonLinear(double *P, double *Point2D, double *Point3D, do
 
 	ceres::Solver::Summary summary;
 	ceres::Solve(options, &problem, &summary);
-	//std::cout << summary.BriefReport() << "\n";
+	//std::cout << summary.FullReport() << "\n";
 
 	//printf("Error after: \n");
 	for (int ii = 0; ii < npts; ii++)

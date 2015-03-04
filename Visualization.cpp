@@ -935,7 +935,7 @@ bool ReadCurrent3DGL(char *path, bool drawPointColor, bool drawPatchNormal, int 
 	if (setCoordinate)
 		PointsCentroid[0] = 0.0f, PointsCentroid[1] = 0.0f, PointsCentroid[2] = 0.f;
 	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	sprintf(Fname, "%s/3DPoints/3dGL_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/GT_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
 		printf("Cannot load %s\n", Fname);
@@ -982,7 +982,7 @@ bool ReadCurrent3DGL2(char *path, bool drawPointColor, bool drawPatchNormal, int
 		g_vis.PointColor2.clear(), g_vis.PointColor2.reserve(10e5);
 
 	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	sprintf(Fname, "%s/BA_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/B_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
 		printf("Cannot load %s\n", Fname);
@@ -1018,7 +1018,7 @@ bool ReadCurrent3DGL3(char *path, bool drawPointColor, bool drawPatchNormal, int
 		g_vis.PointColor3.clear(), g_vis.PointColor3.reserve(10e5);
 
 	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	sprintf(Fname, "%s/Ba_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/A_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
 		printf("Cannot load %s\n", Fname);

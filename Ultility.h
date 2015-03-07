@@ -100,6 +100,7 @@ int siftgpu(char *Fname1, char *Fname2, const float nndrRatio = 0.8, const doubl
 
 void dec2bin(int dec, int*bin, int num_bin);
 double nChoosek(int n, int k);
+double nPermutek(int n, int k);
 int MyFtoI(double W);
 bool IsNumber(double x);
 bool IsFiniteNumber(double x);
@@ -501,7 +502,7 @@ int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, v
 int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, vector<Point2d> keypoints1, vector<Point2d> keypoints2, vector<int>pair, double density);
 int DisplayImageCorrespondencesDriver(char *Path, vector<int>viewsID, int timeID, int nchannels, double density = 0.25);
 
-int ReadIntrinsicResults(char *path, CameraData *DeviceParas);
+bool ReadIntrinsicResults(char *path, CameraData *DeviceParas);
 int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams);
 void SaveCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>AvailViews, Point3d *All3D, int npts);
 void ReadCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>&AvailViews, Point3d *All3D, int npts);

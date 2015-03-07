@@ -34,9 +34,10 @@ static void onMouse(int event, int x, int y, int, void*)
 	{
 		MousePosX = x, MousePosY = y;
 		printf("Selected: %d %d\n", x, y);
+		cout << "\a";
 	}
 }
-int TriangulatePointsFromCalibratedCameras(char *Path, int nCams, int distortionCorrected, int maxPts, double threshold = 2.0)
+int TriangulatePointsFromCalibratedCameras(char *Path, int distortionCorrected, int maxPts, double threshold = 2.0)
 {
 	char Fname[200];
 	Corpus corpusData;
@@ -260,323 +261,12 @@ int ShowSyncMem()
 	delete[]BlackImage;
 	return 0;
 }
-int ShowSyncLoad(char *DataPATH, int writeSyncedFrames = 0)
-{
-	//bad frames: 1510 1741 1765 1899
-	char Fname[2000];
-	const int playBackSpeed = 1, nsequences = 10, refSeq = 1;
-	int seqName[nsequences] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 }; //{ 2, 7 };
-
-	int WBlock = 1920, HBlock = 1080, nBlockX = 5, nchannels = 3, MaxFrames = 5500;
-
-	//Make sure to use 59.94 instead of 60 
-	Sequence mySeq[nsequences];
-	/*mySeq[0].InitSeq(47.95, 4.761);
-	mySeq[1].InitSeq(47.95, - 8.3183);
-	mySeq[2].InitSeq(47.95,  4.761+0.80816);
-	mySeq[3].InitSeq(47.95,  0.0);*/
-
-	/*//My wedding sequences: 1 3 5 7
-	mySeq[0].InitSeq(100.0,   333.3126);
-	mySeq[1].InitSeq(59.94, 0);
-	mySeq[2].InitSeq(59.94,  660.8185);
-	mySeq[3].InitSeq(59.94,  700.2928);*/
-
-	// soccer sequences: 
-	mySeq[0].InitSeq(47.95, 0);
-	mySeq[1].InitSeq(47.95, 72.78);
-	mySeq[2].InitSeq(47.95, 108.19);
-	mySeq[3].InitSeq(47.95, 91.42);
-	mySeq[4].InitSeq(47.95, 91.38);
-	mySeq[5].InitSeq(47.95, 89.52);
-	mySeq[6].InitSeq(47.95, 79.56);
-	mySeq[7].InitSeq(47.95, 90.74);
-	mySeq[8].InitSeq(47.95, 89.62);
-	mySeq[9].InitSeq(47.95, 78.93);
-	/*mySeq[0].InitSeq(47.95, 110.19 - 90.74);
-	mySeq[1].InitSeq(47.95, 90.74 - 90.74);*/
-
-	//clock with srinivas
-	//mySeq[0].InitSeq(29.97, 18.08);
-	//mySeq[1].InitSeq(29.97, 0);
-
-	//Juggling
-	//mySeq[0].InitSeq(29.97, 0);
-	//mySeq[1].InitSeq(29.97, 0);// 70.57 + 383.24);
-	//mySeq[2].InitSeq(29.97, 0);// 70.57 + 167.79);
-	//mySeq[3].InitSeq(29.97, 0);// 70.57 + 367.67);
-
-	int allFramesOn = 0;
-	if (mySeq[0].TimeAlignPara[0] == 47.95)
-		allFramesOn = 150;
-
-	//Read video sequences
-	int width = 0, height = 0;
-	nBlockX = nsequences < nBlockX ? nsequences : nBlockX;
-	for (int ii = 0; ii < nsequences; ii++)
-		width += WBlock, height += HBlock;
-
-	//Initialize display canvas
-	int nBlockY = (1.0*nsequences / nBlockX > nsequences / nBlockX) ? nsequences / nBlockX + 1 : nsequences / nBlockX;
-	width = WBlock*nBlockX, height = HBlock*nBlockY;
-	char *BigImg = new char[width*height*nchannels];
-	char *BlackImage = new char[WBlock*HBlock*nchannels], *SubImage = new char[WBlock*HBlock*nchannels];
-	IplImage *cvImg = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, nchannels);
-
-	for (int ii = 0; ii < width*height*nchannels; ii++)
-		BigImg[ii] = (char)0;
-	for (int ii = 0; ii < WBlock*HBlock*nchannels; ii++)
-		BlackImage[ii] = (char)0;
-
-	//Create display window
-	int oFrameID[nsequences + 1], FrameID[nsequences + 1];
-	for (int ii = 0; ii < nsequences + 1; ii++)
-		oFrameID[ii] = allFramesOn, FrameID[ii] = allFramesOn;
-	cvNamedWindow("VideoSequences", CV_WINDOW_NORMAL);
-	cvCreateTrackbar("Global frame", "VideoSequences", &FrameID[0], MaxFrames - 1, NULL);
-	for (int ii = 0; ii < nsequences; ii++)
-	{
-		sprintf(Fname, "Seq %d", ii + 1);
-		cvCreateTrackbar(Fname, "VideoSequences", &FrameID[ii + 1], MaxFrames - 1, NULL);
-		cvSetTrackbarPos(Fname, "VideoSequences", 0);
-	}
-	char* nameb1 = "Play/Stop";
-	createButton(nameb1, AutomaticPlay, nameb1, CV_CHECKBOX, 1);
-
-	int BlockXID, BlockYID, setframeID, setSeqFrame, same, noUpdate, swidth, sheight;
-	bool GlobalSlider[nsequences]; //True: global slider, false: local slider
-	for (int ii = 0; ii < nsequences; ii++)
-		GlobalSlider[ii] = true;
-
-	int SaveFrameCount = 0;
-	while (waitKey(17) != 27)
-	{
-		noUpdate = 0;
-		for (int ii = 0; ii < nsequences; ii++)
-		{
-			BlockXID = ii%nBlockX, BlockYID = ii / nBlockX;
-
-			same = 0;
-			if (GlobalSlider[ii])
-				setframeID = FrameID[0]; //global frame
-			else
-				setframeID = FrameID[ii + 1];
-
-			if (oFrameID[0] != FrameID[0])
-				FrameID[ii + 1] = FrameID[0], GlobalSlider[ii] = true;
-			else
-				same += 1;
-
-			if (oFrameID[ii + 1] != FrameID[ii + 1]) //but if local slider moves
-				setframeID = FrameID[ii + 1], GlobalSlider[ii] = false;
-			else
-				same += 1;
-
-			sprintf(Fname, "Seq %d", ii + 1);
-			setSeqFrame = (int)(mySeq[ii].TimeAlignPara[0] / mySeq[refSeq].TimeAlignPara[0] * (1.0*setframeID - mySeq[ii].TimeAlignPara[1]) + 0.5); //setframeID-SeqFrameOffset[ii];
-			printf("Sequence %d frame %d\n", ii + 1, setSeqFrame);
-			if (same == 2)
-			{
-				noUpdate++;
-				continue;
-			}
-			if (setSeqFrame <= 0)
-			{
-				cvSetTrackbarPos(Fname, "VideoSequences", (int)(mySeq[ii].TimeAlignPara[1] + 0.5));
-				Set_Sub_Mat(BlackImage, BigImg, nchannels*WBlock, HBlock, nchannels*width, nchannels*BlockXID*WBlock, BlockYID*HBlock);
-			}
-			else
-			{
-				oFrameID[ii + 1] = FrameID[ii + 1];
-				cvSetTrackbarPos(Fname, "VideoSequences", oFrameID[ii + 1]);
-				sprintf(Fname, "%s/Corrected/%d/%d.png", DataPATH, seqName[ii], setSeqFrame);
-				if (GrabImage(Fname, SubImage, swidth, sheight, nchannels) && ii == 5)
-					Set_Sub_Mat(SubImage, BigImg, nchannels*swidth, sheight, nchannels*width, nchannels*BlockXID*WBlock, BlockYID*HBlock);
-				else
-					Set_Sub_Mat(BlackImage, BigImg, nchannels*WBlock, HBlock, nchannels*width, nchannels*BlockXID*WBlock, BlockYID*HBlock);
-
-				if (writeSyncedFrames == 1 && ii == 5)
-				{
-					//Han's format
-					sprintf(Fname, "%s/%.8d", DataPATH, SaveFrameCount / nsequences);	_mkdir(Fname);
-					sprintf(Fname, "%s/%.8d/%.8d_00_%.2d.png", DataPATH, SaveFrameCount / nsequences, SaveFrameCount / nsequences, seqName[ii]);
-					SaveDataToImage(Fname, SubImage, swidth, sheight, nchannels);
-
-					sprintf(Fname, "%s/%d", DataPATH, seqName[ii]);	_mkdir(Fname);
-					sprintf(Fname, "%s/%d/%d.png", DataPATH, seqName[ii], SaveFrameCount / nsequences);
-					SaveDataToImage(Fname, SubImage, swidth, sheight, nchannels);
-					SaveFrameCount++;
-				}
-			}
-		}
-		oFrameID[0] = FrameID[0];
-		if (noUpdate != nsequences)
-			ShowDataToImage("VideoSequences", BigImg, width, height, nchannels, cvImg);
-		if (autoplay)
-		{
-			cvSetTrackbarPos("Global frame", "VideoSequences", FrameID[0]);
-			FrameID[0] += playBackSpeed;
-		}
-	}
-
-	cvReleaseImage(&cvImg);
-	delete[]BigImg;
-	delete[]BlackImage;
-	delete[]SubImage;
-
-	return 0;
-}
-int ShowSyncLoad2(char *DataPATH, int writeSyncedFrames = 0)
-{
-	//bad frames: 1510 1741 1765 1899
-	char Fname[2000];
-	const int playBackSpeed = 1, nsequences = 2, refSeq = 1;
-	int seqName[nsequences] = { 2, 7 };
-
-	int WBlock = 1920, HBlock = 1080, nBlockX = 2, nchannels = 3, MaxFrames = 5500;
-
-	//Make sure to use 59.94 instead of 60 
-	Sequence mySeq[nsequences];
-	/*mySeq[0].InitSeq(47.95, 4.761);
-	mySeq[1].InitSeq(47.95, - 8.3183);
-	mySeq[2].InitSeq(47.95,  4.761+0.80816);
-	mySeq[3].InitSeq(47.95,  0.0);*/
-
-	/*//My wedding sequences: 1 3 5 7
-	mySeq[0].InitSeq(100.0,   333.3126);
-	mySeq[1].InitSeq(59.94, 0);
-	mySeq[2].InitSeq(59.94,  660.8185);
-	mySeq[3].InitSeq(59.94,  700.2928);*/
-
-	// soccer sequences: 
-	mySeq[0].InitSeq(47.95, 110.19 - 90.74);
-	mySeq[1].InitSeq(47.95, 90.74 - 90.74);
-
-	//clock with srinivas
-	//mySeq[0].InitSeq(29.97, 18.08);
-	//mySeq[1].InitSeq(29.97, 0);
-
-
-	int allFramesOn = 0;
-	if (mySeq[0].TimeAlignPara[0] == 47.95)
-		allFramesOn = 150;
-
-	//Read video sequences
-	int width = 0, height = 0;
-	nBlockX = nsequences < nBlockX ? nsequences : nBlockX;
-	for (int ii = 0; ii < nsequences; ii++)
-		width += WBlock, height += HBlock;
-
-	//Initialize display canvas
-	int nBlockY = (1.0*nsequences / nBlockX > nsequences / nBlockX) ? nsequences / nBlockX + 1 : nsequences / nBlockX;
-	width = WBlock*nBlockX, height = HBlock*nBlockY;
-	char *BigImg = new char[width*height*nchannels];
-	char *BlackImage = new char[WBlock*HBlock*nchannels], *SubImage = new char[WBlock*HBlock*nchannels];
-	IplImage *cvImg = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, nchannels);
-
-	for (int ii = 0; ii < width*height*nchannels; ii++)
-		BigImg[ii] = (char)0;
-	for (int ii = 0; ii < WBlock*HBlock*nchannels; ii++)
-		BlackImage[ii] = (char)0;
-
-	//Create display window
-	int oFrameID[nsequences + 1], FrameID[nsequences + 1];
-	for (int ii = 0; ii < nsequences + 1; ii++)
-		oFrameID[ii] = allFramesOn, FrameID[ii] = allFramesOn;
-	cvNamedWindow("VideoSequences2", CV_WINDOW_NORMAL);
-	cvCreateTrackbar("Global frame", "VideoSequences2", &FrameID[0], MaxFrames - 1, NULL);
-	for (int ii = 0; ii < nsequences; ii++)
-	{
-		sprintf(Fname, "Seq %d", ii + 1);
-		cvCreateTrackbar(Fname, "VideoSequences2", &FrameID[ii + 1], MaxFrames - 1, NULL);
-		cvSetTrackbarPos(Fname, "VideoSequences2", 0);
-	}
-	char* nameb1 = "Play/Stop";
-	createButton(nameb1, AutomaticPlay, nameb1, CV_CHECKBOX, 1);
-
-	int BlockXID, BlockYID, setframeID, setSeqFrame, same, noUpdate, swidth, sheight;
-	bool GlobalSlider[nsequences]; //True: global slider, false: local slider
-	for (int ii = 0; ii < nsequences; ii++)
-		GlobalSlider[ii] = true;
-
-	int SaveFrameCount = 0;
-	while (waitKey(17) != 27)
-	{
-		noUpdate = 0;
-		for (int ii = 0; ii < nsequences; ii++)
-		{
-			BlockXID = ii%nBlockX, BlockYID = ii / nBlockX;
-
-			same = 0;
-			if (GlobalSlider[ii])
-				setframeID = FrameID[0]; //global frame
-			else
-				setframeID = FrameID[ii + 1];
-
-			if (oFrameID[0] != FrameID[0])
-				FrameID[ii + 1] = FrameID[0], GlobalSlider[ii] = true;
-			else
-				same += 1;
-
-			if (oFrameID[ii + 1] != FrameID[ii + 1]) //but if local slider moves
-				setframeID = FrameID[ii + 1], GlobalSlider[ii] = false;
-			else
-				same += 1;
-
-			sprintf(Fname, "Seq %d", ii + 1);
-			setSeqFrame = (int)(mySeq[ii].TimeAlignPara[0] / mySeq[refSeq].TimeAlignPara[0] * (1.0*setframeID - mySeq[ii].TimeAlignPara[1]) + 0.5); //setframeID-SeqFrameOffset[ii];
-			printf("Sequence %d frame %d\n", ii + 1, setSeqFrame);
-			if (same == 2)
-			{
-				noUpdate++;
-				continue;
-			}
-			if (setSeqFrame <= 0)
-			{
-				cvSetTrackbarPos(Fname, "VideoSequences2", (int)(mySeq[ii].TimeAlignPara[1] + 0.5));
-				Set_Sub_Mat(BlackImage, BigImg, nchannels*WBlock, HBlock, nchannels*width, nchannels*BlockXID*WBlock, BlockYID*HBlock);
-			}
-			else
-			{
-				oFrameID[ii + 1] = FrameID[ii + 1];
-				cvSetTrackbarPos(Fname, "VideoSequences2", oFrameID[ii + 1]);
-				sprintf(Fname, "%s/RawImages/%d/%d.png", DataPATH, seqName[ii], setSeqFrame);
-				if (GrabImage(Fname, SubImage, swidth, sheight, nchannels))
-					Set_Sub_Mat(SubImage, BigImg, nchannels*swidth, sheight, nchannels*width, nchannels*BlockXID*WBlock, BlockYID*HBlock);
-				else
-					Set_Sub_Mat(BlackImage, BigImg, nchannels*WBlock, HBlock, nchannels*width, nchannels*BlockXID*WBlock, BlockYID*HBlock);
-
-				if (writeSyncedFrames == 1)
-				{
-					sprintf(Fname, "%s/%d/%d.png", DataPATH, seqName[ii], SaveFrameCount / nsequences);
-					SaveDataToImage(Fname, SubImage, swidth, sheight, nchannels);
-					SaveFrameCount++;
-				}
-			}
-		}
-		oFrameID[0] = FrameID[0];
-		if (noUpdate != nsequences)
-			ShowDataToImage("VideoSequences2", BigImg, width, height, nchannels, cvImg);
-		if (autoplay)
-		{
-			cvSetTrackbarPos("Global frame", "VideoSequences2", FrameID[0]);
-			FrameID[0] += playBackSpeed;
-		}
-	}
-
-	cvReleaseImage(&cvImg);
-	delete[]BigImg;
-	delete[]BlackImage;
-	delete[]SubImage;
-
-	return 0;
-}
-int ShowSyncLoad3(char *DataPATH, char *SavePATH, int refSeq = -1)
+int ShowSyncLoad(char *DataPATH, char *SavePATH, int refSeq = -1)
 {
 	char Fname[2000];
 	const int nsequences = 9;
 	int  playBackSpeed = 1, seqName[nsequences] = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
-	int WBlock = 1920, HBlock = 1080, nBlockX = 3, nchannels = 3, MaxFrames = 8500;
+	int WBlock = 1280, HBlock = 720, nBlockX = 3, nchannels = 3, MaxFrames = 2500;
 
 
 	/*sprintf(Fname, "%s/FaudioSync.txt", DataPATH);
@@ -601,15 +291,14 @@ int ShowSyncLoad3(char *DataPATH, char *SavePATH, int refSeq = -1)
 	//refSeq = ii;
 	}
 	}
-	refSeq = 2;
-	*/
+	refSeq = 2;*/
 
-	double Offset[] = { 1, 0, 0, -2, 0, 1, 0, 1, 0 };
-	//double Offset[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	double Offset[] = { 0.315, 0.000, 0.547, 0.477, 0.046, 0.225, 0.187, 0.118, 0.150 };
+	//double Offset[] = { 0.501, 0.431, 0.000, 0.179 }; int seqName[nsequences] = { 2, 3, 4, 5 }
 	Sequence mySeq[nsequences];
 	if (refSeq == -1)
 		for (int ii = 0; ii < nsequences; ii++)
-			mySeq[ii].InitSeq(1, Offset[ii]);
+			mySeq[ii].InitSeq(119.88, Offset[ii]);
 	refSeq = 2;
 
 	//Read video sequences
@@ -855,7 +544,7 @@ int TestPnP(char *Path, int nCams, int selectedCams)
 	int nviews = corpusData.nCamera;
 
 	CameraData *cameraInfo = new CameraData[nCams];
-	if (ReadIntrinsicResults(Path, cameraInfo) != 0)
+	if (!ReadIntrinsicResults(Path, cameraInfo))
 		return 1;
 	if (selectedCams != -1)
 	{
@@ -1054,7 +743,7 @@ void VisualizeCleanMatches(char *Path, int view1, int view2, int timeID, double 
 {
 	char Fname[200];
 	if (timeID < 0)
-		sprintf(Fname, "%s/M_%d_%d.dat", Path, view1, view2);
+		sprintf(Fname, "%s/Corpus/M_%d_%d.dat", Path, view1, view2);
 	else
 		sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, view1, view2);
 
@@ -1073,7 +762,7 @@ void VisualizeCleanMatches(char *Path, int view1, int view2, int timeID, double 
 	fclose(fp);
 
 	if (timeID < 0)
-		sprintf(Fname, "%s/K%d.dat", Path, view1);
+		sprintf(Fname, "%s/Corpus/K%d.dat", Path, view1);
 	else
 		sprintf(Fname, "%s/%d/K%d.dat", Path, view1, timeID);
 
@@ -1087,7 +776,7 @@ void VisualizeCleanMatches(char *Path, int view1, int view2, int timeID, double 
 	}
 
 	if (timeID < 0)
-		sprintf(Fname, "%s/K%d.dat", Path, view2);
+		sprintf(Fname, "%s/Corpus/K%d.dat", Path, view2);
 	else
 		sprintf(Fname, "%s/%d/K%d.dat", Path, view2, timeID);
 	vector<KeyPoint> keypoints2; keypoints2.reserve(MAXSIFTPTS);
@@ -1104,7 +793,7 @@ void VisualizeCleanMatches(char *Path, int view1, int view2, int timeID, double 
 
 	int nchannels = 3;
 	if (timeID < 0)
-		sprintf(Fname, "%s/%d.png", Path, view1);
+		sprintf(Fname, "%s/Corpus/%d.png", Path, view1);
 	else
 		sprintf(Fname, "%s/%d/%d.png", Path, view1, timeID);
 	IplImage *Img1 = cvLoadImage(Fname, nchannels == 3 ? 1 : 0);
@@ -1114,7 +803,7 @@ void VisualizeCleanMatches(char *Path, int view1, int view2, int timeID, double 
 		return;
 	}
 	if (timeID < 0)
-		sprintf(Fname, "%s/%d.png", Path, view2);
+		sprintf(Fname, "%s/Corpus/%d.png", Path, view2);
 	else
 		sprintf(Fname, "%s/%d/%d.png", Path, view2, timeID);
 	IplImage *Img2 = cvLoadImage(Fname, nchannels == 3 ? 1 : 0);
@@ -3003,7 +2692,7 @@ void Simulate3DHelix(vector<Point3d> &Traj, double A, double T, double V, int np
 	}
 	return;
 }
-double ComputeActionEnergy(vector<Point3d> traj, vector<double>Time, double eps, int ApproxOrder)
+double ComputeActionEnergy(vector<Point3d> traj, vector<double>Time, double eps, double g, int ApproxOrder)
 {
 	double Cost = 0.0;
 	if (ApproxOrder == 1)
@@ -3011,7 +2700,7 @@ double ComputeActionEnergy(vector<Point3d> traj, vector<double>Time, double eps,
 		{
 			double num = (pow(traj[ii].x - traj[ii + 1].x, 2) + pow(traj[ii].y - traj[ii + 1].y, 2) + pow(traj[ii].z - traj[ii + 1].z, 2));
 			double denum = Time[ii + 1] - Time[ii] + eps;
-			double cost = num / denum;// -0.5*9.8*(traj[ii].y + traj[ii + 1].y)*(Time[ii + 1] - Time[ii]);
+			double cost = num / denum - g*(traj[ii].y + traj[ii + 1].y)*(Time[ii + 1] - Time[ii]);
 			Cost += cost;
 		}
 	else
@@ -3058,23 +2747,21 @@ void RecursiveUpdateCameraOffset(int *currentOffset, int BruteForceTimeWindow, i
 
 	return;
 }
-int TestLeastActionConstraint(int nCams, double stdev, int actionID, int nRep = 10000)
+int TestLeastActionConstraint(char *Path, int nCams, int ntracks, double stdev, int nRep = 10000)
 {
 	int approxOrder = 1;
 
 	char Fname[200];
-	vector<char*> str;
-	str.push_back("s"), str.push_back("f"), str.push_back("d");
 	VideoData AllVideoInfo;
-	sprintf(Fname, "%s/Calib", "C:/temp/Sim");
+	sprintf(Fname, "%s/Calib", Path);
 	if (ReadVideoData(Fname, AllVideoInfo, nCams, 0, 3000) == 1)
 		return 1;
-	int nframes = max(MaxnFrame, 6500);
+	int nframes = max(MaxnFrame, 7000);
 	double P[12];
 
 	srand(time(NULL));
-	const int ntracks = 13, BruteForceTimeWindow = 10;
-	const double Tscale = 1.0, ialpha = 0.02; //1/50
+	const double Tscale = 1.0, ialpha = 1.0 / 120, eps = 1.0e-6, rate = 10;
+	const int  BruteForceTimeWindow = 10, nCostSize = pow(2 * BruteForceTimeWindow + 1, (nCams - 1));
 
 	vector<Point2d> uv;
 	vector<int> ViewerList;
@@ -3083,28 +2770,18 @@ int TestLeastActionConstraint(int nCams, double stdev, int actionID, int nRep = 
 	Point3d XYZAll[2000];
 
 	int gtOff[] = { 0, 6, 2, 8, 8 };
-	//int *currentOffset = new int[nCams];
-	//int *currentOffsetBK = new int[nCams];
-	//int *SortID = new int[nCams];
-	//int *PerCam_nf = new int[nCams];
-	//******************
-	int currentFrame[5], currentOffset[5], currentOffsetBK[5], PerCam_nf[5], SortID[5];
-	//******************
-
-	vector<Point2d> *PerCam_UV_All = new vector<Point2d>[nCams];
-	vector<Point2d> *PerCam_UV = new vector<Point2d>[nCams];
-	vector<Point3d> *PerCam_XYZ = new vector<Point3d>[nCams];
-
-	const double eps = 1.0e-6, rate = 10;
-	const int nCostEdgeLength = 2 * BruteForceTimeWindow + 1, nCostSize = pow(2 * BruteForceTimeWindow + 1, (nCams - 1));
 	double *AllCost = new double[nCostSize];
+	int *currentFrame = new int[nCams], *currentOffset = new int[nCams], *currentOffsetBK = new int[nCams], *SortID = new int[nCams], *PerCam_nf = new int[nCams];
+
+	vector<Point2d> *PerCam_UV_All = new vector<Point2d>[nCams], *PerCam_UV = new vector<Point2d>[nCams];
+	vector<Point3d> *PerCam_XYZ = new vector<Point3d>[nCams];
 
 	//Make sure that no gtOff is smaller than 0
 	for (int ii = 0; ii < nCams; ii++)
 		if (rate*ii + gtOff[ii] < 0)
 			gtOff[ii] += rate;
 
-	for (int strID = 1; strID < 2; strID++)
+	for (int gI = 0; gI < 10; gI++)
 	{
 		for (int off = 0; off <= 10; off++)
 		{
@@ -3116,7 +2793,7 @@ int TestLeastActionConstraint(int nCams, double stdev, int actionID, int nRep = 
 				//Read 3D
 				double x, y, z;
 				XYZ.clear();
-				sprintf(Fname, "C:/temp/Sim/3DTracks/%d.txt", trackID);
+				sprintf(Fname, "%s/3DTracks/%d.txt", Path, trackID);
 				FILE *fp = fopen(Fname, "r");
 				while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
 					XYZ.push_back(Point3d(x, y, z));
@@ -3283,7 +2960,7 @@ int TestLeastActionConstraint(int nCams, double stdev, int actionID, int nRep = 
 						}
 
 						//Compute energy
-						AllCost[count] += ComputeActionEnergy(Traj, Time, eps, approxOrder) + ImCost;
+						AllCost[count] += ComputeActionEnergy(Traj, Time, eps, 9.8 * gI, approxOrder) + ImCost;
 						//double cost2 = ComputeActionEnergy(Traj, Time, eps, 1);
 
 						currentOffset[1]++;
@@ -3301,7 +2978,7 @@ int TestLeastActionConstraint(int nCams, double stdev, int actionID, int nRep = 
 			for (int kk = 1; kk < nCams; kk++)
 				currentOffset[kk] = -BruteForceTimeWindow;
 
-			sprintf(Fname, "C:/temp/%d_cost_%d_%.1f.txt", gtOff[1], nCams, stdev);  FILE *fp = fopen(Fname, "w+");
+			sprintf(Fname, "C:/temp/%d_%d_cost_%d_%.1f.txt", gI, gtOff[1], nCams, stdev);  FILE *fp = fopen(Fname, "w+");
 			while (true)
 			{
 				for (int kk = 1; kk < nCams; kk++)
@@ -3319,11 +2996,8 @@ int TestLeastActionConstraint(int nCams, double stdev, int actionID, int nRep = 
 		}
 	}
 
-	for (int ii = 0; ii < nCams; ii++)
-		PerCam_UV[ii].clear(), PerCam_UV_All[ii].clear(), PerCam_XYZ[ii].clear();
-
-	//delete[]currentOffset, delete[]PerCam_nf, delete[]SortID, delete[]currentOffsetBK;
-	delete[]AllCost;
+	printf("Done with %s\n", Path);
+	delete[]currentFrame, delete[]currentOffset, delete[]PerCam_nf, delete[]SortID, delete[]currentOffsetBK, delete[]AllCost;
 	delete[]PerCam_UV, delete[]PerCam_UV_All, delete[]PerCam_XYZ;
 
 	return 0;
@@ -3603,6 +3277,29 @@ struct LeastActionCostCeres {
 	int frameID1, frameID2;
 	double ialpha, Tscale, timeStep, epsilon;
 };
+struct TimeCyclicCostCerest {
+	TimeCyclicCostCerest(double ilamda){
+		lamda = ilamda;
+	}
+
+	template <typename T>	bool operator()(const T* const timeStamp1, const T* const timeStamp2, const T* const timeStamp3, T* residuals) 	const
+	{
+		T dif12 = timeStamp1[0] - timeStamp2[0];
+		T dif23 = timeStamp2[0] - timeStamp3[0];
+		T dif13 = timeStamp1[0] - timeStamp3[0];
+		residuals[0] = (T)lamda*(dif12 + dif23 - dif13);
+		return true;
+	}
+	static ceres::CostFunction* CreateAutoDiff(double lamda){
+		return (new ceres::AutoDiffCostFunction<TimeCyclicCostCerest, 1, 1, 1, 1>(new TimeCyclicCostCerest(lamda)));
+	}
+
+	static ceres::CostFunction* CreateNumerDiff(double lamda){
+		return (new ceres::NumericDiffCostFunction<TimeCyclicCostCerest, ceres::CENTRAL, 1, 1, 1, 1>(new TimeCyclicCostCerest(lamda)));
+	}
+
+	double lamda;
+};
 struct IdealGeoProjectionCeres {
 	IdealGeoProjectionCeres(double *Pmat, Point2d pt2D, double ilamda)
 	{
@@ -3651,7 +3348,8 @@ struct IdealAlgebraicReprojectionCeres {
 
 	double *Q, *U, lamda;
 };
-void LeastActionOptimXYZT(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PointsPerTrack, double *currentOffset, int ntracks, bool fixedTime, bool fixed3D, bool non_monotonicDescent, int nCams, double Tscale, double ialpha, double rate, double eps, double lamda)
+
+void LeastActionOptimXYZT(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PointsPerTrack, double *currentOffset, int ntracks, bool fixedTime, bool fixed3D, bool non_monotonicDescent, int nCams, double Tscale, double ialpha, double rate, double eps, double lamda2DCost, double lamdaTimeTripletCost)
 {
 	double ActionCost = 0.0, ProjCost = 0.0, costiX, costiY, costi;
 
@@ -3754,13 +3452,13 @@ void LeastActionOptimXYZT(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle>
 			ActionCost += costi;
 			Q1 = Traj2DAll[trackID][ll].Q, Q2 = Traj2DAll[trackID][ll + 1].Q, U1 = Traj2DAll[trackID][ll].u, U2 = Traj2DAll[trackID][ll + 1].u;
 
-			costiX = lamda*(Q1[0] * Allpt3D[trackID][3 * ll] + Q1[1] * Allpt3D[trackID][3 * ll + 1] + Q1[2] * Allpt3D[trackID][3 * ll + 2] - U1[0]);
-			costiY = lamda*(Q1[3] * Allpt3D[trackID][3 * ll] + Q1[4] * Allpt3D[trackID][3 * ll + 1] + Q1[5] * Allpt3D[trackID][3 * ll + 2] - U1[1]);
+			costiX = lamda2DCost*(Q1[0] * Allpt3D[trackID][3 * ll] + Q1[1] * Allpt3D[trackID][3 * ll + 1] + Q1[2] * Allpt3D[trackID][3 * ll + 2] - U1[0]);
+			costiY = lamda2DCost*(Q1[3] * Allpt3D[trackID][3 * ll] + Q1[4] * Allpt3D[trackID][3 * ll + 1] + Q1[5] * Allpt3D[trackID][3 * ll + 2] - U1[1]);
 			costi = sqrt(costiX*costiX + costiY*costiY);
 			ProjCost += costi;
 
-			costiX = lamda*(Q2[0] * Allpt3D[trackID][3 * ll + 3] + Q2[1] * Allpt3D[trackID][3 * ll + 4] + Q2[2] * Allpt3D[trackID][3 * ll + 5] - U2[0]);
-			costiY = lamda*(Q2[3] * Allpt3D[trackID][3 * ll + 3] + Q2[4] * Allpt3D[trackID][3 * ll + 4] + Q2[5] * Allpt3D[trackID][3 * ll + 5] - U2[1]);
+			costiX = lamda2DCost*(Q2[0] * Allpt3D[trackID][3 * ll + 3] + Q2[1] * Allpt3D[trackID][3 * ll + 4] + Q2[2] * Allpt3D[trackID][3 * ll + 5] - U2[0]);
+			costiY = lamda2DCost*(Q2[3] * Allpt3D[trackID][3 * ll + 3] + Q2[4] * Allpt3D[trackID][3 * ll + 4] + Q2[5] * Allpt3D[trackID][3 * ll + 5] - U2[1]);
 			costi = sqrt(costiX*costiX + costiY*costiY);
 			ProjCost += costi;
 
@@ -3775,26 +3473,48 @@ void LeastActionOptimXYZT(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle>
 				problem.AddResidualBlock(cost_function, NULL, &Allpt3D[trackID][3 * ll], &Allpt3D[trackID][3 * (ll + 1)], &currentOffset[camID1], &currentOffset[camID2]);
 			}
 
-			ceres::CostFunction* cost_function2 = IdealAlgebraicReprojectionCeres::Create(Traj2DAll[trackID][ll].Q, Traj2DAll[trackID][ll].u, lamda);
+			ceres::CostFunction* cost_function2 = IdealAlgebraicReprojectionCeres::Create(Traj2DAll[trackID][ll].Q, Traj2DAll[trackID][ll].u, lamda2DCost);
 			problem.AddResidualBlock(cost_function2, NULL, Allpt3D[trackID] + 3 * ll);
 
-			ceres::CostFunction* cost_function3 = IdealAlgebraicReprojectionCeres::Create(Traj2DAll[trackID][ll + 1].Q, Traj2DAll[trackID][ll + 1].u, lamda);
+			ceres::CostFunction* cost_function3 = IdealAlgebraicReprojectionCeres::Create(Traj2DAll[trackID][ll + 1].Q, Traj2DAll[trackID][ll + 1].u, lamda2DCost);
 			problem.AddResidualBlock(cost_function3, NULL, Allpt3D[trackID] + 3 * ll + 3);
 		}
 	}
-	//printf("ActionCost and ProjCost before: %f %f\n", ActionCost, ProjCost);
-	printf("%f %f ", ActionCost, ProjCost);
-	for (int trackID = 0; trackID < ntracks; trackID++)
-		PointsPerTrack.push_back(Traj2DAll[trackID].size());
+	//Add triplet cyclic time constraint: AB + BC = AC
+	if (nCams > 2)
+	{
+		const int k = 3; //nchoosek
+		std::vector<bool> v(nCams);
+		std::fill(v.begin() + k, v.end(), true);
 
+		int nTriplets = nChoosek(nCams, k);
+		vector<int>*TripletList = new vector<int>[nTriplets];
+		int count = 0;
+		do {
+			for (int i = 0; i < nCams; ++i)
+				if (!v[i])
+					TripletList[count].push_back(i);
+			count++;
+		} while (std::next_permutation(v.begin(), v.end()));
+
+		for (int ii = 0; ii < nTriplets; ii++)
+		{
+			ceres::CostFunction* cost_function = TimeCyclicCostCerest::CreateAutoDiff(lamdaTimeTripletCost);
+			problem.AddResidualBlock(cost_function, NULL, &currentOffset[TripletList[ii][0]], &currentOffset[TripletList[ii][1]], &currentOffset[TripletList[ii][2]]);
+		}
+	}
+	//Set bound on the time 
 	for (int camID = 1; camID < nCams; camID++)
-		problem.SetParameterLowerBound(&currentOffset[camID], 0, 0.0), problem.SetParameterUpperBound(&currentOffset[camID], 0, 2.0*rate);
+		problem.SetParameterLowerBound(&currentOffset[camID], 0, 0.0), problem.SetParameterUpperBound(&currentOffset[camID], 0, rate);
 
+	//Set fixed parameters
 	problem.SetParameterBlockConstant(&currentOffset[0]);
 	if (fixedTime)
 		for (int camID = 1; camID < nCams; camID++)
 			problem.SetParameterBlockConstant(&currentOffset[camID]);
 
+	for (int trackID = 0; trackID < ntracks; trackID++)
+		PointsPerTrack.push_back(Traj2DAll[trackID].size());
 	if (fixed3D)
 	{
 		for (int trackID = 0; trackID < ntracks; trackID++)
@@ -3804,6 +3524,9 @@ void LeastActionOptimXYZT(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle>
 				problem.SetParameterBlockConstant(&Allpt3D[trackID][3 * ll]);
 		}
 	}
+
+	//printf("ActionCost and ProjCost before: %f %f\n", ActionCost, ProjCost);
+	printf("%f %f ", ActionCost, ProjCost);
 
 	ceres::Solver::Options options;
 	options.num_threads = 4;
@@ -3829,13 +3552,13 @@ void LeastActionOptimXYZT(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle>
 			costi = LeastActionError(&Allpt3D[trackID][3 * ll], &Allpt3D[trackID][3 * ll + 3], &currentOffset[camID1], &currentOffset[camID2], VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, rate, eps);
 			ActionCost += costi;
 
-			costiX = lamda*(Traj2DAll[trackID][ll].Q[0] * Allpt3D[trackID][3 * ll] + Traj2DAll[trackID][ll].Q[1] * Allpt3D[trackID][3 * ll + 1] + Traj2DAll[trackID][ll].Q[2] * Allpt3D[trackID][3 * ll + 2] - Traj2DAll[trackID][ll].u[0]);
-			costiY = lamda*(Traj2DAll[trackID][ll].Q[3] * Allpt3D[trackID][3 * ll] + Traj2DAll[trackID][ll].Q[4] * Allpt3D[trackID][3 * ll + 1] + Traj2DAll[trackID][ll].Q[5] * Allpt3D[trackID][3 * ll + 2] - Traj2DAll[trackID][ll].u[1]);
+			costiX = lamda2DCost*(Traj2DAll[trackID][ll].Q[0] * Allpt3D[trackID][3 * ll] + Traj2DAll[trackID][ll].Q[1] * Allpt3D[trackID][3 * ll + 1] + Traj2DAll[trackID][ll].Q[2] * Allpt3D[trackID][3 * ll + 2] - Traj2DAll[trackID][ll].u[0]);
+			costiY = lamda2DCost*(Traj2DAll[trackID][ll].Q[3] * Allpt3D[trackID][3 * ll] + Traj2DAll[trackID][ll].Q[4] * Allpt3D[trackID][3 * ll + 1] + Traj2DAll[trackID][ll].Q[5] * Allpt3D[trackID][3 * ll + 2] - Traj2DAll[trackID][ll].u[1]);
 			costi = sqrt(costiX*costiX + costiY*costiY);
 			ProjCost += costi;
 
-			costiX = lamda*(Traj2DAll[trackID][ll + 1].Q[0] * Allpt3D[trackID][3 * ll + 3] + Traj2DAll[trackID][ll + 1].Q[1] * Allpt3D[trackID][3 * ll + 4] + Traj2DAll[trackID][ll + 1].Q[2] * Allpt3D[trackID][3 * ll + 5] - Traj2DAll[trackID][ll + 1].u[0]);
-			costiY = lamda*(Traj2DAll[trackID][ll + 1].Q[3] * Allpt3D[trackID][3 * ll + 3] + Traj2DAll[trackID][ll + 1].Q[4] * Allpt3D[trackID][3 * ll + 4] + Traj2DAll[trackID][ll + 1].Q[5] * Allpt3D[trackID][3 * ll + 5] - Traj2DAll[trackID][ll + 1].u[1]);
+			costiX = lamda2DCost*(Traj2DAll[trackID][ll + 1].Q[0] * Allpt3D[trackID][3 * ll + 3] + Traj2DAll[trackID][ll + 1].Q[1] * Allpt3D[trackID][3 * ll + 4] + Traj2DAll[trackID][ll + 1].Q[2] * Allpt3D[trackID][3 * ll + 5] - Traj2DAll[trackID][ll + 1].u[0]);
+			costiY = lamda2DCost*(Traj2DAll[trackID][ll + 1].Q[3] * Allpt3D[trackID][3 * ll + 3] + Traj2DAll[trackID][ll + 1].Q[4] * Allpt3D[trackID][3 * ll + 4] + Traj2DAll[trackID][ll + 1].Q[5] * Allpt3D[trackID][3 * ll + 5] - Traj2DAll[trackID][ll + 1].u[1]);
 			costi = sqrt(costiX*costiX + costiY*costiY);
 			ProjCost += costi;
 		}
@@ -3887,21 +3610,21 @@ void LeastActionOptimXYZT(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle>
 
 	return;
 }
-int SimultaneousSyncReconc(char *Path, int nCams, int ntracks, double stdev, double initOff)
+int SimultaneousSyncReconc(char *Path, int nCams, int ntracks, double stdev)
 {
 	srand(time(NULL));
 	bool save3D = true, fixed3D = true, fixedTime = false, non_monotonicDescent = true;
 	int gtOff[] = { 0, 1, 4, 8, 9 };
 	double currentOffset[5] = { 0, 0.1, .2, .3, .4 };
 
-	const double Tscale = 1000.0, ialpha = 1.0 / 120, rate = 10, eps = 1.0e-1, lamda = 10.0;
+	const double Tscale = 1000.0, ialpha = 1.0 / 120, rate = 10, eps = 1.0e-1, lamda2DCost = 10.0, lamdaTimeTripletCost = 10000.0;
 
 	char Fname[200];
 	VideoData AllVideoInfo;
 	sprintf(Fname, "%s/Calib", Path);
-	if (ReadVideoData(Fname, AllVideoInfo, nCams, 0, 3000) == 1)
+	if (ReadVideoData(Fname, AllVideoInfo, nCams, 0, 7000) == 1)
 		return 1;
-	int nframes = max(MaxnFrame, 6500);
+	int nframes = max(MaxnFrame, 7000);
 	double ActionCost = 0.0, TProjCost = 0.0, costi, x, y, z;
 	double P[12], AA[6], bb[2], ccT[3], dd[1];
 	double *Q = new double[6 * nCams], *U = new double[2 * nCams], *AllP = new double[12 * nCams], *A = new double[6 * nCams], *B = new double[2 * nCams];
@@ -4176,7 +3899,7 @@ int SimultaneousSyncReconc(char *Path, int nCams, int ntracks, double stdev, dou
 	}
 
 	fixedTime = false, fixed3D = false;
-	LeastActionOptimXYZT(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, fixedTime, fixed3D, non_monotonicDescent, nCams, Tscale, ialpha, rate, eps, lamda);
+	LeastActionOptimXYZT(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, fixedTime, fixed3D, non_monotonicDescent, nCams, Tscale, ialpha, rate, eps, lamda2DCost, lamdaTimeTripletCost);
 
 	//printf("Saving results...\n");
 	for (int trackID = 0; trackID < ntracks; trackID++)
@@ -4193,7 +3916,7 @@ int SimultaneousSyncReconc(char *Path, int nCams, int ntracks, double stdev, dou
 	printf("%d %f\n", ll, currentOffset[ll]);
 
 	fixedTime = true, fixed3D = false;
-	LeastActionOptimXYZT(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, fixedTime, fixed3D, non_monotonicDescent, nCams, Tscale, ialpha, rate, eps, lamda);
+	LeastActionOptimXYZT(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, fixedTime, fixed3D, non_monotonicDescent, nCams, Tscale, ialpha, rate, eps, lamda2DCost);
 
 	for (int trackID = 0; trackID < ntracks; trackID++)
 	{
@@ -4205,7 +3928,7 @@ int SimultaneousSyncReconc(char *Path, int nCams, int ntracks, double stdev, dou
 	}
 
 	fixedTime = false, fixed3D = false;
-	LeastActionOptimXYZT(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, fixedTime, fixed3D, non_monotonicDescent, nCams, Tscale, ialpha, rate, eps, lamda);
+	LeastActionOptimXYZT(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, fixedTime, fixed3D, non_monotonicDescent, nCams, Tscale, ialpha, rate, eps, lamda2DCost);
 	for (int trackID = 0; trackID < ntracks; trackID++)
 	{
 	sprintf(Fname, "%s/A3Track_%d.txt", Path, trackID);  FILE *fp = fopen(Fname, "w+");
@@ -4216,7 +3939,7 @@ int SimultaneousSyncReconc(char *Path, int nCams, int ntracks, double stdev, dou
 	}*/
 	printf("Final results\n");
 	for (int ll = 0; ll < nCams; ll++)
-	printf("%d %f\n", ll, currentOffset[ll]);
+		printf("%d %f\n", ll, currentOffset[ll]);
 
 	for (int trackID = 0; trackID < ntracks; trackID++)
 		delete[]All3D[trackID];
@@ -4232,30 +3955,29 @@ int SimultaneousSyncReconc(char *Path, int nCams, int ntracks, double stdev, dou
 }
 int main(int argc, char* argv[])
 {
-	char Path[] = "C:/temp/Sim/TaiChi", Fname[200], Fname2[200];
+	char Path[] = "E:/Data/Phuong", Fname[200], Fname2[200];
 
-	srand((unsigned int)time(NULL));
+	/*srand((unsigned int)time(NULL));
 #pragma omp parallel for
 	for (int ii = 1; ii <= 13; ii++)
 	{
-		//Interpolation3DTrajectory(ii);
-		//Generate2DTracksFrom3D_Simu(Path, 5, ii, 1, 1, 2600);
-		//GenarateTrajectoryInput(Path, 2, 1, 2600, 1, ii, 0, 50.0);
+	//Interpolation3DTrajectory(ii);
+	//Generate2DTracksFrom3D_Simu(Path, 5, ii, 1, 1, 2600);
+	//GenarateTrajectoryInput(Path, 2, 1, 2600, 1, ii, 0, 50.0);
 	}
 
-	int nCams = 5, nTracks = 31, width = 1920, height = 1080;
+	int nCams = 5, nTracks = 13, width = 1920, height = 1080;
 	double Intrinsic[5] = { 1500, 1500, 0, 960, 540 }, radius = 3000;
-	SimulateCamerasAnd2DPointsForMoCap(Path, nCams, nTracks, Intrinsic, width, height, radius, false, true);
-	//visualizationDriver(Path, nCams, 0, 6500, false, false, true, true, false, 0);
+	//SimulateCamerasAnd2DPointsForMoCap(Path, nCams, nTracks, Intrinsic, width, height, radius, false, true);
+	//visualizationDriver(Path, nCams, 0,7000, false, false, true, true, false, 0);
 	//return 0;
 
-	//for (int ii = 0; ii < 20; ii++)
-	//	SimultaneousSyncReconc(Path, nCams, 1, .1);
-	//return 0;
-	if (argc !=1)
-		SimultaneousSyncReconc(Path, nCams, nTracks, atof(argv[1]), atof(argv[2]));
+	if (argc == 2)
+	SimultaneousSyncReconc(Path, nCams, nTracks, atof(argv[1]));
 	else
-		visualizationDriver(Path, nCams, 0, 6500, false, false, false, true, false, 0);
+	visualizationDriver(argv[1], nCams, 0, atoi(argv[2]), false, false, false, true, false, 0);
+	return 0;*/
+
 
 	/*int actionID[] = { 9 };
 	double stdev[] = { 0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5 };
@@ -4268,18 +3990,15 @@ int main(int argc, char* argv[])
 	for (int jj = 1; jj < 7; jj++)
 	TestLeastActionConstraint(nCams, stdev[jj], actionID[kk], 1000);
 	}
-	}*/
+	}
+	return 0;*/
 
-	//NonRigidTemporalOptim();
-	//TemporalOptimInterp();
-	return 0;
-
-	int mode = atoi(argv[1]);
+	int mode = 5;// atoi(argv[1]);
 
 	srand((unsigned int)time(NULL));
-	if (mode == 0)
+	if (mode == 0) //Step 1: sync all sequences with audio
 	{
-		int computeSync = 1;// atoi(argv[2]);
+		int computeSync = 0;// atoi(argv[2]);
 		if (computeSync == 1)
 		{
 			int pair = 0;// atoi(argv[3]);
@@ -4302,12 +4021,12 @@ int main(int argc, char* argv[])
 			}
 			else
 			{
-				double	minZNCC = 0.25;// atof(argv[4]);
+				double	minZNCC = 0.15;// atof(argv[4]);
 				int minSegLength = 3e6;
 
-				const int nvideos = 9;
-				int camID[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
-				double fps[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };//time in sample is better to avoid drift at this stage
+				const int nvideos = 4;
+				int camID[] = { 2, 3, 4, 5 };
+				double fps[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };//to avoid drift at this stage
 				double offset, ZNCC;
 
 				sprintf(Fname, "%s/audioSync.txt", Path);
@@ -4321,7 +4040,7 @@ int main(int argc, char* argv[])
 						if (SynAudio(Fname, Fname2, fps[jj], fps[ii], minSegLength, offset, ZNCC, minZNCC) != 0)
 						{
 							printf("Between %d and %d: not succeed\n", camID[jj], camID[ii]);
-							fprintf(fp, "%d %d %.4f\n", camID[jj], camID[ii], 0.0);
+							fprintf(fp, "%d %d %.4f\n", camID[jj], camID[ii], 1.0*rand());
 						}
 						else
 							fprintf(fp, "%d %d %.4f\n", camID[jj], camID[ii], offset);
@@ -4335,12 +4054,12 @@ int main(int argc, char* argv[])
 		}
 		else
 		{
-			int writeSyncedImages = atoi(argv[3]);
-			ShowSyncLoad(Path, writeSyncedImages);
+			//int writeSyncedImages = atoi(argv[3]);
+			ShowSyncLoad(Path, Path);
 		}
 		return 0;
 	}
-	else if (mode == 1)
+	else if (mode == 1) //step 2: calibrate camera individually if needed
 	{
 		char *Path = argv[2],
 			*VideoName = argv[3];
@@ -4349,100 +4068,107 @@ int main(int argc, char* argv[])
 		PickStaticImagesFromVideo(Path, VideoName, SaveFrameDif, 15, .3, 50, nNonBlurIma, true);
 		//BlurDetectionDriver(Path, nNonBlurIma, 1920, 1080, 0.1);
 	}
-	else if (mode == 2)
+	else if (mode == 2) //Step 3: do BA of visSfM and rescale the result
 	{
 		printf("Input the Path name and number of points per image\n");
-		//TriangulatePointsFromCalibratedCameras("D:/Phuong", 11, 0, atoi(argv[3]), 2.0);
-		ReSaveBundleAdjustedNVMResults("D:/Phuong/BA_Camera_AllParams_after.txt", 313.2);
+		TriangulatePointsFromCalibratedCameras("E:/Data/Phuong/Corpus", 0, 2, 2.0);
+		cout << "Input conversion ratio (real unit / visSfM): ";
+		double ratio; cin >> ratio;
+		ReSaveBundleAdjustedNVMResults("E:/Data/Phuong/Corpus/BA_Camera_AllParams_after.txt", ratio);
 		return 0;
 	}
-	else if (mode == 3)
+	else if (mode == 3) //step 4: generate corpus
 	{
-		int nviews = 11,//atoi(argv[2]),
-			NPplus = 4,//atoi(argv[3]),
+		int nviews = 94,//atoi(argv[2]),
+			NPplus = 5,//atoi(argv[3]),
 			runMatching = 0,//atoi(argv[4]),
 			distortionCorrected = 0;//atoi(argv[5]);
 
+		sprintf(Fname, "%s/Corpus", Path);
 		if (runMatching == 1)
 		{
-			int HistogramEqual = 1,//atoi(argv[6]),
+			int HistogramEqual = 0,//atoi(argv[6]),
 				OulierRemoveTestMethod = 2,//atoi(argv[7]), //Fmat is more prefered. USAC is much faster then 5-pts :(
 				LensType = 0;// atoi(argv[8]);
 			double ratioThresh = 0.8;// atof(argv[9]);
 
 			int nCams = nviews, cameraToScan = -1;
 			if (OulierRemoveTestMethod == 2)
-				nCams = 11,//atoi(argv[10]),
+				nCams = 94,//atoi(argv[10]),
 				cameraToScan = -1;// atoi(argv[11]);
 
-			GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nviews, -1, HistogramEqual, ratioThresh);
+			int timeID = -1, ninlierThesh = 50;
+			GeneratePointsCorrespondenceMatrix_SiftGPU2(Fname, nviews, -1, HistogramEqual, ratioThresh);
 
-			int timeID = -1, ninlierThesh = 50;/*
-											   #pragma omp parallel
-											   {
-											   #pragma omp for nowait
-											   for (int jj = 0; jj < nviews - 1; jj++)
-											   {
-											   for (int ii = jj + 1; ii < nviews; ii++)
-											   {
-											   if (OulierRemoveTestMethod == 1)
-											   EssentialMatOutliersRemove(Path, timeID, jj, ii, nCams, cameraToScan, ninlierThesh, distortionCorrected, false);
-											   else if (OulierRemoveTestMethod == 2)
-											   FundamentalMatOutliersRemove(Path, timeID, jj, ii, ninlierThesh, LensType, distortionCorrected, false, nCams, cameraToScan);
-											   }
-											   }
-											   }*/
-			GenerateMatchingTable(Path, nviews, timeID);
+#pragma omp parallel
+			{
+#pragma omp for nowait
+				for (int jj = 0; jj < nviews - 1; jj++)
+				{
+					for (int ii = jj + 1; ii < nviews; ii++)
+					{
+						if (OulierRemoveTestMethod == 1)
+							EssentialMatOutliersRemove(Fname, timeID, jj, ii, nCams, cameraToScan, ninlierThesh, distortionCorrected, false);
+						else if (OulierRemoveTestMethod == 2)
+							FundamentalMatOutliersRemove(Fname, timeID, jj, ii, ninlierThesh, LensType, distortionCorrected, false, nCams, cameraToScan);
+					}
+				}
+			}
+			GenerateMatchingTable(Fname, nviews, timeID);
 		}
 		else
 		{
-			BuildCorpus(Path, -1, distortionCorrected, NPplus);
-			visualizationDriver(Path, 1, -1, -1, true, false, false, false);
+			BuildCorpus(Fname, -1, distortionCorrected, NPplus);
+			visualizationDriver(Fname, 1, -1, -1, true, false, false, false);
 		}
 		return 0;
 	}
-	else if (mode == 4)
+	else if (mode == 4) //Step 5: Get features data for test sequences
 	{
-		int nviews = 11,//atoi(argv[2]),
+		int nviews = 9,//atoi(argv[2]),
 			selectedView = 0,//atoi(argv[3]),
 			startF = 1,//atoi(argv[4]),
-			stopF = 500,//atoi(argv[5]),
+			stopF = 2500,//atoi(argv[5]),
 			HistogrameEqual = 0;// atoi(argv[6]);
 
 		Corpus corpusData;
 		sprintf(Fname, "%s/BA_Camera_AllParams_after.txt", Path);
 		if (!loadBundleAdjustedNVMResults(Fname, corpusData))
-			return 1;
+		{
+			corpusData.camera = new CameraData[nviews];
+			if (!ReadIntrinsicResults(Path, corpusData.camera))
+				return 1;
+		}
 
 		vector<int> availViews;
+		availViews.push_back(selectedView);
 		sprintf(Fname, "%s/%d", Path, selectedView);
 		printf("Working on %s: ", Fname);
 
-		LensCorrectionImageSequenceDriver(Fname, corpusData.camera[selectedView].K, corpusData.camera[selectedView].distortion, corpusData.camera[selectedView].LensModel, startF, stopF, 1.0, 1.0, 5);
-		availViews.push_back(selectedView);
+		//LensCorrectionImageSequenceDriver(Fname, corpusData.camera[selectedView].K, corpusData.camera[selectedView].distortion, corpusData.camera[selectedView].LensModel, startF, stopF, 1.0, 1.0, 5);
 		ExtractSiftGPUfromExtractedFrames(Path, availViews, startF, stopF, HistogrameEqual);
 
 		return 0;
 	}
-	else if (mode == 5)
+	else if (mode == 5) //Step 6: Localize test sequence wrst to corpus
 	{
 		int StartTime = 1,//atoi(argv[2]),
-			StopTime = 500,//atoi(argv[3]),
+			StopTime = 2500,//atoi(argv[3]),
 			seletectedCam = 0,//atoi(argv[4]),
-			nCams = 11,//atoi(argv[5]),
-			runMatching = 0,//atoi(argv[6]),
-			distortionCorrected = 1,//atoi(argv[7]), //must set to 1 when runMatching != 1;
-			sharedIntriniscOptim = 1,//atoi(argv[8]),
+			nCams = 9,//atoi(argv[5]),
+			runMatching = -1,//atoi(argv[6]),
+			distortionCorrected = 0,//atoi(argv[7]), //must set to 1 when runMatching != 1;
+			sharedIntriniscOptim = 0,//atoi(argv[8]),
 			LensType = 0;// atoi(argv[9]);// RADIAL_TANGENTIAL_PRISM;// FISHEYE;
 
 		//sprintf(Fname, "%s/intrinsic_%d.txt", Path, seletectedCam); FILE*fp = fopen(Fname, "w+");	fclose(fp);
 		if (runMatching >= 0)
 			LocalizeCameraFromCorpusDriver(Path, StartTime, StopTime, runMatching, nCams, seletectedCam, distortionCorrected, sharedIntriniscOptim, LensType);
 		if (runMatching != 1)
-			visualizationDriver(Path, nCams, StartTime, StopTime, true, false, true, false);
+			visualizationDriver(Path, nCams, StartTime, StopTime, true, false, true, false, false, StartTime);
 		return 0;
 	}
-	else if (mode == 6)
+	else if (mode == 6) //step 7: generate 3d data from test sequences
 	{
 		int StartTime = 1,// atoi(argv[2]),
 			StopTime = 500,//atoi(argv[3]),
@@ -4486,8 +4212,6 @@ int main(int argc, char* argv[])
 	}
 	else if (mode == 7)
 	{
-		//google::InitGoogleLogging("SfM");
-		//IncrementalBundleAdjustment(Path, nviews, -1, 20000);
 		int nVideoCams = 5,
 			startTime = 0, stopTime = 199,
 			LensModel = RADIAL_TANGENTIAL_PRISM;

@@ -38,8 +38,8 @@ VisualizationManager g_vis;
 int nviews = 10, timeID = 0, otimeID = 0, otimeID2 = 0, maxTime, minTime;
 bool drawCameraPose = false, drawPointColor = false, drawPatchNormal = false;
 bool drawPt3DTraject = false, drawCameraTraject = false, drawPt3D = false;
-static bool ReCenterNeeded = false, bFullsreen = false, showGroundPlane = false, SaveScreen = false;
-static bool showInit3D = true, showFinal3D = true;
+static bool ReCenterNeeded = false, bFullsreen = false, showGroundPlane = false, showAxis = false, SaveScreen = false;
+static bool showInit3D = true, showFinal3D = false;
 
 void Draw_Axes(void)
 {
@@ -146,7 +146,7 @@ void Arrow(GLdouble x1, GLdouble y1, GLdouble z1, GLdouble x2, GLdouble y2, GLdo
 void RenderGroundPlane()
 {
 	int gridNum = 10;
-	double width = 500;
+	double width = 1000;
 	double halfWidth = width / 2;
 	Point3f origin(-PointsCentroid[0], -PointsCentroid[1], -PointsCentroid[2]);
 	Point3f axis1 = Point3f(1.0f, 0.0f, 0.0f)* width;
@@ -177,7 +177,7 @@ void RenderGroundPlane()
 	glEnd();
 
 }
-void RenderSkeleton(vector<Point3d> pt3D,GLfloat *color)
+void RenderSkeleton(vector<Point3d> pt3D, GLfloat *color)
 {
 	glPushMatrix();
 	glBegin(GL_LINE_STRIP);
@@ -209,11 +209,53 @@ void RenderSkeleton(vector<Point3d> pt3D,GLfloat *color)
 	glEnd();
 	glPopMatrix();
 }
+void RenderSkeleton2(vector<Point3d> pt3D, GLfloat *color)
+{
+	glPushMatrix();
+	glBegin(GL_LINE_STRIP);
+	int i = 0; glVertex3f(pt3D[i].x - PointsCentroid[0], pt3D[i].y - PointsCentroid[1], pt3D[i].z - PointsCentroid[2]);			glColor3fv(color);
+	for (i = 1; i < 6; i++)
+		glVertex3f(pt3D[i].x - PointsCentroid[0], pt3D[i].y - PointsCentroid[1], pt3D[i].z - PointsCentroid[2]);			glColor3fv(color);
+	glEnd();
+	glPopMatrix();
+
+	glPushMatrix();
+	glBegin(GL_LINE_STRIP);
+	i = 0; glVertex3f(pt3D[i].x - PointsCentroid[0], pt3D[i].y - PointsCentroid[1], pt3D[i].z - PointsCentroid[2]);			glColor3fv(color);
+	for (i = 6; i < 11; i++)
+		glVertex3f(pt3D[i].x - PointsCentroid[0], pt3D[i].y - PointsCentroid[1], pt3D[i].z - PointsCentroid[2]);			glColor3fv(color);
+	glEnd();
+	glPopMatrix();
+
+	glPushMatrix();
+	glBegin(GL_LINE_STRIP);
+	i = 0; glVertex3f(pt3D[i].x - PointsCentroid[0], pt3D[i].y - PointsCentroid[1], pt3D[i].z - PointsCentroid[2]);			glColor3fv(color);
+	for (i = 11; i < 17; i++)
+		glVertex3f(pt3D[i].x - PointsCentroid[0], pt3D[i].y - PointsCentroid[1], pt3D[i].z - PointsCentroid[2]);			glColor3fv(color);
+	glEnd();
+	glPopMatrix();
+
+	glPushMatrix();
+	glBegin(GL_LINE_STRIP);
+	i = 14; glVertex3f(pt3D[i].x - PointsCentroid[0], pt3D[i].y - PointsCentroid[1], pt3D[i].z - PointsCentroid[2]);			glColor3fv(color);
+	for (i = 24; i < 31; i++)
+		glVertex3f(pt3D[i].x - PointsCentroid[0], pt3D[i].y - PointsCentroid[1], pt3D[i].z - PointsCentroid[2]);			glColor3fv(color);
+	glEnd();
+	glPopMatrix();
+
+	glPushMatrix();
+	glBegin(GL_LINE_STRIP);
+	i = 14; glVertex3f(pt3D[i].x - PointsCentroid[0], pt3D[i].y - PointsCentroid[1], pt3D[i].z - PointsCentroid[2]);			glColor3fv(color);
+	for (i = 17; i < 24; i++)
+		glVertex3f(pt3D[i].x - PointsCentroid[0], pt3D[i].y - PointsCentroid[1], pt3D[i].z - PointsCentroid[2]);			glColor3fv(color);
+	glEnd();
+	glPopMatrix();
+}
 void RenderObjects()
 {
 	int CountFilesLoaded = 0;
 	ReCenterNeeded = true;
-	if (otimeID != timeID)
+	if (otimeID != timeID && drawPt3D)
 	{
 		if (ReadCurrent3DGL(Path, drawPointColor, drawPatchNormal, timeID, ReCenterNeeded))
 			CountFilesLoaded++;
@@ -225,10 +267,6 @@ void RenderObjects()
 			CountFilesLoaded++;
 
 		otimeID = timeID;
-		if (CountFilesLoaded > 0)
-			printf("Loaded frame %d\n", timeID);
-		else
-			return;
 	}
 
 	//Draw not picked 3D points
@@ -261,7 +299,7 @@ void RenderObjects()
 			glPopMatrix();
 		}
 	}
-	//RenderSkeleton(g_vis.PointPosition, Red);
+	//RenderSkeleton2(g_vis.PointPosition, Red);
 
 	if (showInit3D)
 	{
@@ -412,7 +450,6 @@ void RenderObjects()
 		}
 	}
 
-
 	glFlush();
 }
 
@@ -436,14 +473,19 @@ void display(void)
 	glLightfv(GL_LIGHT1, GL_DIFFUSE, g_lightBright);
 
 	RenderObjects();
-	//Draw_Axes();
+	if (showAxis)
+		Draw_Axes();
 	if (showGroundPlane)
 		RenderGroundPlane();
 	glutSwapBuffers();
 
 	if (SaveScreen && otimeID2 != timeID)
 	{
-		char Fname[200]; sprintf(Fname, "C:/temp/Img_%d.png", timeID);
+		char Fname[200];
+		if (showInit3D)
+			sprintf(Fname, "%s/B/%d.png", Path, timeID);
+		else if (showFinal3D)
+			sprintf(Fname, "%s/A/%d.png", Path, timeID);
 		screenShot(Fname, 1024, 768, true);
 		otimeID2 = timeID;
 	}
@@ -552,6 +594,7 @@ void Keyboard(unsigned char key, int x, int y)
 		bFullsreen = !bFullsreen;
 		if (bFullsreen)
 			glutFullScreen();
+		break;
 	case 'c':
 		printf("Current cameraSize: %f. Please enter the new size: ", CameraSize);
 		cin >> CameraSize;
@@ -567,11 +610,19 @@ void Keyboard(unsigned char key, int x, int y)
 		showGroundPlane = !showGroundPlane;
 		break;
 	case 't':
-		printf("Toggle trajectory display\n ");
-		drawCameraTraject = !drawCameraTraject;
+		printf("Toggle 3D point trajectory display\n ");
 		drawPt3DTraject = !drawPt3DTraject;
 		break;
+	case 'T':
+		printf("Toggle Camera trajectory display\n ");
+		drawCameraTraject = !drawCameraTraject;
+		break;
+	case 'A':
+		printf("Toggle axis display\n ");
+		showAxis = !showAxis;
+		break;
 	case 's':
+		printf("Toggle screen saving\n ");
 		SaveScreen = !SaveScreen;
 		break;
 	case 'a':
@@ -594,29 +645,24 @@ void SpecialInput(int key, int x, int y)
 	switch (key)
 	{
 	case GLUT_KEY_UP:
-		//do something here
+		timeID = maxTime;
+		printf("Current time: %d\n", timeID);
 		break;
 	case GLUT_KEY_DOWN:
-		//do something here
+		timeID = 0;
+		printf("Current time: %d\n", timeID);
 		break;
 	case GLUT_KEY_LEFT:
 		timeID--;
 		if (timeID < minTime)
 			timeID = minTime;
-
-		//if (timeID < 0)
-		//	timeID = 0;
-		//ReadCurrentTrajectory2(Path, timeID);
+		printf("Current time: %d\n", timeID);
 		break;
 	case GLUT_KEY_RIGHT:
 		timeID++;
 		if (timeID > maxTime)
 			timeID = maxTime;
-
-		//if (timeID > 500)
-		//	timeID = 500;
-		//ReadCurrentTrajectory2(Path, timeID);
-		glutPostRedisplay();
+		printf("Current time: %d\n", timeID);
 		break;
 	}
 
@@ -728,7 +774,7 @@ int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, b
 	nviews = nViews;
 	drawPointColor = hasPointColor, drawPatchNormal = hasPatchNormal, drawCameraPose = hasCameraPose, drawPt3D = has3DPoints;
 	Path = inPath;
-	if (drawPt3D)
+	if (drawPt3D || drawCameraPose)
 		minTime = StartTime, maxTime = StopTime;
 
 	timeID = CurrentTime;
@@ -872,7 +918,7 @@ void ReadCurrentSfmGL(char *path, bool drawPointColor, bool drawPatchNormal)
 	int viewID;
 
 	CamInfo temp;
-	sprintf(Fname, "%s/DinfoGL.txt", path);
+	sprintf(Fname, "%s/Corpus/DinfoGL.txt", path);
 	FILE *fp = fopen(Fname, "r");
 	if (fp != NULL)
 	{
@@ -898,7 +944,7 @@ void ReadCurrentSfmGL(char *path, bool drawPointColor, bool drawPatchNormal)
 		g_vis.PointColor.clear(), g_vis.PointColor.reserve(10e5);
 
 	Point3i iColor; Point3f fColor; Point3f t3d;
-	sprintf(Fname, "%s/3dGL.xyz", path); fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/Corpus/3dGL.xyz", path); fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
 		printf("Cannot load %s\n", Fname);
@@ -1176,10 +1222,13 @@ void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime)
 	CamInfo temp;
 	for (int ii = 0; ii < nviews; ii++)
 	{
-		sprintf(Fname, "%s/Calib/PinfoGL_%d.txt", path, ii);
+		sprintf(Fname, "%s/PinfoGL_%d.txt", path, ii);
 		FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
+		{
+			sprintf("Cannot load %s\n", Fname);
 			continue;
+		}
 		while (fscanf(fp, "%d ", &timeID) != EOF)
 		{
 
@@ -1204,9 +1253,9 @@ int screenShot(char *Fname, int width, int height, bool color)
 
 	glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, data);
 
-	for (kk = 0; kk<3; kk++)
-		for (jj = 0; jj<height; jj++)
-			for (ii = 0; ii<width; ii++)
+	for (kk = 0; kk < 3; kk++)
+		for (jj = 0; jj < height; jj++)
+			for (ii = 0; ii < width; ii++)
 				cvImg->imageData[3 * ii + 3 * jj*width + kk] = data[3 * ii + 3 * (height - 1 - jj)*width + kk];
 
 	if (color)

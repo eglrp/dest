@@ -2539,15 +2539,14 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 {
 	bool notCalibrated = false;
 	CameraData *camera = new CameraData[nCams];
-	if (distortionCorrected == 0 && ReadIntrinsicResults(Path, camera) != 0 && LensType == FISHEYE)
-		return 1;
-	else
-	{
+	if (!ReadIntrinsicResults(Path, camera) != 0)
 		notCalibrated = true;
-		distortionCorrected = 1;
+	else
 		for (int ii = 0; ii < nCams; ii++)
 			camera[ii].LensModel = LensType;
-	}
+
+	if (notCalibrated &&distortionCorrected == 0 && LensType == FISHEYE)
+		return 1;
 
 	char Fname[200];
 	vector<Point2i> RawPairWiseMatchID;
@@ -2691,20 +2690,11 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 	vector<int>Inliers; Inliers.reserve(pts1.size());
 	cfg.common.numDataPoints = pts1.size();
 	USAC_FindFundamentalMatrix(cfg, pts1, pts2, Fmat, Inliers, ninliers);
-
-	for (int ii = 0; ii < cfg.common.numDataPoints; ii++)
-		if (Inliers[ii] == 1)
-			ninliers++;
 	if (ninliers < ninlierThresh)
 		printf("(%d, %d): failed Fundamental matrix test\n\n", id1, id2);
 
-	//if (ninliers > 40)
-	//	printf("Essential matrix succeeds....%d inliers\n", ninliers);
-	//else
-	//	printf("Essential matrix fails....%d inliers\n", ninliers);
-
 	if (timeID < 0)
-		sprintf(Fname, "%s/M_%d_%d.dat", Path, id1, id2);
+		sprintf(Fname, "%s/_M_%d_%d.dat", Path, id1, id2);
 	else
 		sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, id1, id2);
 	fp = fopen(Fname, "w+");
@@ -3034,13 +3024,13 @@ int ExtractSiftGPUfromExtractedFrames(char *Path, vector<int> nviews, int startF
 			keys.clear(), descriptors.clear();
 			double start = omp_get_wtime();
 
-			sprintf(Fname, "%s/%d/%d.png", Path, viewID, timeID);
+			sprintf(Fname, "%s/%d/U_%d.png", Path, viewID, timeID);
 			if (HistogramEqual == 1)
 			{
 				cvImg = imread(Fname, 0);
 				equalizeHist(cvImg, equalizedImg);
 
-				sprintf(Fname, "%s/%d/%d.png", Path, viewID, timeID);
+				sprintf(Fname, "%s/%d/H_%d.png", Path, viewID, timeID);
 				imwrite(Fname, equalizedImg);
 			}
 
@@ -3053,9 +3043,9 @@ int ExtractSiftGPUfromExtractedFrames(char *Path, vector<int> nviews, int startF
 				//Getting color info
 				Vrgb.clear();
 				if (timeID < 0)
-					sprintf(Fname, "%s/%d.png", Path, ii);
+					sprintf(Fname, "%s/U_%d.png", Path, ii);
 				else
-					sprintf(Fname, "%s/%d/%d.png", Path, ii, timeID);
+					sprintf(Fname, "%s/%d/U_%d.png", Path, ii, timeID);
 				cvImg = imread(Fname, IMREAD_COLOR);
 				for (int kk = 0; kk < numKeys; kk++)
 				{
@@ -3069,7 +3059,7 @@ int ExtractSiftGPUfromExtractedFrames(char *Path, vector<int> nviews, int startF
 				}
 
 				sprintf(Fname, "%s/%d/K%d.dat", Path, viewID, timeID); WriteKPointsBinarySIFTGPU(Fname, keys);
-				sprintf(Fname, "%s/RGB%d.dat", Path, timeID); WriteRGBBinarySIFTGPU(Fname, Vrgb);
+				sprintf(Fname, "%s/%d/RGB%d.dat", Path, viewID, timeID); WriteRGBBinarySIFTGPU(Fname, Vrgb);
 				sprintf(Fname, "%s/%d/D%d.dat", Path, viewID, timeID); WriteDescriptorBinarySIFTGPU(Fname, descriptors);
 				printf("View (%d, %d): %d points ... Wrote to files. Take %.2fs\n", viewID, timeID, numKeys, omp_get_wtime() - start);
 			}
@@ -3783,7 +3773,7 @@ void GenerateMatchingTable(char *Path, int nviews, int timeID)
 			}
 			filesCount++;
 			if (timeID < 0)
-				sprintf(Fname, "%s/M_%d_%d.dat", Path, jj, ii);
+				sprintf(Fname, "%s/_M_%d_%d.dat", Path, jj, ii);
 			else
 				sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, jj, ii);
 
@@ -6286,9 +6276,6 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int NDplu
 	}
 	printf("...Done\n");
 
-	//for (int ii = 0; ii < nviews; ii++)
-	//LensCorrectionDriver(Path, corpusData.camera[ii].K, corpusData.camera[ii].distortion, corpusData.camera[ii].LensModel, ii, ii, 1.0, 1.0, 1);
-	//return 0;
 
 	sprintf(Fname, "%s/ViewPM.txt", Path); FILE *fp = fopen(Fname, "r");
 	int nviewsi, viewi, n3D = 0;
@@ -6475,8 +6462,8 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int NDplu
 	printf("Runing BA on the triangulated points...");
 	AllViewsBA(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, nviews, false, false, false, distortionCorrected, true);
 
-	//sprintf(Fname, "%s/BA_Camera_AllParams_after2.txt", Path);
-	//ReSaveBundleAdjustedNVMResults(Fname, corpusData, 1.0);
+	sprintf(Fname, "%s/BA_Camera_AllParams_after2.txt", Path);
+	ReSaveBundleAdjustedNVMResults(Fname, corpusData, 1.0);
 	/*//Corpus intrinisc is not useful anymore
 	if (CameraToScan != -1)
 	SaveIntrinsicResults(Path, corpusData.camera, 1);
@@ -6485,7 +6472,7 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int NDplu
 	printf("...Done!\n");
 
 	printf("Remove not good points ...");
-	sprintf(Fname, "%s/notGood.txt", Path);	fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/Good.txt", Path);	fp = fopen(Fname, "r");
 	vector<int> *notGood = new vector<int>[goodNDplus];
 	for (int jj = 0; jj < goodNDplus; jj++)
 	{
@@ -6510,6 +6497,7 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int NDplu
 		}
 	}
 	delete[]notGood;
+	printf("Done\n");
 
 
 	//And generate 3D id, uv, sift id for all views
@@ -7250,7 +7238,7 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 			}
 		}
 
-		if (ShowCorrespondence)
+		if (1)//ShowCorrespondence)
 		{
 			int nchannels = 3;
 			sprintf(Fname, "%s/%d/%d.png", Path, cameraID, timeID);
@@ -7260,7 +7248,7 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 				printf("Cannot load %s\n", Fname);
 				return 1;
 			}
-			sprintf(Fname, "%s/%d.png", Path, camera2ID);
+			sprintf(Fname, "%s/Corpus/%d.png", Path, camera2ID);
 			IplImage *Img2 = cvLoadImage(Fname, nchannels == 3 ? 1 : 0);
 			if (Img2->imageData == NULL)
 			{
@@ -7305,6 +7293,7 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 				DisplayImageCorrespondence(correspond, Img1->width, 0, _key1, _key2, CorrespondencesID, 1.0);
 			else
 				DisplayImageCorrespondence(correspond, Img1->width, 0, key1, key2, CorrespondencesID, 1.0);
+			cout << "\a";
 		}
 #pragma omp critical
 		printf("(%d, %d) to Corpus %d: %d 3+ points in %.2fs.\n\n", cameraID, timeID, camera2ID, count, omp_get_wtime() - start);
@@ -7668,19 +7657,21 @@ int OptimizeCameraPoseVideoData(char *Path, int startTime, int stopTime, int nvi
 //Required calibrated cameras if Fisheye or lens with large distortion is used.
 int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, bool RunMatching, int nCams, int selectedCams, int distortionCorrected, int sharedIntriniscOptim, int LensType)
 {
+	char Fname[200];
 	const int ninlierThresh = 10;
 	const float nndrRatio = 0.8;
 	Corpus corpusData;
+	sprintf(Fname, "%s/Corpus", Path);
 	if (RunMatching)
-		ReadCorpusInfo(Path, corpusData, false, false);
+		ReadCorpusInfo(Fname, corpusData, false, false);
 	else
-		ReadCorpusInfo(Path, corpusData, false, true);
+		ReadCorpusInfo(Fname, corpusData, false, true);
 
 	corpusData.camera[1];
 	///****NOTE: Required calibrated cameras if Fisheye or lens with large distortion is used***///
 	bool fixedIntrinsc = true, fixedDistortion = true;
 	CameraData *AllCamsInfo = new CameraData[nCams];
-	if (ReadIntrinsicResults(Path, AllCamsInfo) != 0)
+	if (!ReadIntrinsicResults(Path, AllCamsInfo))
 	{
 		//Uncalibrated cam-->have to search for focal length + distortion
 		fixedIntrinsc = false, fixedDistortion = false;
@@ -7704,11 +7695,9 @@ int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, bool
 			AllCamsInfo[ii].notCalibrated = false, AllCamsInfo[ii].threshold = 3.0, AllCamsInfo[ii].ninlierThresh = 40;
 
 	double start = omp_get_wtime();
-	char Fname[200];
-
 	if (RunMatching)
 	{
-#pragma omp parallel for
+//#pragma omp parallel for
 		for (int timeID = StartTime; timeID <= StopTime; timeID++)
 		{
 			vector<int> CorpusViewToMatch;

@@ -115,14 +115,14 @@ int PrismMST(char *Path, int nvideos)
 	double *weightTable = new double[nvideos*nvideos];
 	double *weights = new double[nedges];
 
-	/*fp = fopen("C:/temp/timeoffset.txt", "w+");
+	sprintf(Fname, "%s/timeConstrantoffset.txt", Path);	fp = fopen(Fname, "w+");
 	for (int kk = 0; kk < nvideos; kk++)
 	{
 	for (int ll = 0; ll < nvideos; ll++)
-	fprintf(fp, "%.2f ", TimeOffset[kk + ll*nvideos]);
+	fprintf(fp, "%.4f ", TimeOffset[kk + ll*nvideos]);
 	fprintf(fp, "\n");
 	}
-	fclose(fp);*/
+	fclose(fp);
 
 	//Form edges weight based on the consistency of the triplet
 	int count = 0;

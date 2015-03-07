@@ -250,12 +250,12 @@ double nChoosek(int n, int k)
 	int iMax;
 	double delta;
 
-	if (k < n - k) // ex: Choose(100,3)
+	if (k < n - k) // eg: Choose(100,3)
 	{
 		delta = 1.0*(n - k);
 		iMax = k;
 	}
-	else         // ex: Choose(100,97)
+	else         // eg: Choose(100,97)
 	{
 		delta = 1.0*k;
 		iMax = n - k;
@@ -265,6 +265,13 @@ double nChoosek(int n, int k)
 	for (int i = 2; i <= iMax; i++)
 		res = res * (delta + i) / i;
 
+	return res;
+}
+double nPermutek(int n, int k)
+{
+	double res = n;
+	for (int ii = 0; ii < k; ii++)
+		res *= 1.0*(n - ii);
 	return res;
 }
 int MyFtoI(double W)
@@ -4093,7 +4100,7 @@ int DisplayImageCorrespondencesDriver(char *Path, vector<int>AvailViews, int tim
 	return 0;
 }
 
-int ReadIntrinsicResults(char *path, CameraData *AllViewsParas)
+bool ReadIntrinsicResults(char *path, CameraData *AllViewsParas)
 {
 	//Note that visCamualSfm use different lens model than openCV or matlab or yours (inverse model)
 	char Fname[200];
@@ -4104,7 +4111,7 @@ int ReadIntrinsicResults(char *path, CameraData *AllViewsParas)
 	if (fp == NULL)
 	{
 		cout << "Cannot load " << Fname << endl;
-		return 1;
+		return false;
 	}
 	while (fscanf(fp, "%d %d %d %lf %lf %lf %lf %lf ", &lensType, &width, &height, &fx, &fy, &skew, &u0, &v0) != EOF)
 	{
@@ -4114,7 +4121,7 @@ int ReadIntrinsicResults(char *path, CameraData *AllViewsParas)
 			AllViewsParas[id].K[6] = 0.0, AllViewsParas[id].K[7] = 0.0, AllViewsParas[id].K[8] = 1.0;
 
 		GetIntrinsicFromK(AllViewsParas[id]);
-		//mat_invert(AllViewsParas[id].K, AllViewsParas[id].iK);
+		mat_invert(AllViewsParas[id].K, AllViewsParas[id].invK);
 		if (lensType == RADIAL_TANGENTIAL_PRISM)
 		{
 			fscanf(fp, " %lf %lf %lf %lf %lf %lf %lf ", &r0, &r1, &r2, &t0, &t1, &p0, &p1);
@@ -4133,7 +4140,7 @@ int ReadIntrinsicResults(char *path, CameraData *AllViewsParas)
 	}
 	fclose(fp);
 
-	return 0;
+	return true;
 }
 int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams)
 {
@@ -4274,13 +4281,13 @@ void ReadPointCorrespondences(char *Path, int nviews, int timeID, vector<int> *P
 	if (!Merge)
 	{
 		if (timeID < 0)
-			sprintf(Fname, "%s/PM.txt", Path);
+			sprintf(Fname, "%s/Corpus/PM.txt", Path);
 		else
 			sprintf(Fname, "%s/PM_%ds.txt", Path, timeID);
 	}
 	else
 		if (timeID < 0)
-			sprintf(Fname, "%s/MPM.txt", Path);
+			sprintf(Fname, "%s/Corpus/MPM.txt", Path);
 		else
 			sprintf(Fname, "%s/MPM_%ds.txt", Path, timeID);
 
@@ -5035,7 +5042,7 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 	FILE *fp = fopen(BAfileName, "r");
 	if (fp == NULL)
 	{
-		printf("Cannot load %s\n");
+		printf("Cannot load %s\n", BAfileName);
 		return false;
 	}
 
@@ -5117,7 +5124,7 @@ bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor)
 	FILE *fp = fopen(BAfileName, "r");
 	if (fp == NULL)
 	{
-		printf("Cannot load %s\n");
+		printf("Cannot load %s\n", BAfileName);
 		return false;
 	}
 

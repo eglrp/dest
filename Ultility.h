@@ -2,6 +2,9 @@
 #define ULTILITY_H
 #pragma once
 
+#ifdef _WINDOWS
+#include <direct.h>
+#endif
 #include <cstdlib>
 #include <stdio.h>
 #include <iostream>
@@ -12,7 +15,6 @@
 #include <math.h>
 #include <omp.h>
 #include <stdint.h>
-#include <direct.h>
 #include "ceres/ceres.h"
 #include "ceres/rotation.h"
 #include <opencv2/opencv.hpp>
@@ -25,9 +27,16 @@
 using namespace cv;
 using namespace std;
 
-bool myImgReader(char *fname, unsigned char *Img, int width, int height, int nchannels);
-bool myImgReader(char *fname, float *Img, int width, int height, int nchannels);
-bool myImgReader(char *fname, double *Img, int width, int height, int nchannels);
+//Phase shifting:
+void Average_Filtering_All(char *lpD, int width, int height, int ni, int HSize, int VSize);
+void MConventional_PhaseShifting(char *lpD, char *lpPBM, double* lpFO, int nipf, int length, int Mask_Threshold, double *f_atan2);
+void DecodePhaseShift2(char *Image, char *PBM, double *PhaseUW, int width, int height, int *frequency, int nfrequency, int sstep, int LFstep, int half_filter_size, int m_mask);
+
+//Image processing
+bool GrabImage(char *fname, char *Img, int &width, int &height, int nchannels, bool silent = false);
+bool GrabImage(char *fname, unsigned char *Img, int &width, int &height, int nchannels, bool silent = false);
+bool GrabImage(char *fname, float *Img, int &width, int &height, int nchannels, bool silent = false);
+bool GrabImage(char *fname, double *Img, int &width, int &height, int nchannels, bool silent = false);
 
 void ShowDataToImage(char *Fname, char *Img, int width, int height, int nchannels, IplImage *cvImg = 0);
 
@@ -36,6 +45,20 @@ bool SaveDataToImage(char *fname, unsigned char *Img, int width, int height, int
 bool SaveDataToImage(char *fname, float *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, double *Img, int width, int height, int nchannels = 1);
 
+void ResizeImage(unsigned char *Image, unsigned char *OutImage, int width, int height, int nchannels, double Rfactor, double sigma, int InterpAlgo, double *InPara = 0);
+void ResizeImage(float *Image, float *OutImage, int width, int height, int channels, double Rfactor, double sigma, int InterpAlgo, float *Para = 0);
+void ResizeImage(double *Image, double *OutImage, int width, int height, int nchannels, double Rfactor, double sigma, int InterpAlgo, double *Para = 0);
+
+void RemoveNoiseMedianFilter(float *data, int width, int height, int ksize, float thresh);
+void RemoveNoiseMedianFilter(double *data, int width, int height, int ksize, float thresh, float *fdata = 0);
+
+//Image pyramid
+int BuildImgPyr(char *ImgName, ImgPyr &Pyrad, int nOtaves, int nPerOctaves, bool color, int interpAlgo, double sigma = 1.0);
+
+//Image Correlation
+double ComputeZNCCPatch(double *RefPatch, double *TarPatch, int hsubset, int nchannels, double *T = NULL);
+
+//Descriptor
 template <class myType> bool WriteGridBinary(char *fn, myType *data, int width, int height, bool silent = false)
 {
 	ofstream fout;
@@ -98,6 +121,7 @@ bool ReadKPointsRGBBinarySIFTGPU(char *fn, vector<KeyPoint> &kpts, vector<Point3
 
 int siftgpu(char *Fname1, char *Fname2, const float nndrRatio = 0.8, const double fractionMatchesDisplayed = 0.5);
 
+//Math
 void dec2bin(int dec, int*bin, int num_bin);
 double nChoosek(int n, int k);
 double nPermutek(int n, int k);
@@ -109,6 +133,7 @@ double gaussian_noise(double mean, double std);
 
 double Distance2D(Point2d X, Point2d Y);
 double Distance3D(Point3d X, Point3d Y);
+double Distance3D(double *X, double * Y);
 double L1norm(vector<double>A);
 double L2norm(double *A, int dim);
 float MeanArray(float *data, int length);
@@ -124,7 +149,6 @@ void conv(float *A, int lenA, float *B, int lenB, float *C);
 void conv(double *A, int lenA, double *B, int lenB, double *C);
 void ZNCC1D(float *A, const int dimA, float *B, const int dimB, float *Result, float *nB = NULL);
 void ZNCC1D(double *A, int Asize, double *B, int Bsize, double *Result);
-double ComputeZNCCPatch(double *RefPatch, double *TarPatch, int hsubset, int nchannels, double *T = NULL);
 
 void mat_invert(double* mat, double* imat, int dims = 3);
 void mat_invert(float* mat, float* imat, int dims = 3);
@@ -151,9 +175,6 @@ bool in_polygon(double u, double v, Point2d *vertex, int num_vertex);
 
 void ConvertToHeatMap(double *Map, unsigned char *ColorMap, int width, int height, bool *mask = 0);
 
-void ResizeImage(unsigned char *Image, unsigned char *OutImage, int width, int height, int nchannels, double Rfactor, int InterpAlgo, double *InPara = 0);
-void ResizeImage(float *Image, float *OutImage, int width, int height, int channels, double Rfactor, int InterpAlgo, float *Para = 0);
-void ResizeImage(double *Image, double *OutImage, int width, int height, int nchannels, double Rfactor, int InterpAlgo, double *Para = 0);
 
 template <class myType>void Get_Sub_Mat(myType *srcMat, myType *dstMat, int srcWidth, int srcHeight, int dstWidth, int startCol, int startRow)
 {
@@ -529,6 +550,7 @@ void GetrtFromRT(double *rt, double *R, double *T);
 void GetRTFromrt(CameraData *AllViewsParas, vector<int> AvailViews);
 void GetRTFromrt(CameraData *AllViewsParas, int nviews);
 void GetRCGL(CameraData &camInfo);
+void GetTfromC(CameraData &camInfo);
 
 void GetRTFromrt(CameraData &camera);
 void GetRTFromrt(double *rt, double *R, double *T);
@@ -547,11 +569,13 @@ void Rodrigues_trans(double *RT_vec, double *R_mat, bool vec2mat, double *dR_dm 
 
 double DistanceOfTwoPointsSfM(char *Path, int id1, int id2, int id3);
 
+int IsBlurred(const unsigned char* const luminance, const int width, const int height, float &blur, float &extent, float blurThresh = 0.075);
 void BlurDetectionDriver(char *Path, int nimages, int width, int height, float blurThresh);
 
 int BAVisualSfMDriver(char *Path, char *nvmName, char *camInfo, char *IntrinsicInfo = NULL, bool lensconversion = 1, int sharedIntrinsics = 0);
 bool loadNVMLite(const string filepath, Corpus &CorpusData, int sharedIntrinsics);
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
+bool saveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor = 1.0);
 bool ReSaveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData, double ScaleFactor);
 
@@ -584,4 +608,19 @@ int ImportCalibDatafromHanFormat(char *Path, VideoData &AllVideoInfo, int nVGAPa
 void ExportCalibDatatoHanFormat(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime, int selectedCam = -1);
 
 void GenerateViewAll_3D_2DInliers(char *Path, int viewID, int startID, int stopID, int n3Dcorpus);
+
+void LaplacianOfGaussian(double *LOG, int sigma);
+void synthesize_concentric_circles_mask(double *ring_mask_smooth, int *pattern_bi_graylevel, int pattern_size, double sigma, double scale, double *ring_info, int flag, int num_ring_edge);
+void DetectBlobCorrelation(char *ImgName, vector<KeyPoint> &kpts, int nOctaveLayers, int nScalePerOctave, double sigma, int templateSize, int NMS_BW, double thresh);
+int DetectRGBBallCorrelation(char *ImgName, vector<KeyPoint> &kpts, vector<int> &ballType, int nOctaveLayers, int nScalePerOctave, double sigma, int PatternSize, int NMS_BW, double thresh, bool visualize);
+
+int ComputeAverageImage(char *Path, unsigned char *MeanImg, int width, int height, int camID, int panelID, int startF, int stopF);
+int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, unsigned char *MeanImg, vector<Point2d> &kpts, double sigma, int PatternSize, int nscales, int NMS_BW, double thresh, bool visualize,
+	unsigned char *ColorImg, float *colorResponse, double *DImg, double *ImgPara, double *maskSmooth, double *Znssd_reqd);
+
+double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, Point2i &POI, int search_area, double thresh);
+double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd = 0);
+double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
+double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
+
 #endif

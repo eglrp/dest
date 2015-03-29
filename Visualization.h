@@ -32,10 +32,10 @@ void MouseMotion(int x, int y);
 void ReshapeGL(int width, int height);
 
 void visualization();
-int visualizationDriver(char *Path, int nViews, int StartTime, int StopTime, bool Color, bool Normal, bool Pose, bool ThreeD, bool Traject3Dfrom1Time = false, int timeID = -1);
+int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, bool hasColor, bool hasPatchNormal, bool hasTimeVaryingCameraPose, bool hasTimeVarying3DPoints, bool hasFullTrajectory, int CurrentTime);
 
 void SaveCurrentSfmGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, Point3d *All3D, Point3i *AllColor, int npts);
-void SaveCurrentSfmGL2(char *path, CameraData *AllViewParas, vector<int>AvailViews, vector<Point3d>All3D, vector<Point3i>AllColor);
+void SaveCurrentSfmGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, vector<Point3d>All3D, vector<Point3i>AllColor);
 void ReadCurrentSfmGL(char *path, bool hasColor, bool hasNormal);
 bool ReadCurrent3DGL(char *path, bool hasColor, bool hasNormal, int timeID, bool setCoordinate);
 bool ReadCurrent3DGL2(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
@@ -46,7 +46,7 @@ void ReadCurrentTrajectory3(char *path, int timeID);
 void ReadCurrentTrajectory4(char *path, int timeID);
 void ReadCurrentTrajectory5(char *path, int timeID);
 
-void SaveCurrenPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID);
+void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID);
 void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime = 0);
 void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime);
 int screenShot(char *Fname, int width, int height, bool color);

@@ -1,3 +1,5 @@
+#ifdef _WINDOWS
+
 #include "VideoSequence.h"
 #include "Ultility.h"
 #include <boost/config.hpp>
@@ -8,21 +10,6 @@
 using namespace cv;
 using namespace std;
 
-bool GrabImage(char *fname, char *Img, int &width, int &height, int nchannels)
-{
-	Mat view = imread(fname, nchannels == 1 ? 0 : 1);
-	if (view.data == NULL)
-	{
-		cout << "Cannot load: " << fname << endl;
-		return false;
-	}
-	width = view.cols, height = view.rows;
-	int length = width *height*nchannels;
-	for (int ii = 0; ii < length; ii++)
-		Img[ii] = view.data[ii];
-
-	return true;
-}
 bool GrabVideoFrame2Mem(char *fname, char *Data, int &width, int &height, int &nchannels, int &nframes, int frameSample, int fixnframes)
 {
 	IplImage  *frame = 0;
@@ -607,4 +594,4 @@ void DynamicTimeWarping5Step(Mat pM, vector<int>&pp, vector<int> &qq)
 
 	return;
 }
-
+#endif

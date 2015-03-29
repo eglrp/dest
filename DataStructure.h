@@ -19,6 +19,15 @@ using namespace std;
 #define Pi 3.1415926535897932
 #define MaxnFrame 7000
 
+struct ImgPyr
+{
+	bool rgb;
+	int nscales;
+	vector<double *> ImgPyrPara;
+	vector<unsigned char *> ImgPyrImg;
+	vector<Point2i> wh;
+	vector<double> factor;
+};
 struct LKParameters
 {
 	//DIC_Algo: 
@@ -42,15 +51,6 @@ struct CameraData
 	bool notCalibrated;
 };
 
-struct SurfDesc
-{
-	float desc[64];
-};
-struct SiftDesc
-{
-	float desc[128];
-};
-
 struct Corpus
 {
 	int nCamera, n3dPoints;
@@ -68,7 +68,6 @@ struct Corpus
 	vector<vector<Point2d>> uvAllViews;
 	Mat SiftDesc, SurfDesc;
 };
-
 struct CorpusandVideo
 {
 	int nViewsCorpus, nVideos, startTime, stopTime, CorpusSharedIntrinsics;
@@ -86,21 +85,14 @@ struct CamInfo
 	float camCenter[3];
 	GLfloat Rgl[16];
 };
-struct Trajectory2D
-{
-	int timeID, nViews;
-	vector<int>viewIDs;
-	vector<Point2d> uv;
-	vector<float>angle;
-};
-
 struct ImgPtEle
 {
 	Point2d pt2D;
 	Point3d pt3D;
-	double ray[3], C[3], d;
+	double ray[3], camcenter[3], d;
 	double K[9], R[9], P[12], Q[6], u[2];//Jack notation
 };
+
 struct XYZD
 {
 	Point3d xyz;
@@ -129,6 +121,7 @@ struct Quaternion
 struct Track3D
 {
 	double *xyz;
+	int *frameID;
 	int npts;
 };
 struct Track4D
@@ -140,6 +133,7 @@ struct Track2D
 {
 	double *ParaX, *ParaY;
 	Point2d *uv;
+	double *frameID;
 	int npts;
 };
 struct PerCamNonRigidTrajectory
@@ -157,6 +151,13 @@ struct PerCamNonRigidTrajectory
 	double F;
 	int nTracks;
 };
+struct Trajectory2D
+{
+	int timeID, nViews;
+	vector<int>viewIDs;
+	vector<Point2d> uv;
+	vector<float>angle;
+};
 struct Trajectory3D
 {
 	int timeID;
@@ -164,7 +165,6 @@ struct Trajectory3D
 	vector<Point2d> uv;
 	Point3d WC;
 };
-
 struct TrajectoryData
 {
 	vector<Point3d> *cpThreeD;
@@ -178,15 +178,13 @@ struct TrajectoryData
 	int nTrajectories, nViews;
 	vector<Trajectory2D> *trajectoryUnit;
 };
-
 struct VisualizationManager
 {
 	Point3d g_trajactoryCenter;
-	vector<Point3d> PointPosition, PointPosition2, PointPosition3;
-	vector<Point3f> PointColor, PointColor2, PointColor3;
+	vector<Point3d> CorpusPointPosition, CorpusPointPosition2, PointPosition, PointPosition2, PointPosition3;
+	vector<Point3f> CorpusPointColor, CorpusPointColor2, PointColor, PointColor2, PointColor3;
 	vector<Point3d>PointNormal, PointNormal2, PointNormal3;
-	vector<CamInfo> glCameraInfo;
-	vector<CamInfo> *glCameraPoseInfo;
+	vector<CamInfo> glCorpusCameraInfo, *glCameraPoseInfo;
 	vector<Point3d> *catPointPosition, *catPointPosition3;
 	vector<Trajectory3D* > Traject3D;
 	vector<int> Track3DLength;
@@ -200,6 +198,13 @@ struct VisualizationManager
 	vector<int> Track3DLength5;
 };
 
-
+struct SurfDesc
+{
+	float desc[64];
+};
+struct SiftDesc
+{
+	float desc[128];
+};
 
 #endif 

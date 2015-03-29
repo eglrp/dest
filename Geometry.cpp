@@ -3555,7 +3555,9 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 			}
 			else
 			{
+#ifdef _WINDOWS
 				sprintf(Fname, "%s/%d", Path, ii); mkdir(Fname);
+#endif
 				sprintf(Fname, "%s/%d/K%d.dat", Path, ii, timeID); WriteKPointsBinarySIFTGPU(Fname, keys);
 				sprintf(Fname, "%s/%d/RGB%d.dat", Path, ii, timeID); WriteRGBBinarySIFTGPU(Fname, Vrgb);
 				sprintf(Fname, "%s/%d/D%d.dat", Path, ii, timeID); WriteDescriptorBinarySIFTGPU(Fname, descriptors);
@@ -4612,7 +4614,7 @@ double NviewTriangulationRANSAC(Point2d *pts, double *P, Point3d *WC, bool *Pass
 				for (ll = 0; ll<nview; ll++)
 					BestViewID[ll] = GoodViewID[ll];
 			}
-			if (bestCount> nview*2.0*inlierPercent)
+			if (bestCount> nview*inlierPercent)
 				break;
 		}
 
@@ -6545,7 +6547,7 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int NDplu
 	vector<int> AvailViews; AvailViews.reserve(nviews);
 	for (int ii = 0; ii < nviews; ii++)
 		AvailViews.push_back(ii);
-	SaveCurrentSfmGL2(Path, corpusData.camera, AvailViews, corpusData.xyz, corpusData.rgb);
+	SaveCurrentSfmGL(Path, corpusData.camera, AvailViews, corpusData.xyz, corpusData.rgb);
 
 	//Get sift matrix for all views
 	printf("Prune SIFT descriptors for only Corpus points....");

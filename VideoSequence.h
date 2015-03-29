@@ -1,3 +1,4 @@
+#ifdef _WINDOWS
 #pragma once
 #include <iostream>
 #include <fstream>
@@ -34,8 +35,7 @@ public:
 	}
 };
 
-bool myImgReader(char *fname, char *Img, int &width, int &height, int nchannels);
-bool GrabImage(char *fname, char *Img, int &width, int &height, int nchannels);
+
 bool GrabVideoFrame2Mem(char *fname, char *Data, int &width, int &height, int &nchannels, int &nframes, int frameSample = 1, int fixnframes = 99999999);
 int ReadAudio(char *Fin, Sequence &mySeq, char *Fout = 0);
 
@@ -45,6 +45,7 @@ int AssignOffsetFromMST(char *Path, int nvideos);
 
 void DynamicTimeWarping3Step(Mat pM, vector<int>&p, vector<int> &q);
 void DynamicTimeWarping5Step(Mat pM, vector<int>&p, vector<int> &q);
+#endif
 
 
 

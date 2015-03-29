@@ -321,6 +321,11 @@ double Distance3D(Point3d X, Point3d Y)
 	Point3d Dif = X - Y;
 	return sqrt(Dif.x*Dif.x + Dif.y * Dif.y + Dif.z *Dif.z);
 }
+double Distance3D(double *X, double * Y)
+{
+	Point3d Dif(X[0] - Y[0], X[1] - Y[1], X[2] - Y[2]);
+	return sqrt(Dif.x*Dif.x + Dif.y * Dif.y + Dif.z *Dif.z);
+}
 double L1norm(vector<double>A)
 {
 	double res = 0.0;
@@ -793,7 +798,21 @@ void mat_completeSym(double *mat, int size, bool upper)
 	}
 	return;
 }
+void RescaleMat(double *mat, double nmin, double nmax, int length)
+{
+	double minv = 9e9, maxv = -9e9;
+	for (int ii = 0; ii < length; ii++)
+	{
+		if (mat[ii] > maxv)
+			maxv = mat[ii];
+		if (mat[ii] < minv)
+			minv = mat[ii];
+	}
 
+	for (int ii = 0; ii < length; ii++)
+		mat[ii] = (mat[ii] - minv) / (maxv - minv)*(nmax - nmin) + nmin;
+	return;
+}
 void LS_Solution_Double(double *lpA, double *lpB, int m, int n)
 {
 	if (m == n)
@@ -2660,13 +2679,301 @@ int Compute3DTrajectoryError2DTracking(char *Path, TrajectoryData infoTraj, int 
 	return 0;
 }
 
-bool myImgReader(char *fname, unsigned char *Img, int width, int height, int nchannels)
+void Average_Filtering_All(char *lpD, int width, int height, int ni, int HSize, int VSize)
+{
+	int length = width*height;
+	int i, j, k, m, n, ii, jj, s;
+
+	char *T = new char[length];
+
+	for (k = 0; k < ni; k++)
+	{
+		/// Testing shows that memcpy() is NOT faster than the conventional way
+		// memcpy(T, lpD+k*length, length);
+		for (n = 0; n < length; n++)
+			*(T + n) = *(lpD + k*length + n);
+
+		/*
+		for(j=0; j<height; j++)
+		{
+		for(i=0; i<width; i++)
+		{
+		s = 0;
+		m = 0;
+		for(jj=-VSize; jj<=VSize; jj++)
+		{
+		for(ii=-HSize; ii<=HSize; ii++)
+		{
+		if( (j+jj)>=0 && (j+jj)<height && (i+ii)>=0 && (i+ii)<width )
+		{
+		s +=  (int)((unsigned char)*(lpD+k*length+(j+jj)*width+i+ii));
+		m++;
+		}
+		}
+		}
+		s = int( (double)s/m + 0.5 );
+		*(T+j*width+i) = (char)s;
+		}
+		}*/
+
+		/// Do not consider the boundary issue to increase the processing speed
+		m = (2 * HSize + 1)*(2 * VSize + 1);
+		for (j = VSize; j < height - VSize; j++)
+		{
+			for (i = HSize; i < width - HSize; i++)
+			{
+				s = 0;
+				for (jj = -VSize; jj <= VSize; jj++)
+				{
+					for (ii = -HSize; ii <= HSize; ii++)
+					{
+						s += (int)((unsigned char)*(lpD + k*length + (j + jj)*width + i + ii));
+					}
+				}
+				s = int((double)s / m + 0.5);
+				*(T + j*width + i) = (char)s;
+			}
+		}
+
+		for (n = 0; n < length; n++)
+			*(lpD + k*length + n) = *(T + n);
+	}
+
+	delete[]T;
+
+	return;
+}
+void MConventional_PhaseShifting(char *lpD, char *lpPBM, double* lpFO, int nipf, int length, int Mask_Threshold, double *f_atan2)
+{
+	int n, ni, nj;
+	int I1, I2, I3, I4, I5, f1, f2;
+	double q;
+
+	if (nipf == 3)
+	{
+		ni = 510;
+		nj = 255;
+		for (n = 0; n < length; n++)
+		{
+			I1 = (int)((unsigned char)*(lpD + n));
+			I2 = (int)((unsigned char)*(lpD + length + n));
+			I3 = (int)((unsigned char)*(lpD + 2 * length + n));
+			if (abs(I1 - I2) < Mask_Threshold && abs(I2 - I3) < Mask_Threshold && abs(I3 - I1) < Mask_Threshold)
+				*(lpPBM + n) = (char)0;
+
+			f1 = 2 * I1 - I2 - I3;
+			f2 = I3 - I2;
+			q = f_atan2[(f2 + nj)*(2 * ni + 1) + f1 + ni];
+
+			if (q < 0.0)
+				q = q + 2 * Pi;
+			*(lpFO + n) = q / (2 * Pi);
+		}
+	}
+	else if (nipf == 4)
+	{
+		ni = 255;
+		nj = 255;
+
+		for (n = 0; n < length; n++)
+		{
+			I1 = (int)((unsigned char)*(lpD + n));
+			I2 = (int)((unsigned char)*(lpD + length + n));
+			I3 = (int)((unsigned char)*(lpD + 2 * length + n));
+			I4 = (int)((unsigned char)*(lpD + 3 * length + n));
+			if (abs(I1 - I2) < Mask_Threshold && abs(I2 - I3) < Mask_Threshold && abs(I3 - I4) < Mask_Threshold && abs(I4 - I1) < Mask_Threshold)
+			{
+				*(lpPBM + n) = (char)0;
+			}
+
+			f1 = I1 - I3;
+			f2 = I4 - I2;
+			q = *(f_atan2 + (f2 + nj)*(2 * ni + 1) + f1 + ni);
+			if (q < 0.0)
+				q = q + 2 * Pi;
+			*(lpFO + n) = q / (2 * Pi);
+		}
+	}
+	else if (nipf == 5)
+	{
+		ni = 510;
+		nj = 510;
+
+		for (n = 0; n < length; n++)
+		{
+			I1 = (int)((unsigned char)*(lpD + n));
+			I2 = (int)((unsigned char)*(lpD + length + n));
+			I3 = (int)((unsigned char)*(lpD + 2 * length + n));
+			I4 = (int)((unsigned char)*(lpD + 3 * length + n));
+			I5 = (int)((unsigned char)*(lpD + 4 * length + n));
+			if (abs(I1 - I2) < Mask_Threshold && abs(I2 - I3) < Mask_Threshold && abs(I3 - I4) < Mask_Threshold && abs(I4 - I5) < Mask_Threshold && abs(I5 - I1) < Mask_Threshold)
+			{
+				*(lpPBM + n) = (char)0;
+			}
+
+			f1 = I1 + I5 - 2 * I3;
+			f2 = 2 * (I4 - I2);
+			q = *(f_atan2 + (f2 + nj)*(2 * ni + 1) + f1 + ni);
+			if (q < 0.0)
+				q = q + 2 * Pi;
+			*(lpFO + n) = q / (2 * Pi);
+		}
+	}
+	else
+	{
+		int I_max, I_min, i;
+		double ff1, ff2;
+		I_max = 0;
+		I_min = 255;
+		int *I = new int[nipf];
+
+		for (n = 0; n < length; n++)
+		{
+			for (i = 0; i<nipf; i++)
+			{
+				I[i] = (int)((unsigned char)*(lpD + i*length + n));
+				if (I[i]>I_max)
+					I_max = I[i];
+				if (I[i] < I_min)
+					I_min = I[i];
+			}
+			if ((I_max - I_min) < Mask_Threshold)
+				*(lpPBM + n) = (char)0;
+
+			ff1 = 0.0;
+			ff2 = 0.0;
+			for (i = 0; i < nipf; i++)
+			{
+				ff1 = ff1 + I[i] * cos(2.0*i*Pi / nipf);
+				ff2 = ff2 + I[i] * sin(2.0*i*Pi / nipf);
+			}
+			q = atan2(-ff2, ff1);
+			if (q < 0.0)
+				q = q + 2 * Pi;
+			*(lpFO + n) = q / (2.0*Pi);
+		}
+		delete[]I;
+	}
+
+	return;
+}
+void DecodePhaseShift2(char *Image, char *PBM, double *PhaseUW, int width, int height, int *frequency, int nfrequency, int sstep, int LFstep, int half_filter_size, int m_mask)
+{
+	int ii, jj, k, m, n, length = width*height;
+	int ni = sstep*(nfrequency - 1) + LFstep;
+	double *PhaseW = new double[nfrequency*length];
+
+	double s;
+	if (sstep == 3)
+	{
+		m = 510; n = 255; s = sqrt(3.0);
+	}
+	else if (sstep == 4)
+	{
+		m = 255; n = 255; s = 1.0;
+	}
+	else if (sstep == 5)
+	{
+		m = 510; n = 510; s = 1.0;
+	}
+	else
+	{
+		m = 1; n = 1;
+	}
+
+	double *f_atan2 = new double[(2 * m + 1)*(2 * n + 1)];
+	for (jj = -n; jj <= n; jj++)
+	{
+		for (ii = -m; ii <= m; ii++)
+		{
+			f_atan2[(jj + n)*(2 * m + 1) + ii + m] = atan2(s*jj, 1.0*ii);
+		}
+	}
+
+	// Filtering all images first
+	if (half_filter_size >= 1)
+		Average_Filtering_All(Image, width, height, ni, half_filter_size, half_filter_size);
+
+	m = nfrequency*length;
+	for (n = 0; n < m; n++)
+		*(PBM + n) = (char)255;
+
+	//Phase warpping
+	for (k = 0; k < nfrequency; k++)
+	{
+		if (k < nfrequency - 1)
+			MConventional_PhaseShifting(Image + k*sstep*length, PBM + k*length, PhaseW + k*length, sstep, length, m_mask, f_atan2);
+		else
+			MConventional_PhaseShifting(Image + k*sstep*length, PBM + k*length, PhaseW + k*length, LFstep, length, m_mask, f_atan2);
+	}
+
+	//Incremental phase unwarpped
+	double m_s;
+	for (k = 1; k < nfrequency; k++)
+	{
+		for (n = 0; n < length; n++)
+		{
+			if (PBM[(k - 1)*length + n] == (char)0)
+			{
+				PBM[k*length + n] = (char)0;
+				PhaseW[k*length + n] = 1000.0f;
+			}
+			else
+			{
+				m_s = PhaseW[(k - 1)*length + n] * frequency[k] / frequency[k - 1] - PhaseW[k*length + n];
+				if (m_s >= 0.0)
+					PhaseW[k*length + n] += (int)(m_s + 0.5);
+				else
+					PhaseW[k*length + n] += (int)(m_s - 0.5);
+			}
+		}
+	}
+
+	for (n = 0; n < length; n++)
+		PhaseUW[n] = PhaseW[(nfrequency - 1)*length + n];
+
+	delete[]PhaseW;
+	delete[]f_atan2;
+	return;
+}
+
+bool GrabImage(char *fname, char *Img, int &width, int &height, int nchannels, bool silent)
 {
 	Mat view = imread(fname, nchannels == 1 ? 0 : 1);
 	if (view.data == NULL)
 	{
-		cout << "Cannot load: " << fname << endl;
+		if (!silent)
+			cout << "Cannot load: " << fname << endl;
 		return false;
+	}
+	if (Img == NULL)
+	{
+		width = view.cols, height = view.rows;
+		Img = new char[width*height*nchannels];
+	}
+	int length = width*height;
+	for (int kk = 0; kk < nchannels; kk++)
+	{
+		for (int jj = 0; jj < height; jj++)
+			for (int ii = 0; ii < width; ii++)
+				Img[ii + jj*width + kk*length] = (char)view.data[nchannels*ii + jj*nchannels*width + kk];
+	}
+
+	return true;
+}
+bool GrabImage(char *fname, unsigned char *Img, int &width, int &height, int nchannels, bool silent)
+{
+	Mat view = imread(fname, nchannels == 1 ? 0 : 1);
+	if (view.data == NULL)
+	{
+		if (!silent)
+			cout << "Cannot load: " << fname << endl;
+		return false;
+	}
+	if (Img == NULL)
+	{
+		width = view.cols, height = view.rows;
+		Img = new unsigned char[width*height*nchannels];
 	}
 	int length = width*height;
 	for (int kk = 0; kk < nchannels; kk++)
@@ -2678,13 +2985,19 @@ bool myImgReader(char *fname, unsigned char *Img, int width, int height, int nch
 
 	return true;
 }
-bool myImgReader(char *fname, float *Img, int width, int height, int nchannels)
+bool GrabImage(char *fname, float *Img, int &width, int &height, int nchannels, bool silent)
 {
 	Mat view = imread(fname, nchannels == 1 ? 0 : 1);
 	if (view.data == NULL)
 	{
-		cout << "Cannot load: " << fname << endl;
+		if (!silent)
+			cout << "Cannot load: " << fname << endl;
 		return false;
+	}
+	if (Img == NULL)
+	{
+		width = view.cols, height = view.rows;
+		Img = new float[width*height*nchannels];
 	}
 	int length = width*height;
 	for (int kk = 0; kk < nchannels; kk++)
@@ -2696,13 +3009,19 @@ bool myImgReader(char *fname, float *Img, int width, int height, int nchannels)
 
 	return true;
 }
-bool myImgReader(char *fname, double *Img, int width, int height, int nchannels)
+bool GrabImage(char *fname, double *Img, int &width, int &height, int nchannels, bool silent)
 {
 	Mat view = imread(fname, nchannels == 1 ? 0 : 1);
 	if (view.data == NULL)
 	{
-		cout << "Cannot load: " << fname << endl;
+		if (!silent)
+			cout << "Cannot load: " << fname << endl;
 		return false;
+	}
+	if (Img == NULL)
+	{
+		width = view.cols, height = view.rows;
+		Img = new double[width*height*nchannels];
 	}
 	int length = width*height;
 	for (int kk = 0; kk < nchannels; kk++)
@@ -2755,7 +3074,7 @@ bool SaveDataToImage(char *fname, unsigned char *Img, int width, int height, int
 	for (jj = 0; jj < height; jj++)
 		for (ii = 0; ii < width; ii++)
 			for (kk = 0; kk < nchannels; kk++)
-				M.data[nchannels*ii + kk + nchannels*jj*width] = Img[ii + (height - 1 - jj)*width + kk*length];
+				M.data[nchannels*ii + kk + nchannels*jj*width] = Img[ii + jj*width + kk*length];
 
 	return imwrite(fname, M);
 }
@@ -2783,6 +3102,55 @@ bool SaveDataToImage(char *fname, double *Img, int width, int height, int nchann
 
 	return imwrite(fname, M);
 }
+
+
+void RemoveNoiseMedianFilter(float *data, int width, int height, int ksize, float thresh)
+{
+	Mat src = Mat(height, width, CV_32F, data);
+	Mat dst = Mat(10, 10, CV_32F, Scalar(0));
+
+	if (ksize > 5)
+		ksize = 5;
+
+	medianBlur(src, dst, ksize);
+
+	for (int jj = 0; jj < height; jj++)
+		for (int ii = 0; ii<width; ii++)
+			if (abs(data[ii + jj*width] - dst.at<float>(jj, ii))>thresh)
+				data[ii + jj*width] = 0.0;
+
+	return;
+}
+void RemoveNoiseMedianFilter(double *data, int width, int height, int ksize, float thresh, float *fdata)
+{
+	bool createMem = false;
+	if (fdata == NULL)
+	{
+		createMem = true;
+		fdata = new float[width*height];
+	}
+
+	for (int ii = 0; ii < width*height; ii++)
+		fdata[ii] = (float)data[ii];
+
+	Mat src = Mat(height, width, CV_32F, fdata);
+	Mat dst = Mat(10, 10, CV_32F, Scalar(0));
+
+	if (ksize > 5)
+		ksize = 5;
+
+	medianBlur(src, dst, ksize);
+
+	for (int jj = 0; jj < height; jj++)
+		for (int ii = 0; ii<width; ii++)
+			if (abs(data[ii + jj*width] - dst.at<float>(jj, ii))>thresh)
+				data[ii + jj*width] = 0.0;
+
+	if (createMem)
+		delete[]fdata;
+	return;
+}
+
 
 bool WriteKPointsBinary(char *fn, vector<KeyPoint>kpts, bool silent)
 {
@@ -3305,7 +3673,7 @@ bool ReadKPointsRGBBinarySIFTGPU(char *fn, vector<KeyPoint> &kpts, vector<Point3
 	return true;
 }
 
-void ResizeImage(unsigned char *Image, unsigned char *OutImage, int width, int height, int nchannels, double Rfactor, int InterpAlgo, double *InPara)
+void ResizeImage(unsigned char *Image, unsigned char *OutImage, int width, int height, int nchannels, double Rfactor, double sigma, int InterpAlgo, double *InPara)
 {
 	bool createMem = false;
 	int length = width*height;
@@ -3313,8 +3681,19 @@ void ResizeImage(unsigned char *Image, unsigned char *OutImage, int width, int h
 	{
 		createMem = true;
 		InPara = new double[length*nchannels];
-		for (int kk = 0; kk < nchannels; kk++)
-			Generate_Para_Spline(Image + kk*length, InPara + kk*length, width, height, InterpAlgo);
+		if (sigma == 0)
+			for (int kk = 0; kk < nchannels; kk++)
+				Generate_Para_Spline(Image + kk*length, InPara + kk*length, width, height, InterpAlgo);
+		else
+		{
+			double *SmoothImg = new double[length];
+			for (int kk = 0; kk < nchannels; kk++)
+			{
+				Gaussian_smooth(Image + kk*length, SmoothImg, height, width, 255.0, sigma);
+				Generate_Para_Spline(SmoothImg, InPara + kk*length, width, height, InterpAlgo);
+			}
+			delete[]SmoothImg;
+		}
 	}
 
 	double S[3];
@@ -3339,7 +3718,7 @@ void ResizeImage(unsigned char *Image, unsigned char *OutImage, int width, int h
 
 	return;
 }
-void ResizeImage(float *Image, float *OutImage, int width, int height, int nchannels, double Rfactor, int InterpAlgo, float *InPara)
+void ResizeImage(float *Image, float *OutImage, int width, int height, int nchannels, double Rfactor, double sigma, int InterpAlgo, float *InPara)
 {
 	bool createMem = false;
 	int length = width*height;
@@ -3347,8 +3726,20 @@ void ResizeImage(float *Image, float *OutImage, int width, int height, int nchan
 	{
 		createMem = true;
 		InPara = new float[width*height*nchannels];
-		for (int kk = 0; kk < nchannels; kk++)
-			Generate_Para_Spline(Image + kk*length, InPara + kk*length, width, height, InterpAlgo);
+		if (sigma < 0.001)
+			for (int kk = 0; kk < nchannels; kk++)
+				Generate_Para_Spline(Image + kk*length, InPara + kk*length, width, height, InterpAlgo);
+		else
+		{
+			printf("Image resize type not supported\n");
+			/*float *SmoothImg = new float[length*nchannels];
+			for (int kk = 0; kk < nchannels; kk++)
+			{
+			Gaussian_smooth(Image + kk*length, SmoothImg, height, width, 255.0, sigma);
+			Generate_Para_Spline(SmoothImg, InPara + kk*length, width, height, InterpAlgo);
+			}
+			delete[]SmoothImg;*/
+		}
 	}
 
 	double S[3];
@@ -3373,7 +3764,7 @@ void ResizeImage(float *Image, float *OutImage, int width, int height, int nchan
 
 	return;
 }
-void ResizeImage(double *Image, double *OutImage, int width, int height, int nchannels, double Rfactor, int InterpAlgo, double *InPara)
+void ResizeImage(double *Image, double *OutImage, int width, int height, int nchannels, double Rfactor, double sigma, int InterpAlgo, double *InPara)
 {
 	bool createMem = false;
 	int length = width*height;
@@ -3381,8 +3772,20 @@ void ResizeImage(double *Image, double *OutImage, int width, int height, int nch
 	{
 		createMem = true;
 		InPara = new double[width*height*nchannels];
-		for (int kk = 0; kk < nchannels; kk++)
-			Generate_Para_Spline(Image + kk*length, InPara + kk*length, width, height, InterpAlgo);
+
+		if (sigma < 0.001)
+			for (int kk = 0; kk < nchannels; kk++)
+				Generate_Para_Spline(Image + kk*length, InPara + kk*length, width, height, InterpAlgo);
+		else
+		{
+			double *SmoothImg = new double[length];
+			for (int kk = 0; kk < nchannels; kk++)
+			{
+				Gaussian_smooth(Image + kk*length, SmoothImg, height, width, 255.0, sigma);
+				Generate_Para_Spline(SmoothImg, InPara + kk*length, width, height, InterpAlgo);
+			}
+			delete[]SmoothImg;
+		}
 	}
 
 	double S[3];
@@ -3541,7 +3944,7 @@ int PickStaticImagesFromVideo(char *PATH, char *VideoName, int SaveFrameDif, int
 			points[1].resize(k);
 
 			sort(flowMag2.begin(), flowMag2.end());
-			if (flowMag2.size()>0)
+			if (flowMag2.size() > 0)
 				distance.push_back(flowMag2.at((int)(percentile*flowMag2.size())));
 			else
 				distance.push_back(-1);
@@ -3661,7 +4064,7 @@ int PickStaticImagesFromImages(char *PATH, int SaveFrameDif, int redetectInterva
 			points[1].resize(k);
 
 			sort(flowMag2.begin(), flowMag2.end());
-			if (flowMag2.size()>0)
+			if (flowMag2.size() > 0)
 				distance.push_back(flowMag2.at((int)(percentile*flowMag2.size())));
 			else
 				distance.push_back(-1);
@@ -4549,6 +4952,60 @@ void GetrtFromRT(double *rt, double *R, double *T)
 
 	return;
 }
+void GetRCGL(CameraData &camInfo)
+{
+	double iR[9], center[3];
+	mat_invert(camInfo.R, iR);
+
+	camInfo.Rgl[0] = camInfo.R[0], camInfo.Rgl[1] = camInfo.R[1], camInfo.Rgl[2] = camInfo.R[2], camInfo.Rgl[3] = 0.0;
+	camInfo.Rgl[4] = camInfo.R[3], camInfo.Rgl[5] = camInfo.R[4], camInfo.Rgl[6] = camInfo.R[5], camInfo.Rgl[7] = 0.0;
+	camInfo.Rgl[8] = camInfo.R[6], camInfo.Rgl[9] = camInfo.R[7], camInfo.Rgl[10] = camInfo.R[8], camInfo.Rgl[11] = 0.0;
+	camInfo.Rgl[12] = 0, camInfo.Rgl[13] = 0, camInfo.Rgl[14] = 0, camInfo.Rgl[15] = 1.0;
+
+	mat_mul(iR, camInfo.T, center, 3, 3, 1);
+	camInfo.camCenter[0] = -center[0], camInfo.camCenter[1] = -center[1], camInfo.camCenter[2] = -center[2];
+	return;
+}
+void GetTfromC(CameraData &camInfo)
+{
+	double T[3];
+
+	mat_mul(camInfo.R, camInfo.camCenter, T, 3, 3, 1);
+	camInfo.T[0] = -T[0], camInfo.T[1] = -T[1], camInfo.T[2] = -T[2];
+	return;
+}
+void CopyCamereInfo(CameraData Src, CameraData &Dst, bool Extrinsic)
+{
+	int ii;
+	for (ii = 0; ii < 9; ii++)
+		Dst.K[ii] = Src.K[ii];
+	for (ii = 0; ii < 7; ii++)
+		Dst.distortion[ii] = Src.distortion[ii];
+	for (ii = 0; ii < 5; ii++)
+		Dst.intrinsic[ii] = Src.intrinsic[ii];
+
+	Dst.LensModel = Src.LensModel;
+	Dst.ninlierThresh = Src.ninlierThresh;
+	Dst.threshold = Src.threshold;
+	Dst.width = Src.width, Dst.height = Src.height;
+
+	if (Extrinsic)
+	{
+		for (ii = 0; ii < 9; ii++)
+			Dst.R[ii] = Src.R[ii];
+		for (ii = 0; ii < 3; ii++)
+			Dst.T[ii] = Src.T[ii];
+		for (ii = 0; ii < 6; ii++)
+			Dst.rt[ii] = Src.rt[ii];
+		for (ii = 0; ii < 12; ii++)
+			Dst.P[ii] = Src.P[ii];
+		for (ii = 0; ii < 16; ii++)
+			Dst.Rgl[ii] = Src.Rgl[ii];
+		for (ii = 0; ii < 3; ii++)
+			Dst.camCenter[ii] = Src.camCenter[ii];
+	}
+	return;
+}
 
 void GetRTFromrt(CameraData &camera)
 {
@@ -4817,6 +5274,292 @@ double DistanceOfTwoPointsSfM(char *Path, int id1, int id2, int id3)
 	return sqrt(pow(WC[0].x - WC[1].x, 2) + pow(WC[0].y - WC[1].y, 2) + pow(WC[0].z - WC[1].z, 2));
 }
 
+
+// Author: Xiaotao Duan
+//
+// This library contains image processing method to detect
+// image blurriness.
+//
+// This library is *not* thread safe because static memory is
+// used for performance.
+//
+// A method to detect whether a given image is blurred or not.
+// The algorithm is based on H. Tong, M. Li, H. Zhang, J. He,
+// and C. Zhang. "Blur detection for digital images using wavelet
+// transform".
+//
+// To achieve better performance on client side, the method
+// is running on four 128x128 portions which compose the 256x256
+// central area of the given image. On Nexus One, average time
+// to process a single image is ~5 milliseconds.
+static const int kDecomposition = 3;
+static const int kThreshold = 35;
+
+static const int kMaximumWidth = 2048;
+static const int kMaximumHeight = 1536;
+
+static int32_t _smatrix[kMaximumWidth * kMaximumHeight];
+static int32_t _arow[kMaximumWidth > kMaximumHeight ? kMaximumWidth : kMaximumHeight];
+
+// Does Haar Wavelet Transformation in place on a given row of a matrix. The matrix is in size of matrix_height * matrix_width and represented in a linear array. 
+//Parameter offset_row indicates transformation is performed on which row. offset_column and num_columns indicate column range of the given row.
+inline void Haar1DX(int* matrix, int matrix_height, int matrix_width, int offset_row, int offset_column, int num_columns) {
+	int32_t* ptr_a = _arow;
+	int32_t* ptr_matrix = matrix + offset_row * matrix_width + offset_column;
+	int half_num_columns = num_columns / 2;
+
+	int32_t* a_tmp = ptr_a;
+	int32_t* matrix_tmp = ptr_matrix;
+	for (int j = 0; j < half_num_columns; ++j) {
+		*a_tmp++ = (matrix_tmp[0] + matrix_tmp[1]) / 2;
+		matrix_tmp += 2;
+	}
+
+	int32_t* average = ptr_a;
+	a_tmp = ptr_a + half_num_columns;
+	matrix_tmp = ptr_matrix;
+	for (int j = 0; j < half_num_columns; ++j) {
+		*a_tmp++ = *matrix_tmp - *average++;
+		matrix_tmp += 2;
+	}
+
+	memcpy(ptr_matrix, ptr_a, sizeof(int32_t)* num_columns);
+}
+// Does Haar Wavelet Transformation in place on a given column of a matrix.
+inline void Haar1DY(int* matrix, int matrix_height, int matrix_width, int offset_column, int offset_row, int num_rows) {
+	int32_t* ptr_a = _arow;
+	int32_t* ptr_matrix = matrix + offset_row * matrix_width + offset_column;
+	int half_num_rows = num_rows / 2;
+	int two_line_width = matrix_width * 2;
+
+	int32_t* a_tmp = ptr_a;
+	int32_t* matrix_tmp = ptr_matrix;
+	for (int j = 0; j < half_num_rows; ++j) {
+		*a_tmp++ = (matrix_tmp[matrix_width] + matrix_tmp[0]) / 2;
+		matrix_tmp += two_line_width;
+	}
+
+	int32_t* average = ptr_a;
+	a_tmp = ptr_a + half_num_rows;
+	matrix_tmp = ptr_matrix;
+	for (int j = 0; j < num_rows; j += 2) {
+		*a_tmp++ = *matrix_tmp - *average++;
+		matrix_tmp += two_line_width;
+	}
+
+	for (int j = 0; j < num_rows; ++j) {
+		*ptr_matrix = *ptr_a++;
+		ptr_matrix += matrix_width;
+	}
+}
+// Does Haar Wavelet Transformation in place for a specified area of a matrix. The matrix size is specified by matrix_width and matrix_height.
+// The area on which the transformation is performed is specified by offset_column, num_columns, offset_row and num_rows.
+void Haar2D(int* matrix, int matrix_height, int matrix_width, int offset_column, int num_columns, int offset_row, int num_rows) {
+	for (int i = offset_row; i < offset_row + num_rows; ++i) {
+		Haar1DX(matrix, matrix_height, matrix_width, i, offset_column, num_columns);
+	}
+
+	for (int i = offset_column; i < offset_column + num_columns; ++i){
+		Haar1DY(matrix, matrix_height, matrix_width, i, offset_row, num_rows);
+	}
+}
+// Reads in a given matrix, does first round HWT and outputs result matrix into target array. This function is used for optimization by avoiding a memory copy. 
+//The input matrix has height rows and width columns. The transformation is performed on the given area specified by offset_column, num_columns, offset_row, num_rows. 
+// After transformation, the output matrix has num_columns columns and num_rows rows.
+void HwtFirstRound(const unsigned char* const data, int height, int width, int offset_column, int num_columns, int offset_row, int num_rows, int32_t* matrix)
+{
+	int32_t* ptr_a = _arow;
+	const unsigned char* ptr_data = data + offset_row * width + offset_column;
+	int half_num_columns = num_columns / 2;
+
+	for (int i = 0; i < num_rows; ++i)
+	{
+		int32_t* a_tmp = ptr_a;
+		const unsigned char* data_tmp = ptr_data;
+		for (int j = 0; j < half_num_columns; ++j)
+		{
+			*a_tmp++ = (int32_t)((data_tmp[0] + data_tmp[1]) / 2);
+			data_tmp += 2;
+		}
+
+		int32_t* average = ptr_a;
+		a_tmp = ptr_a + half_num_columns;
+		data_tmp = ptr_data;
+		for (int j = 0; j < half_num_columns; ++j)
+		{
+			*a_tmp++ = *data_tmp - *average++;
+			data_tmp += 2;
+		}
+
+		int32_t* ptr_matrix = matrix + i * num_columns;
+		a_tmp = ptr_a;
+		for (int j = 0; j < num_columns; ++j)
+		{
+			*ptr_matrix++ = *a_tmp++;
+		}
+
+		ptr_data += width;
+	}
+
+	// Column transformation does not involve input data.
+	for (int i = 0; i < num_columns; ++i)
+		Haar1DY(matrix, num_rows, num_columns, i, 0, num_rows);
+}
+// Returns the weight of a given point in a certain scale of a matrix after wavelet transformation.
+// The point is specified by k and l which are y and x coordinate respectively. Parameter scale tells in which scale the weight is computed, must be 1, 2 or 3 which stands respectively for 1/2, 1/4, and 1/8 of original size.
+int ComputeEdgePointWeight(int* matrix, int width, int height, int k, int l, int scale) {
+	int r = k >> scale;
+	int c = l >> scale;
+	int window_row = height >> scale;
+	int window_column = width >> scale;
+
+	int v_top_right = pow(matrix[r * width + c + window_column], 2);
+	int v_bot_left = pow(matrix[(r + window_row) * width + c], 2);
+	int v_bot_right = pow(matrix[(r + window_row) * width + c + window_column], 2);
+
+	int v = sqrt(v_top_right + v_bot_left + v_bot_right);
+	return v;
+}
+// Computes point with maximum weight for a given local window for a given scale. Parameter scaled_width and scaled_height define scaled image size of a certain decomposition level. 
+//The window size is defined by window_size. Output value k and l store row (y coordinate) and column (x coordinate) respectively of the point with maximum weight. The maximum weight is returned.
+int ComputeLocalMaximum(int* matrix, int width, int height, int scaled_width, int scaled_height, int top, int left, int window_size, int* k, int* l) {
+	int max = -1;
+	*k = top;
+	*l = left;
+
+	for (int i = 0; i < window_size; ++i) {
+		for (int j = 0; j < window_size; ++j) {
+			int r = top + i;
+			int c = left + j;
+
+			int v_top_right = abs(matrix[r * width + c + scaled_width]);
+			int v_bot_left = abs(matrix[(r + scaled_height) * width + c]);
+			int v_bot_right =
+				abs(matrix[(r + scaled_height) * width + c + scaled_width]);
+			int v = v_top_right + v_bot_left + v_bot_right;
+
+			if (v > max) {
+				max = v;
+				*k = r;
+				*l = c;
+			}
+		}
+	}
+
+	int r = *k;
+	int c = *l;
+	int v_top_right = pow(matrix[r * width + c + scaled_width], 2);
+	int v_bot_left = pow(matrix[(r + scaled_height) * width + c], 2);
+	int v_bot_right = pow(matrix[(r + scaled_height) * width + c + scaled_width], 2);
+	int v = sqrt(v_top_right + v_bot_left + v_bot_right);
+
+	return v;
+}
+// Detects blurriness of a transformed matrix. Blur confidence and extent will be returned through blur_conf and blur_extent. 1 is returned while input matrix is blurred.
+int DetectBlur(int* matrix, int width, int height, float* blur_conf, float* blur_extent, float blurThresh) {
+	int nedge = 0;
+	int nda = 0;
+	int nrg = 0;
+	int nbrg = 0;
+
+	// For each scale
+	for (int current_scale = kDecomposition; current_scale > 0; --current_scale) {
+		int scaled_width = width >> current_scale;
+		int scaled_height = height >> current_scale;
+		int window_size = 16 >> current_scale;  // 2, 4, 8
+		// For each window
+		for (int r = 0; r + window_size < scaled_height; r += window_size) {
+			for (int c = 0; c + window_size < scaled_width; c += window_size) {
+				int k, l;
+				int emax = ComputeLocalMaximum(matrix, width, height,
+					scaled_width, scaled_height, r, c, window_size, &k, &l);
+				if (emax > kThreshold) {
+					int emax1, emax2, emax3;
+					switch (current_scale) {
+					case 1:
+						emax1 = emax;
+						emax2 = ComputeEdgePointWeight(matrix, width, height,
+							k << current_scale, l << current_scale, 2);
+						emax3 = ComputeEdgePointWeight(matrix, width, height,
+							k << current_scale, l << current_scale, 3);
+						break;
+					case 2:
+						emax1 = ComputeEdgePointWeight(matrix, width, height,
+							k << current_scale, l << current_scale, 1);
+						emax2 = emax;
+						emax3 = ComputeEdgePointWeight(matrix, width, height,
+							k << current_scale, l << current_scale, 3);
+						break;
+					case 3:
+						emax1 = ComputeEdgePointWeight(matrix, width, height,
+							k << current_scale, l << current_scale, 1);
+						emax2 = ComputeEdgePointWeight(matrix, width, height,
+							k << current_scale, l << current_scale, 2);
+						emax3 = emax;
+						break;
+					}
+
+					nedge++;
+					if (emax1 > emax2 && emax2 > emax3) {
+						nda++;
+					}
+					if (emax1 < emax2 && emax2 < emax3) {
+						nrg++;
+						if (emax1 < kThreshold) {
+							nbrg++;
+						}
+					}
+					if (emax2 > emax1 && emax2 > emax3) {
+						nrg++;
+						if (emax1 < kThreshold) {
+							nbrg++;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// TODO(xiaotao): No edge point at all, blurred or not?
+	float per = nedge == 0 ? 0 : (float)nda / nedge;
+
+	*blur_conf = per;
+	*blur_extent = (float)nbrg / nrg;
+
+	return per < blurThresh;
+}
+// Detects blurriness of a given portion of a luminance matrix.
+int IsBlurredInner(const unsigned char* const luminance, const int width, const int height, const int left, const int top, const int width_wanted, const int height_wanted, float* const blur, float* const extent, float blurThresh) {
+	int32_t* matrix = _smatrix;
+
+	HwtFirstRound(luminance, height, width, left, width_wanted, top, height_wanted, matrix);
+	Haar2D(matrix, height_wanted, width_wanted, 0, width_wanted >> 1, 0, height_wanted >> 1);
+	Haar2D(matrix, height_wanted, width_wanted, 0, width_wanted >> 2, 0, height_wanted >> 2);
+
+	int blurred = DetectBlur(matrix, width_wanted, height_wanted, blur, extent, blurThresh);
+
+	return blurred;
+}
+int IsBlurred(const unsigned char* const luminance, const int width, const int height, float &blur, float &extent, float blurThresh) {
+
+	int desired_width = min(kMaximumWidth, width);
+	int desired_height = min(kMaximumHeight, height);
+	int left = (width - desired_width) >> 1;
+	int top = (height - desired_height) >> 1;
+
+	float conf1, extent1;
+	int blur1 = IsBlurredInner(luminance, width, height, left, top, desired_width >> 1, desired_height >> 1, &conf1, &extent1, blurThresh);
+	float conf2, extent2;
+	int blur2 = IsBlurredInner(luminance, width, height, left + (desired_width >> 1), top, desired_width >> 1, desired_height >> 1, &conf2, &extent2, blurThresh);
+	float conf3, extent3;
+	int blur3 = IsBlurredInner(luminance, width, height, left, top + (desired_height >> 1), desired_width >> 1, desired_height >> 1, &conf3, &extent3, blurThresh);
+	float conf4, extent4;
+	int blur4 = IsBlurredInner(luminance, width, height, left + (desired_width >> 1), top + (desired_height >> 1), desired_width >> 1, desired_height >> 1, &conf4, &extent4, blurThresh);
+
+	blur = (conf1 + conf2 + conf3 + conf4) / 4;
+	extent = (extent1 + extent2 + extent3 + extent4) / 4;
+	return blur < blurThresh;
+}
 
 void BlurDetectionDriver(char *Path, int nimages, int width, int height, float blurThresh)
 {
@@ -5115,8 +5858,47 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 
 		GetKFromIntrinsic(CorpusData.camera[viewID]);
 		GetRTFromrt(CorpusData.camera[viewID].rt, CorpusData.camera[viewID].R, CorpusData.camera[viewID].T);
+		GetRCGL(CorpusData.camera[viewID]);
 	}
 	fclose(fp);
+	return true;
+}
+bool saveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
+{
+	double fx, fy, skew, u0, v0, r1, r2, r3, t1, t2, p1, p2, omega, DistCtrX, DistCtrY, rv[3], T[3];
+
+	FILE *fp = fopen(BAfileName, "w+");
+	fprintf(fp, "%d \n", CorpusData.nCamera);
+
+	for (int viewID = 0; viewID < CorpusData.nCamera; viewID++)
+	{
+		fprintf(fp, "%d.png %d %d %d ", viewID, CorpusData.camera[viewID].LensModel, CorpusData.camera[viewID].width, CorpusData.camera[viewID].height);
+
+		fx = CorpusData.camera[viewID].intrinsic[0], fy = CorpusData.camera[viewID].intrinsic[1],
+			skew = CorpusData.camera[viewID].intrinsic[2],
+			u0 = CorpusData.camera[viewID].intrinsic[3], v0 = CorpusData.camera[viewID].intrinsic[4];
+
+		//Scale data
+		for (int jj = 0; jj < 3; jj++)
+			rv[jj] = CorpusData.camera[viewID].rt[jj], T[jj] = CorpusData.camera[viewID].rt[jj + 3];
+
+		if (CorpusData.camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
+		{
+			r1 = CorpusData.camera[viewID].distortion[0], r2 = CorpusData.camera[viewID].distortion[1], r3 = CorpusData.camera[viewID].distortion[2],
+				t1 = CorpusData.camera[viewID].distortion[3], t2 = CorpusData.camera[viewID].distortion[4],
+				p1 = CorpusData.camera[viewID].distortion[5], p2 = CorpusData.camera[viewID].distortion[6];
+			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f \n", fx, fy, skew, u0, v0,
+				r1, r2, r3, t1, t2, p1, p2,
+				rv[0], rv[1], rv[2], T[0], T[1], T[2]);
+		}
+		else
+		{
+			omega = CorpusData.camera[viewID].distortion[0], DistCtrX = CorpusData.camera[viewID].distortion[1], DistCtrY = CorpusData.camera[viewID].distortion[2];
+			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f  \n", fx, fy, skew, u0, v0,
+				omega, DistCtrX, DistCtrY,
+				rv[0], rv[1], rv[2], T[0], T[1], T[2]);
+		}
+	}
 	return true;
 }
 bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor)
@@ -5251,7 +6033,12 @@ bool ReSaveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData, double
 
 		//Scale data
 		for (int jj = 0; jj < 3; jj++)
-			rv[jj] = CorpusData.camera[viewID].rt[jj], T[jj] = CorpusData.camera[viewID].rt[jj + 3] * ScaleFactor;
+		{
+			CorpusData.camera[viewID].T[jj] *= ScaleFactor;
+			rv[jj] = CorpusData.camera[viewID].rt[jj], T[jj] = CorpusData.camera[viewID].T[jj];
+		}
+		AssembleP(CorpusData.camera[viewID]);
+		GetRCGL(CorpusData.camera[viewID]);
 
 		if (CorpusData.camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
 		{
@@ -6055,220 +6842,7 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 }
 
 
-void TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, Point2i POI, int search_area, double thresh, double &zncc)
-{
-	//No interpolation at all, just slide the template around to compute the ZNCC
-	int m, i, j, ii, jj, iii, jjj, II, JJ, length = width*height;
-	double t_f, t_g, t_1, t_2, t_3, t_4, t_5, m_F, m_G;
 
-	Point2d w_pt, ima_pt;
-	int Pattern_cen_x = pattern_size / 2;
-	int Pattern_cen_y = pattern_size / 2;
-
-	FILE *fp1, *fp2;
-	bool printout = false;
-
-
-	double *T = new double[2 * (2 * hsubset + 1)*(2 * hsubset + 1)];
-	zncc = 0.0;
-	for (j = -search_area; j <= search_area; j++)
-	{
-		for (i = -search_area; i <= search_area; i++)
-		{
-			m = -1;
-			t_f = 0.0;
-			t_g = 0.0;
-
-			if (printout)
-			{
-				fp1 = fopen("C:/temp/src.txt", "w+");
-				fp2 = fopen("C:/temp/tar.txt", "w+");
-			}
-
-			for (jjj = -hsubset; jjj <= hsubset; jjj++)
-			{
-				for (iii = -hsubset; iii <= hsubset; iii++)
-				{
-					jj = Pattern_cen_y + jjj;
-					ii = Pattern_cen_x + iii;
-
-					JJ = POI.y + jjj + j;
-					II = POI.x + iii + i;
-
-					m_F = Pattern[ii + jj*pattern_size];
-					m_G = Image[II + JJ*width];
-
-					if (printout)
-					{
-						fprintf(fp1, "%.2f ", m_F);
-						fprintf(fp2, "%.2f ", m_G);
-					}
-					m++;
-					*(T + 2 * m + 0) = m_F;
-					*(T + 2 * m + 1) = m_G;
-					t_f += m_F;
-					t_g += m_G;
-				}
-				if (printout)
-				{
-					fprintf(fp1, "\n");
-					fprintf(fp2, "\n");
-				}
-			}
-			if (printout)
-			{
-				fclose(fp1); fclose(fp2);
-			}
-
-			t_f = t_f / (m + 1);
-			t_g = t_g / (m + 1);
-			t_1 = 0.0;
-			t_2 = 0.0;
-			t_3 = 0.0;
-			for (iii = 0; iii <= m; iii++)
-			{
-				t_4 = *(T + 2 * iii + 0) - t_f;
-				t_5 = *(T + 2 * iii + 1) - t_g;
-				t_1 += (t_4*t_5);
-				t_2 += (t_4*t_4);
-				t_3 += (t_5*t_5);
-			}
-
-			t_2 = sqrt(t_2*t_3);
-			if (t_2 < 1e-10)
-				t_2 = 1e-10;
-
-			t_3 = t_1 / t_2;
-
-			if (t_3 > 1.0 || t_3 < -1.0)
-				t_3 = 0.0;
-
-			if (t_3>thresh && t_3 > zncc)
-				zncc = t_3;
-			else if (t_3 < -thresh && t_3 < zncc)
-				zncc = t_3;
-		}
-	}
-
-	zncc = abs(zncc);
-
-	delete[]T;
-	return;
-}
-void LaplacianOfGaussian(double *LOG, int sigma)
-{
-	int n = ceil(sigma * 3), Size = 2 * n + 1;
-	//[x, y] = meshgrid(-ceil(sigma * 3) : ceil(sigma * 3));
-	//	L = -(1 - (x. ^ 2 + y. ^ 2) / 2 / sigma ^ 2) / pi / sigma^4.*exp(-(x. ^ 2 + y. ^ 2) / 2 / sigma ^ 2);
-
-	double ii2, jj2, Twosigma2 = 2.0*sigma*sigma, sigma4 = pow(sigma, 4);
-	for (int jj = -n; jj <= n; jj++)
-	{
-		for (int ii = -n; ii <= n; ii++)
-		{
-			ii2 = ii*ii, jj2 = jj*jj;
-			LOG[(ii + n) + (jj + n)*Size] = (ii2 + jj2 - Twosigma2) / sigma4*exp(-(ii2 + jj2) / Twosigma2);
-		}
-	}
-
-	return;
-}
-void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker, int &npts, double sigma, int search_area, int NMS_BW, double thresh)
-{
-	int i, j, ii, jj, kk, jump = 1, nMaxCorners = npts, numPatterns = 1;
-
-	int hsubset = ceil(sigma * 3), PatternSize = hsubset * 2 + 1, PatternLength = PatternSize*PatternSize;
-	double *maskSmooth = new double[PatternLength*numPatterns];
-	LaplacianOfGaussian(maskSmooth, sigma);
-	/*FILE *fp = fopen("C:/temp/LOG.txt", "r");
-	for (int jj = 0; jj < PatternSize; jj++)
-	for (int ii = 0; ii <PatternSize; ii++)
-	fscanf(fp, "%lf ", &maskSmooth[ii + jj*PatternSize]);
-	fclose(fp);*/
-
-	SaveDataToImage("C:/temp/temp.png", maskSmooth, PatternSize, PatternSize, 1);
-
-	//synthesize_square_mask(maskSmooth, bi_graylevel, PatternSize, 1.0, 0, false);
-	double *Cornerness = new double[width*height];
-	for (ii = 0; ii < width*height; ii++)
-		Cornerness[ii] = 0.0;
-
-	double zncc;
-	Point2i POI;
-	for (kk = 0; kk < numPatterns; kk++)
-	{
-		for (jj = 3 * hsubset; jj < height - 3 * hsubset; jj += jump)
-		{
-			for (ii = 3 * hsubset; ii < width - 3 * hsubset; ii += jump)
-			{
-				POI.x = ii, POI.y = jj;
-				TMatchingSuperCoarse(maskSmooth + kk*PatternLength, PatternSize, hsubset, img, width, height, POI, search_area, thresh, zncc);
-				Cornerness[ii + jj*width] = max(zncc, Cornerness[ii + jj*width]);
-			}
-		}
-	}
-
-	//ReadGridBinary("C:/temp/cornerness.dat", Cornerness, width, height);
-	double *Cornerness2 = new double[width*height];
-	for (ii = 0; ii < width*height; ii++)
-		Cornerness2[ii] = Cornerness[ii];
-	WriteGridBinary("C:/temp/cornerness.dat", Cornerness, width, height);
-
-	//Non-max suppression
-	bool breakflag;
-	for (jj = 3 * hsubset; jj < height - 3 * hsubset; jj += jump)
-	{
-		for (ii = 3 * hsubset; ii < width - 3 * hsubset; ii += jump)
-		{
-			breakflag = false;
-			if (Cornerness[ii + jj*width] < thresh)
-			{
-				Cornerness[ii + jj*width] = 0.0;
-				Cornerness2[ii + jj*width] = 0.0;
-			}
-			else
-			{
-				for (j = -NMS_BW; j <= NMS_BW; j += jump)
-				{
-					for (i = -NMS_BW; i <= NMS_BW; i += jump)
-					{
-						if (Cornerness[ii + jj*width] < Cornerness[ii + i + (jj + j)*width] - 0.001) //avoid comparing with itse.8f
-						{
-							Cornerness2[ii + jj*width] = 0.0;
-							breakflag = true;
-							break;
-						}
-					}
-				}
-			}
-			if (breakflag == true)
-				break;
-		}
-	}
-	WriteGridBinary("C:/temp/NMS.dat", Cornerness2, width, height);
-
-	npts = 0;
-	for (jj = 3 * hsubset; jj < height - 3 * hsubset; jj += jump)
-	{
-		for (ii = 3 * hsubset; ii < width - 3 * hsubset; ii += jump)
-		{
-			if (Cornerness2[ii + jj*width] > thresh)
-			{
-				Checker[npts].x = ii;
-				Checker[npts].y = jj;
-				npts++;
-			}
-			if (npts > nMaxCorners)
-				break;
-		}
-	}
-
-	delete[]maskSmooth;
-	delete[]Cornerness;
-	delete[]Cornerness2;
-
-	return;
-}
 
 int ImportCalibDatafromHanFormat(char *Path, VideoData &AllVideoInfo, int nVGAPanels, int nVGACamsPerPanel, int nHDs)
 {
@@ -6358,6 +6932,7 @@ int ImportCalibDatafromHanFormat(char *Path, VideoData &AllVideoInfo, int nVGAPa
 
 	return 0;
 }
+#ifdef _WINDOWS
 void ExportCalibDatatoHanFormat(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime, int chosencamera)
 {
 	char Fname[200];
@@ -6523,53 +7098,8 @@ void ExportCalibDatatoHanFormat(char *Path, VideoData &AllVideoInfo, int nVideoV
 		fclose(fp);
 	}
 }
+#endif
 
-void GetRCGL(CameraData &camInfo)
-{
-	double iR[9], center[3];
-	mat_invert(camInfo.R, iR);
-
-	camInfo.Rgl[0] = camInfo.R[0], camInfo.Rgl[1] = camInfo.R[1], camInfo.Rgl[2] = camInfo.R[2], camInfo.Rgl[3] = 0.0;
-	camInfo.Rgl[4] = camInfo.R[3], camInfo.Rgl[5] = camInfo.R[4], camInfo.Rgl[6] = camInfo.R[5], camInfo.Rgl[7] = 0.0;
-	camInfo.Rgl[8] = camInfo.R[6], camInfo.Rgl[9] = camInfo.R[7], camInfo.Rgl[10] = camInfo.R[8], camInfo.Rgl[11] = 0.0;
-	camInfo.Rgl[12] = 0, camInfo.Rgl[13] = 0, camInfo.Rgl[14] = 0, camInfo.Rgl[15] = 1.0;
-
-	mat_mul(iR, camInfo.T, center, 3, 3, 1);
-	camInfo.camCenter[0] = -center[0], camInfo.camCenter[1] = -center[1], camInfo.camCenter[2] = -center[2];
-	return;
-}
-void CopyCamereInfo(CameraData Src, CameraData &Dst, bool Extrinsic)
-{
-	int ii;
-	for (ii = 0; ii < 9; ii++)
-		Dst.K[ii] = Src.K[ii];
-	for (ii = 0; ii < 7; ii++)
-		Dst.distortion[ii] = Src.distortion[ii];
-	for (ii = 0; ii < 5; ii++)
-		Dst.intrinsic[ii] = Src.intrinsic[ii];
-
-	Dst.LensModel = Src.LensModel;
-	Dst.ninlierThresh = Src.ninlierThresh;
-	Dst.threshold = Src.threshold;
-	Dst.width = Src.width, Dst.height = Src.height;
-
-	if (Extrinsic)
-	{
-		for (ii = 0; ii < 9; ii++)
-			Dst.R[ii] = Src.R[ii];
-		for (ii = 0; ii < 3; ii++)
-			Dst.T[ii] = Src.T[ii];
-		for (ii = 0; ii < 6; ii++)
-			Dst.rt[ii] = Src.rt[ii];
-		for (ii = 0; ii < 12; ii++)
-			Dst.P[ii] = Src.P[ii];
-		for (ii = 0; ii < 16; ii++)
-			Dst.Rgl[ii] = Src.Rgl[ii];
-		for (ii = 0; ii < 3; ii++)
-			Dst.camCenter[ii] = Src.camCenter[ii];
-	}
-	return;
-}
 void GenerateViewAll_3D_2DInliers(char *Path, int viewID, int startID, int stopID, int n3Dcorpus)
 {
 	char Fname[200];
@@ -6608,4 +7138,2556 @@ void GenerateViewAll_3D_2DInliers(char *Path, int viewID, int startID, int stopI
 	fclose(fp);
 
 	return;
+}
+
+//Image pyramid
+int BuildImgPyr(char *ImgName, ImgPyr &Pyrad, int nOtaves, int nPerOctaves, bool color, int interpAlgo, double sigma)
+{
+	int width, height, nw, nh, nchannels = color ? 3 : 1;
+
+	Mat view = imread(ImgName, nchannels == 1 ? 0 : 1);
+	if (view.data == NULL)
+	{
+		cout << "Cannot load: " << ImgName << endl;
+		return false;
+	}
+	width = view.cols, height = view.rows;
+
+	unsigned char*	Img = new unsigned char[width*height*nchannels];
+	int length = width*height;
+	for (int kk = 0; kk < nchannels; kk++)
+	{
+		for (int jj = 0; jj < height; jj++)
+			for (int ii = 0; ii < width; ii++)
+				Img[ii + jj*width + kk*length] = view.data[nchannels*ii + jj*nchannels*width + kk];
+	}
+	Pyrad.factor.push_back(1.0);
+	Pyrad.wh.push_back(Point2i(width, height));
+	Pyrad.ImgPyrImg.push_back(Img);
+
+	int nlayers = nOtaves*nPerOctaves, count = 0;
+	double scalePerOctave = pow(2.0, 1.0 / nPerOctaves), factor;
+	for (int jj = 1; jj <= nOtaves; jj++)
+	{
+		for (int ii = nPerOctaves - 1; ii >= 0; ii--)
+		{
+			factor = pow(scalePerOctave, ii) / pow(2.0, jj);
+			nw = (int)(factor*width), nh = (int)(factor*height);
+
+			unsigned char *smallImg = new uchar[nw*nh*nchannels];
+			ResizeImage(Pyrad.ImgPyrImg[0], smallImg, width, height, nchannels, factor, sigma / factor, interpAlgo);
+
+			Pyrad.factor.push_back(factor);
+			Pyrad.wh.push_back(Point2i(nw, nh));
+			Pyrad.ImgPyrImg.push_back(smallImg);
+
+			//sprintf(Fname, "C:/temp/_L%d.png", count+1);
+			//SaveDataToImage(Fname, Pyrad.ImgPyrImg[count+1], nw, nh, nchannels);
+			count++;
+		}
+	}
+
+	Pyrad.nscales = count + 1;
+	return 0;
+}
+
+//Features dection and tracking
+void LaplacianOfGaussian(double *LOG, int sigma)
+{
+	int n = ceil(sigma * 3), Size = 2 * n + 1;
+	double ii2, jj2, Twosigma2 = 2.0*sigma*sigma, sigma4 = pow(sigma, 4);
+	for (int jj = -n; jj <= n; jj++)
+	{
+		for (int ii = -n; ii <= n; ii++)
+		{
+			ii2 = ii*ii, jj2 = jj*jj;
+			LOG[(ii + n) + (jj + n)*Size] = (ii2 + jj2 - Twosigma2) / sigma4*exp(-(ii2 + jj2) / Twosigma2);
+		}
+	}
+
+	return;
+}
+void LaplacianOfGaussian(double *LOG, int sigma, int PatternSize)
+{
+	int n = ceil(sigma * 3), Size = 2 * n + 1, hsubset = PatternSize / 2;
+	double ii2, jj2, Twosigma2 = 2.0*sigma*sigma, sigma4 = pow(sigma, 4);
+	for (int jj = -hsubset; jj <= hsubset; jj++)
+	{
+		for (int ii = -hsubset; ii <= hsubset; ii++)
+		{
+			ii2 = ii*ii, jj2 = jj*jj;
+			LOG[(ii + hsubset) + (jj + hsubset)*PatternSize] = (ii2 + jj2 - Twosigma2) / sigma4*exp(-(ii2 + jj2) / Twosigma2);
+		}
+	}
+
+	return;
+}
+void Gaussian(double *G, int sigma, int PatternSize)
+{
+	int ii2, jj2, size = MyFtoI(6.0*sigma + 1) / 2 * 2 + 1;
+	double sigma2 = 2.0*sigma*sigma, sqrt2Pi_sigma = sqrt(2.0*Pi)*sigma;
+	int hsubset = PatternSize / 2;
+
+	for (int jj = -hsubset; jj <= hsubset; jj++)
+	{
+		for (int ii = -hsubset; ii <= hsubset; ii++)
+		{
+			ii2 = ii*ii, jj2 = jj*jj;
+			G[(ii + hsubset) + (jj + hsubset)*PatternSize] = exp(-(ii2 + jj2) / sigma2) / sqrt2Pi_sigma;
+		}
+	}
+
+	return;
+}
+void synthesize_concentric_circles_mask(double *ring_mask_smooth, int *pattern_bi_graylevel, int pattern_size, double sigma, double scale, double *ring_info, int flag, int num_ring_edge)
+{
+	//ring_mask's size:[Pattern_size,Pattern_size] 
+	int ii, jj, kk;
+	int es_cen_x = pattern_size / 2;
+	int es_cen_y = pattern_size / 2;
+	int dark = pattern_bi_graylevel[0];
+	int bright = pattern_bi_graylevel[1];
+	int hb = 1;	// half-band
+
+	double t = scale / 2.0;
+	double r0[10], r1[9];
+
+	for (ii = 0; ii <= num_ring_edge; ii++)
+	{
+		r0[ii] = ring_info[ii] * t;
+		if (ii >= 1)
+			r1[ii - 1] = ring_info[ii] * t;
+	}
+
+	char *ring_mask = new char[pattern_size*pattern_size];
+	for (ii = 0; ii < pattern_size*pattern_size; ii++)
+		ring_mask[ii] = (char)bright;
+
+	int g1, g2;
+	if (flag == 0)
+	{
+		for (jj = 0; jj < pattern_size; jj++)
+		{
+			for (ii = 0; ii < pattern_size; ii++)
+			{
+				t = sqrt((double)((ii - es_cen_x)*(ii - es_cen_x) + (jj - es_cen_y)*(jj - es_cen_y)));
+				for (kk = 0; kk <= num_ring_edge; kk++)
+				{
+					if (kk % 2 == 0)
+					{
+						g1 = dark;
+						g2 = bright;
+					}
+					else
+					{
+						g1 = bright;
+						g2 = dark;
+					}
+
+					if (kk <= num_ring_edge - 1 && t <= r0[kk] - hb && t > r0[kk + 1] + hb)
+						ring_mask[ii + jj*pattern_size] = (char)g1;
+					else if (t <= r0[kk] + hb && t > r0[kk] - hb)
+						ring_mask[ii + jj*pattern_size] = (char)(MyFtoI(g2*(t + hb - r0[kk]) / (2.0*hb) + g1*(r0[kk] + hb - t) / (2.0*hb)));
+				}
+				if (t <= r0[num_ring_edge] - hb)
+					ring_mask[ii + jj*pattern_size] = (char)(num_ring_edge % 2 == 0 ? dark : bright);
+			}
+		}
+	}
+	else
+	{
+		for (jj = 0; jj < pattern_size; jj++)
+		{
+			for (ii = 0; ii < pattern_size; ii++)
+			{
+				t = sqrt((double)((ii - es_cen_x)*(ii - es_cen_x) + (jj - es_cen_y)*(jj - es_cen_y)));
+				for (kk = 0; kk < num_ring_edge; kk++)
+				{
+					if (kk % 2 == 0)
+					{
+						g1 = dark;
+						g2 = bright;
+					}
+					else
+					{
+						g1 = bright;
+						g2 = dark;
+					}
+
+					if (kk<num_ring_edge - 1 && t <= r1[kk] - hb && t > r1[kk + 1] + hb)
+						ring_mask[ii + jj*pattern_size] = (char)g1;
+					else if (t <= r1[kk] + hb && t > r1[kk] - hb)
+						ring_mask[ii + jj*pattern_size] = (char)(MyFtoI(g2*(t + hb - r1[kk]) / (2.0*hb) + g1*(r1[kk] + hb - t) / (2.0*hb)));
+				}
+				if (t <= r1[num_ring_edge - 1] - hb)
+					ring_mask[ii + jj*pattern_size] = (char)(num_ring_edge % 2 == 0 ? bright : dark);
+			}
+		}
+	}
+
+	//SaveDataToGreyImage(ring_mask, pattern_size, pattern_size, TempPathName+(flag==0?_T("syn_ring_1_0.png"):_T("syn_ring_2_0.png")));
+
+	// Gaussian smooth
+	Gaussian_smooth(ring_mask, ring_mask_smooth, pattern_size, pattern_size, pattern_bi_graylevel[1], sigma);
+	delete[]ring_mask;
+	return;
+}
+void synthesize_square_mask(double *square_mask_smooth, int *pattern_bi_graylevel, int Pattern_size, double sigma, int flag, bool OpenMP)
+{
+	int ii, jj, pattern_size = Pattern_size;
+	int es_con_x = pattern_size / 2;
+	int es_con_y = pattern_size / 2;
+	char dark = (char)pattern_bi_graylevel[0];
+	char bright = (char)pattern_bi_graylevel[1];
+	char mid = (char)((pattern_bi_graylevel[0] + pattern_bi_graylevel[1]) / 2);
+
+	char *square_mask = new char[pattern_size*pattern_size];
+
+	for (jj = 0; jj < pattern_size; jj++)
+	{
+		for (ii = 0; ii < pattern_size; ii++)
+		{
+			if ((ii<es_con_x && jj<es_con_y) || (ii>es_con_x && jj>es_con_y))
+				square_mask[ii + jj*pattern_size] = (flag == 0 ? bright : dark);
+			else if (ii == es_con_x || jj == es_con_y)
+				square_mask[ii + jj*pattern_size] = mid;
+			else
+				square_mask[ii + jj*pattern_size] = (flag == 0 ? dark : bright);
+		}
+	}
+
+	// Gaussian smooth
+	Gaussian_smooth(square_mask, square_mask_smooth, pattern_size, pattern_size, pattern_bi_graylevel[1], sigma);
+
+	for (jj = 0; jj < pattern_size; jj++)
+		for (ii = 0; ii < pattern_size; ii++)
+			square_mask[ii + jj*pattern_size] = (char)MyFtoI((square_mask_smooth[ii + jj*pattern_size]));
+	delete[]square_mask;
+
+	double x = square_mask_smooth[0];
+	x = x + 1.0;
+	return;
+}
+void synthesize_pattern(int pattern, double *Pattern, int *Pattern_size, int *pattern_bi_graylevel, int *Subset, double *ctrl_pts_info, double scale, int board_width, int board_height, double sigma, int num_ring_edge, int num_target = 0, bool OpenMP = false)
+{
+	int i, addon = MyFtoI(ctrl_pts_info[0] * scale*0.2) / 4 * 4;
+	if (pattern == 0)//CHECKER
+	{
+		Pattern_size[0] = MyFtoI(ctrl_pts_info[0] * scale) / 4 * 4 + addon;
+		Subset[0] = MyFtoI(ctrl_pts_info[0] * scale) / 4 * 2 + addon / 4;
+		if (Subset[0] > 20)
+			Subset[0] = 20;
+
+		Pattern_size[1] = Pattern_size[0];
+		Subset[1] = Subset[0];
+	}
+	else if (pattern == 1)//RING
+	{
+		for (i = 0; i <= 1; i++)
+		{
+			Pattern_size[i] = MyFtoI(ctrl_pts_info[i] * scale) / 4 * 4 + addon;
+			Subset[i] = MyFtoI(ctrl_pts_info[i] * scale) / 4 * 2 + addon / 4;
+		}
+	}
+
+	if (pattern == 0)
+		for (i = 0; i <= 1; i++)
+			synthesize_square_mask(Pattern + Pattern_size[0] * Pattern_size[0] * i, pattern_bi_graylevel, Pattern_size[0], sigma, i, OpenMP);
+	else if (pattern == 1)
+		for (i = 0; i <= 1; i++)
+			synthesize_concentric_circles_mask(Pattern + Pattern_size[0] * Pattern_size[0] * i, pattern_bi_graylevel, Pattern_size[i], sigma, scale, ctrl_pts_info, i, num_ring_edge);
+
+	return;
+}
+
+
+double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, Point2i &POI, int search_area, double thresh)
+{
+	//No interpolation at all, just slide the template around to compute the ZNCC
+	int m, i, j, ii, jj, iii, jjj, II, JJ, length = width*height;
+	double t_f, t_g, t_1, t_2, t_3, t_4, t_5, m_F, m_G;
+
+	Point2d w_pt, ima_pt;
+	int Pattern_cen_x = pattern_size / 2;
+	int Pattern_cen_y = pattern_size / 2;
+
+	FILE *fp1, *fp2;
+	bool printout = false;
+
+	Point2i orgPOI = POI;
+	double *T = new double[2 * (2 * hsubset + 1)*(2 * hsubset + 1)];
+	double zncc = 0.0;
+	for (j = -search_area; j <= search_area; j++)
+	{
+		for (i = -search_area; i <= search_area; i++)
+		{
+			m = -1;
+			t_f = 0.0;
+			t_g = 0.0;
+
+			if (printout)
+			{
+				fp1 = fopen("C:/temp/src.txt", "w+");
+				fp2 = fopen("C:/temp/tar.txt", "w+");
+			}
+
+			for (jjj = -hsubset; jjj <= hsubset; jjj++)
+			{
+				for (iii = -hsubset; iii <= hsubset; iii++)
+				{
+					jj = Pattern_cen_y + jjj, ii = Pattern_cen_x + iii;
+
+					JJ = orgPOI.y + jjj + j, II = orgPOI.x + iii + i;
+
+					m_F = Pattern[ii + jj*pattern_size], m_G = Image[II + JJ*width];
+
+					if (printout)
+						fprintf(fp1, "%.2f ", m_F), fprintf(fp2, "%.2f ", m_G);
+
+					m++;
+					T[2 * m] = m_F, T[2 * m + 1] = m_G;
+					t_f += m_F, t_g += m_G;
+				}
+				if (printout)
+					fprintf(fp1, "\n"), fprintf(fp2, "\n");
+			}
+			if (printout)
+				fclose(fp1), fclose(fp2);
+
+			t_f = t_f / (m + 1);
+			t_g = t_g / (m + 1);
+			t_1 = 0.0, t_2 = 0.0, t_3 = 0.0;
+			for (iii = 0; iii <= m; iii++)
+			{
+				t_4 = *(T + 2 * iii + 0) - t_f;
+				t_5 = *(T + 2 * iii + 1) - t_g;
+				t_1 += (t_4*t_5), t_2 += (t_4*t_4), t_3 += (t_5*t_5);
+			}
+
+			t_2 = sqrt(t_2*t_3);
+			if (t_2 < 1e-10)
+				t_2 = 1e-10;
+
+			t_3 = t_1 / t_2;
+			if (t_3 > 1.0 || t_3 < -1.0)
+				t_3 = 0.0;
+
+			if (t_3>thresh && t_3 > zncc)
+			{
+				zncc = t_3;
+				POI.x = orgPOI.x + i, POI.y = orgPOI.y + j;
+			}
+			else if (t_3 < -thresh && t_3 < zncc)
+			{
+				zncc = t_3;
+				POI.x = orgPOI.x + i, POI.y = orgPOI.y + j;
+			}
+		}
+	}
+	zncc = abs(zncc);
+
+	delete[]T;
+	return zncc;
+}
+double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd)
+{
+	int i, j, k, m, ii, jj, iii, jjj, iii2, jjj2;
+	double II, JJ, iii_n, jjj_n, gx, gy, DIC_Coeff, DIC_Coeff_min, t_1, t_2, t_3, t_4, t_5, t_6, m_F, m_G, t_f, t_ff, t_g, S[6];
+	double conv_crit_1 = pow(10.0, -Convergence_Criteria - 2);
+	double conv_crit_2 = conv_crit_1*0.1;
+	int NN[] = { 4, 6, 12 }, P_Jump_Incr[] = { 1, 1 };
+	int nn = NN[advanced_tech], _iter = 0, Iter_Max = 20;
+	int p_jump, p_jump_0 = 1, p_jump_incr = P_Jump_Incr[advanced_tech];
+
+	double AA[144], BB[12], CC[12];
+
+	bool createMem = false;
+	if (Znssd_reqd == NULL)
+	{
+		createMem = true;
+		Znssd_reqd = new double[6 * (2 * hsubset + 1)*(2 * hsubset + 1)];
+	}
+
+	int Pattern_cen_x = pattern_size / 2;
+	int Pattern_cen_y = pattern_size / 2;
+
+	double p[12], p_best[12];
+	for (i = 0; i < 12; i++)
+		p[i] = 0.0;
+
+	nn = NN[advanced_tech];
+	int pixel_increment_in_subset[] = { 1, 2, 2, 3 };
+
+	bool printout = false;
+	FILE *fp1 = 0, *fp2 = 0;
+
+	/// Iteration: Begin
+	bool Break_Flag = false;
+	DIC_Coeff_min = 4.0;
+	for (p_jump = p_jump_0; p_jump > 0; p_jump -= p_jump_incr)
+	{
+		for (k = 0; k < Iter_Max; k++)
+		{
+			m = -1;
+			t_1 = 0.0, t_2 = 0.0;
+			for (iii = 0; iii < 144; iii++)
+				AA[iii] = 0.0;
+			for (iii = 0; iii < 12; iii++)
+				BB[iii] = 0.0;
+
+			if (printout)
+				fp1 = fopen("C:/temp/src.txt", "w+"), fp2 = fopen("C:/temp/tar.txt", "w+");
+
+			for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+			{
+				for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+				{
+					ii = Pattern_cen_x + iii, jj = Pattern_cen_y + jjj;
+
+					if (ii<0 || ii>(width - 1) || jj<0 || jj>(height - 1))
+						continue;
+
+					iii2 = iii*iii, jjj2 = jjj*jjj;
+					if (advanced_tech == 0)
+						II = POI.x + iii + p[0] + p[2] * iii, JJ = POI.y + jjj + p[1] + p[3] * jjj;
+					else if (advanced_tech == 1)
+						II = POI.x + iii + p[0] + p[2] * iii + p[3] * jjj, JJ = POI.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+					else if (advanced_tech == 2)
+					{
+						II = POI.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * iii2*0.5 + p[7] * jjj2*0.5 + p[8] * iii*jjj;
+						JJ = POI.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[9] * iii2*0.5 + p[10] * jjj2*0.5 + p[11] * iii*jjj;
+					}
+
+					if (II<0.0 || II>(double)(width - 1) - (1e-10) || JJ<0.0 || JJ>(double)(height - 1) - (1e-10))
+						continue;
+
+					Get_Value_Spline(Para, width, height, II, JJ, S, 0, InterpAlgo);
+					m_F = Pattern[ii + jj*pattern_size];
+					m_G = S[0], gx = S[1], gy = S[2];
+					m++;
+
+					Znssd_reqd[6 * m + 0] = m_F, Znssd_reqd[6 * m + 1] = m_G;
+					Znssd_reqd[6 * m + 2] = gx, Znssd_reqd[6 * m + 3] = gy;
+					Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
+					t_1 += m_F, t_2 += m_G;
+
+					if (printout)
+						fprintf(fp1, "%e ", m_F), fprintf(fp2, "%e ", m_G);
+				}
+				if (printout)
+					fprintf(fp1, "\n"), fprintf(fp2, "\n");
+			}
+			if (printout)
+				fclose(fp1), fclose(fp2);
+
+			if (k == 0)
+			{
+				t_f = t_1 / (m + 1);
+				t_1 = 0.0;
+				for (iii = 0; iii <= m; iii++)
+				{
+					t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+					t_1 += t_4*t_4;
+				}
+				t_ff = sqrt(t_1);
+			}
+
+			t_g = t_2 / (m + 1);
+			t_2 = 0.0;
+			for (iii = 0; iii <= m; iii++)
+			{
+				t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+				t_2 += t_5*t_5;
+			}
+			t_2 = sqrt(t_2);
+
+			DIC_Coeff = 0.0;
+			for (iii = 0; iii <= m; iii++)
+			{
+				t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+				t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+				t_6 = t_5 / t_2 - t_4 / t_ff;
+				t_3 = t_6 / t_2;
+				gx = Znssd_reqd[6 * iii + 2], gy = Znssd_reqd[6 * iii + 3];
+				iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
+
+				CC[0] = gx, CC[1] = gy;
+				if (advanced_tech == 0)
+					CC[2] = gx*iii_n, CC[3] = gy*jjj_n;
+				if (advanced_tech == 1)
+				{
+					CC[2] = gx*iii_n, CC[3] = gx*jjj_n;
+					CC[4] = gy*iii_n, CC[5] = gy*jjj_n;
+				}
+				if (advanced_tech == 2)
+				{
+					CC[6] = gx*iii_n*iii_n*0.5, CC[7] = gx*jjj_n*jjj_n*0.5, CC[8] = gx*iii_n*jjj_n;
+					CC[9] = gy*iii_n*iii_n*0.5, CC[10] = gy*jjj_n*jjj_n*0.5, CC[11] = gy*iii_n*jjj_n;
+				}
+				for (j = 0; j < nn; j++)
+				{
+					BB[j] += t_3*CC[j];
+					for (i = 0; i < nn; i++)
+						AA[j*nn + i] += CC[i] * CC[j] / (t_2*t_2);
+				}
+
+				DIC_Coeff += t_6*t_6;
+			}
+
+			QR_Solution_Double(AA, BB, nn, nn);
+			for (iii = 0; iii < nn; iii++)
+				p[iii] -= BB[iii];
+
+			if (!IsNumber(p[0]) || abs(p[0]) > hsubset || abs(p[1]) > hsubset)
+			{
+				if (createMem)
+					delete[]Znssd_reqd;
+				return false;
+			}
+
+			if (DIC_Coeff < DIC_Coeff_min)	// If the iteration does not converge, this can be helpful
+			{
+				DIC_Coeff_min = DIC_Coeff;
+				for (iii = 0; iii < nn; iii++)
+					p_best[iii] = p[iii];
+			}
+
+			if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+			{
+				for (iii = 2; iii < nn; iii++)
+				{
+					if (fabs(BB[iii]) > conv_crit_2)
+						break;
+				}
+				if (iii == nn)
+					Break_Flag = true;
+			}
+
+			if (Break_Flag)
+				break;
+		}
+		// In case the iteration converges to "wrong" points, always use the data that lead to the least-square value.
+		for (iii = 0; iii < nn; iii++)
+			p[iii] = p_best[iii];
+	}
+	/// Iteration: End
+
+	if (createMem)
+		delete[]Znssd_reqd;
+	if (abs(p[0]) > hsubset || abs(p[1]) > hsubset || p[0] != p[0] || p[1] != p[1] || DIC_Coeff_min > 1.0 - 0.5*ZNCCthresh)
+		return false;
+
+	POI.x += p[0], POI.y += p[1];
+
+	return 1.0 - 0.5*DIC_Coeff_min;
+}
+double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch, double *ShapePara, double *oPara, double *Timg, double *T, double *Znssd_reqd)
+{
+	//Also a fine ImgRef matching,.... some differences in the input as compared to TMatchingFine though
+	// NOTE: initial guess is of the form of the homography
+
+	int i, j, k, m, ii, kk, iii, jjj, iii_n, jjj_n, iii2, jjj2, ij;
+	double II, JJ, a, b, gx, gy, DIC_Coeff, DIC_Coeff_min, t_1, t_2, t_3, t_4, t_5, t_6, t_f, t_ff, t_g, m_F, m_G, S[6];
+	double conv_crit_1 = pow(10.0, -Convergence_Criteria - 2);
+	double conv_crit_2 = conv_crit_1*0.01;
+	int NN[] = { 8, 14, 6, 12 };
+	int nn = NN[advanced_tech - 1], nExtraParas = advanced_tech > 2 ? 0 : 2, _iter = 0;
+	int p_jump, p_jump_0 = 1, p_jump_incr = 1;
+	int TimgS = 2 * hsubset + 1, Tlength = TimgS*TimgS, RefLength = widthRef*heightRef, TarLength = widthTar*heightTar;
+
+	double 	AA[196 * 196], BB[14], CC[14], p[14], ip[14], p_best[14];
+	if (ShapePara == NULL)
+	{
+		for (ii = 0; ii < nn; ii++)
+			p[ii] = (ii == nn - nExtraParas ? 1.0 : 0.0);
+	}
+	else
+	{
+		if (advanced_tech == 1) //These are basically taylor approximation of the denumerator
+		{
+			p[0] = ShapePara[2] - PT.x, p[1] = ShapePara[5] - PT.y;
+			p[2] = ShapePara[0] - ShapePara[2] * ShapePara[6] - 1.0;
+			p[3] = ShapePara[1] - ShapePara[2] * ShapePara[7];
+			p[4] = ShapePara[3] - ShapePara[5] * ShapePara[6];
+			p[5] = ShapePara[4] - ShapePara[5] * ShapePara[7] - 1.0;
+			p[6] = 1.0, p[7] = 0.0;
+		}
+		else
+		{
+			p[0] = ShapePara[2] - PT.x, p[1] = ShapePara[5] - PT.y;
+			p[2] = ShapePara[0] - ShapePara[2] * ShapePara[6] - 1.0;
+			p[3] = ShapePara[1] - ShapePara[2] * ShapePara[7];
+			p[4] = ShapePara[3] - ShapePara[5] * ShapePara[6];
+			p[5] = ShapePara[4] - ShapePara[5] * ShapePara[7] - 1.0;
+			p[6] = -0.5*ShapePara[0] * ShapePara[6];
+			p[7] = -0.5*ShapePara[1] * ShapePara[7];
+			p[8] = -(ShapePara[0] * ShapePara[7] + ShapePara[1] * ShapePara[6]);
+			p[9] = -0.5*ShapePara[3] * ShapePara[6];
+			p[10] = -0.5*ShapePara[4] * ShapePara[7];
+			p[11] = -(ShapePara[3] * ShapePara[7] + ShapePara[4] * ShapePara[6]);
+			p[12] = 1.0, p[13] = 0.0;
+		}
+	}
+	for (i = 0; i < nn; i++)
+		ip[i] = p[i];
+
+	bool createMem = false;
+	if (Timg == NULL)
+	{
+		Timg = new double[Tlength*nchannels];
+		T = new double[2 * Tlength*nchannels];
+		Znssd_reqd = new double[6 * Tlength];
+		createMem = true;
+	}
+
+	for (jjj = -hsubset; jjj <= hsubset; jjj++)
+	{
+		for (iii = -hsubset; iii <= hsubset; iii++)
+		{
+			II = PR.x + iii, JJ = PR.y + jjj;
+			for (kk = 0; kk < nchannels; kk++)
+			{
+				Get_Value_Spline(RefPara + kk*RefLength, widthRef, heightRef, II, JJ, S, -1, InterpAlgo);
+				Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength] = S[0];
+			}
+		}
+	}
+
+	bool printout = false; FILE *fp = 0;
+	if (printout)
+	{
+		fp = fopen("C:/temp/src.txt", "w+");
+		for (jjj = -hsubset; jjj <= hsubset; jjj++)
+		{
+			for (iii = -hsubset; iii <= hsubset; iii++)
+				for (kk = 0; kk < nchannels; kk++)
+					fprintf(fp, "%.2f ", Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength]);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+
+	if (greedySearch)
+	{
+		/// Let's start with only translation and only match the at the highest level of the pyramid
+		double zncc, znccMin;
+		for (p_jump = p_jump_0; p_jump > 0; p_jump -= (advanced_tech == 0 ? 1 : 2))
+		{
+			znccMin = 1e10;
+			for (k = 0; k < Iter_Max; k++)
+			{
+				t_1 = 0.0;
+				t_2 = 0.0;
+				for (i = 0; i < 4; i++)
+					AA[i] = 0.0;
+				for (i = 0; i < 2; i++)
+					BB[i] = 0.0;
+
+				for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+				{
+					for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+					{
+						II = PT.x + iii + p[0], JJ = PT.y + jjj + p[1];
+						if (II<0.0 || II>(double)(widthTar - 2) || JJ<0.0 || JJ>(double)(heightTar - 2))
+							continue;
+
+						for (kk = 0; kk < nchannels; kk++)
+						{
+							Get_Value_Spline(TarPara + kk*TarLength, widthTar, heightTar, II, JJ, S, 0, InterpAlgo);
+
+							m_F = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
+							m_G = S[0];
+
+							t_3 = m_G - m_F;
+							CC[0] = S[1], CC[1] = S[2];
+
+							for (i = 0; i < 2; i++)
+								BB[i] += t_3*CC[i];
+
+							for (j = 0; j < 2; j++)
+								for (i = 0; i < 2; i++)
+									AA[j * 2 + i] += CC[i] * CC[j];
+
+							t_1 += t_3*t_3, t_2 += m_F*m_F;
+						}
+					}
+				}
+				zncc = t_1 / t_2;
+
+				QR_Solution_Double(AA, BB, 2, 2);
+				for (i = 0; i < 2; i++)
+					p[i] -= BB[i];
+
+				if (abs(p[0]) > 0.005*widthTar || abs(p[1]) > 0.005*widthTar || !IsFiniteNumber(p[0]))
+				{
+					if (createMem)
+					{
+						delete[]Timg;
+						delete[]T;
+					}
+					return 0.0;
+				}
+
+				if (zncc < znccMin)	// If the iteration does not converge, this can be helpful
+				{
+					znccMin = zncc;
+					p_best[0] = p[0], p_best[1] = p[1];
+				}
+
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+					break;
+			}
+		}
+		p[0] = p_best[0], p[1] = p_best[1];
+	}
+
+	/// DIC Iteration: Begin
+	bool Break_Flag;
+	DIC_Coeff_min = 1e10;
+	for (p_jump = p_jump_0; p_jump > 0; p_jump -= p_jump_incr)
+	{
+		Break_Flag = false;
+		for (k = 0; k < Iter_Max; k++)
+		{
+			m = -1, t_1 = 0.0, t_2 = 0.0;
+			for (iii = 0; iii < nn*nn; iii++)
+				AA[iii] = 0.0;
+			for (iii = 0; iii < nn; iii++)
+				BB[iii] = 0.0;
+
+			a = p[nn - 2], b = p[nn - 1];
+			if (printout)
+				fp = fopen("C:/temp/tar.txt", "w+");
+
+			for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+			{
+				for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+				{
+					if (advanced_tech % 2 == 1)
+						II = PT.x + iii + p[0] + p[2] * iii + p[3] * jjj, JJ = PT.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+					else if (advanced_tech == 0)
+					{
+						iii2 = iii*iii, jjj2 = jjj*jjj, ij = iii*jjj;
+						II = PT.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * iii2*0.5 + p[7] * jjj2*0.5 + p[8] * ij;
+						JJ = PT.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[9] * iii2*0.5 + p[10] * jjj2*0.5 + p[11] * ij;
+					}
+
+					if (II<5.0 || II>(double)(widthTar - 5) || JJ<5.0 || JJ>(double)(heightTar - 5))
+						continue;
+
+					for (kk = 0; kk < nchannels; kk++)
+					{
+						m_F = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
+						Get_Value_Spline(TarPara + kk*TarLength, widthTar, heightTar, II, JJ, S, 0, InterpAlgo);
+						m_G = S[0], gx = S[1], gy = S[2];
+						m++;
+
+						if (printout)
+							fprintf(fp, "%.2f ", m_G);
+
+						if (advanced_tech < 2)
+						{
+							t_3 = a*m_G + b - m_F, t_4 = a;
+
+							t_5 = t_4*gx, t_6 = t_4*gy;
+							CC[0] = t_5, CC[1] = t_6;
+							CC[2] = t_5*iii, CC[3] = t_5*jjj;
+							CC[4] = t_6*iii, CC[5] = t_6*jjj;
+							CC[6] = m_G, CC[7] = 1.0;
+
+							for (j = 0; j < nn; j++)
+								BB[j] += t_3*CC[j];
+
+							for (j = 0; j < nn; j++)
+								for (i = 0; i < nn; i++)
+									AA[j*nn + i] += CC[i] * CC[j];
+
+							t_1 += t_3*t_3, t_2 += m_F*m_F;
+						}
+						else
+						{
+							Znssd_reqd[6 * m + 0] = m_F, Znssd_reqd[6 * m + 1] = m_G;
+							Znssd_reqd[6 * m + 2] = gx, Znssd_reqd[6 * m + 3] = gy;
+							Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
+							t_1 += m_F, t_2 += m_G;
+						}
+					}
+				}
+				if (printout)
+					fprintf(fp, "\n");
+			}
+			if (printout)
+				fclose(fp);
+
+			if (advanced_tech < 3)
+			{
+				DIC_Coeff = t_1 / t_2;
+				if (t_2 < 10.0e-9)
+					break;
+			}
+			else
+			{
+				if (k == 0)
+				{
+					t_f = t_1 / (m + 1);
+					t_1 = 0.0;
+					for (iii = 0; iii <= m; iii++)
+					{
+						t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+						t_1 += t_4*t_4;
+					}
+					t_ff = sqrt(t_1);
+				}
+				t_g = t_2 / (m + 1);
+				t_2 = 0.0;
+				for (iii = 0; iii <= m; iii++)
+				{
+					t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+					t_2 += t_5*t_5;
+				}
+				t_2 = sqrt(t_2);
+
+				DIC_Coeff = 0.0;
+				for (iii = 0; iii <= m; iii++)
+				{
+					t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+					t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+					t_6 = t_5 / t_2 - t_4 / t_ff;
+					t_3 = t_6 / t_2;
+					gx = Znssd_reqd[6 * iii + 2], gy = Znssd_reqd[6 * iii + 3];
+					iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
+					CC[0] = gx, CC[1] = gy;
+					CC[2] = gx*iii_n, CC[3] = gx*jjj_n;
+					CC[4] = gy*iii_n, CC[5] = gy*jjj_n;
+					if (advanced_tech == 4)
+					{
+						CC[6] = gx*iii_n*iii_n*0.5, CC[7] = gx*jjj_n*jjj_n*0.5, CC[8] = gx*iii_n*jjj_n;
+						CC[9] = gy*iii_n*iii_n*0.5, CC[10] = gy*jjj_n*jjj_n*0.5, CC[11] = gy*iii_n*jjj_n;
+					}
+					for (j = 0; j < nn; j++)
+					{
+						BB[j] += t_3*CC[j];
+						for (i = 0; i < nn; i++)
+							AA[j*nn + i] += CC[i] * CC[j] / (t_2*t_2);
+					}
+
+					DIC_Coeff += t_6*t_6;
+				}
+				if (!IsNumber(DIC_Coeff))
+					return 9e9;
+				if (!IsFiniteNumber(DIC_Coeff))
+					return 9e9;
+			}
+
+			QR_Solution_Double(AA, BB, nn, nn);
+			for (iii = 0; iii < nn; iii++)
+				p[iii] -= BB[iii];
+
+			if (abs(p[0]) > 0.005*widthTar || abs(p[1]) > 0.005*widthTar || !IsFiniteNumber(p[0]))
+			{
+				if (createMem)
+				{
+					delete[]Timg;
+					delete[]T;
+				}
+				return 0.0;
+			}
+
+			if (DIC_Coeff < DIC_Coeff_min)	// If the iteration does not converge, this can be helpful
+			{
+				DIC_Coeff_min = DIC_Coeff;
+				for (iii = 0; iii < nn; iii++)
+					p_best[iii] = p[iii];
+				if (!IsNumber(p[0]) || !IsNumber(p[1]))
+					return 9e9;
+			}
+
+			if (advanced_tech < 3)
+			{
+				if (abs(p[0] - ip[0]) > hsubset || abs(p[1] - ip[1]) > hsubset)
+					return 9e9;
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+				{
+					for (iii = 2; iii < nn - nExtraParas; iii++)
+					{
+						if (fabs(BB[iii]) > conv_crit_2)
+							break;
+					}
+					if (iii == nn - nExtraParas)
+						Break_Flag = true;
+				}
+			}
+			else if (advanced_tech == 3)
+			{
+				if (abs(p[0] - ip[0]) > hsubset || abs(p[1] - ip[1]) > hsubset)
+					return 9e9;
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+				{
+					for (iii = 2; iii < nn - nExtraParas; iii++)
+						if (fabs(BB[iii]) > conv_crit_2)
+							break;
+					if (iii == nn - nExtraParas)
+						Break_Flag = true;
+				}
+			}
+			else
+			{
+				if (abs(p[0] - ip[0]) > hsubset || abs(p[1] - ip[1]) > hsubset)
+					return 9e9;
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+				{
+					for (iii = 2; iii < nn; iii++)
+						if (fabs(BB[iii]) > conv_crit_2)
+							break;
+					if (iii == nn)
+						Break_Flag = true;
+				}
+			}
+			if (Break_Flag)
+				break;
+		}
+		_iter += k;
+
+		// In case the iteration converges to "wrong" points, always use the data that lead to the least-square value.
+		for (iii = 0; iii < nn; iii++)
+			p[iii] = p_best[iii];
+	}
+	/// DIC Iteration: End
+
+	//Now, dont really trust the pssad error too much, compute zncc score instead! 
+	//They are usually close when the convergence goes smothly, but in case of trouble, zncc is more reliable.
+	double ZNCC;
+	if (advanced_tech < 3)
+	{
+		int m = 0;
+		double t_1, t_2, t_3, t_4, t_5, t_f = 0.0, t_g = 0.0;
+		if (printout)
+			fp = fopen("C:/temp/tar.txt", "w+");
+		for (jjj = -hsubset; jjj <= hsubset; jjj++)
+		{
+			for (iii = -hsubset; iii <= hsubset; iii++)
+			{
+				II = PT.x + iii + p[0] + p[2] * iii + p[3] * jjj;
+				JJ = PT.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+
+				if (II<0.0 || II>(double)(widthTar - 1) || JJ<0.0 || JJ>(double)(heightTar - 1))
+					continue;
+
+				for (kk = 0; kk < nchannels; kk++)
+				{
+					Get_Value_Spline(TarPara + kk*TarLength, widthTar, heightTar, II, JJ, S, -1, InterpAlgo);
+					if (printout)
+						fprintf(fp, "%.4f ", S[0]);
+
+					T[2 * m] = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
+					T[2 * m + 1] = S[0];
+					t_f += T[2 * m];
+					t_g += T[2 * m + 1];
+					m++;
+				}
+			}
+			if (printout)
+				fprintf(fp, "\n");
+		}
+		if (printout)
+			fclose(fp);
+
+		t_f = t_f / m;
+		t_g = t_g / m;
+		t_1 = 0.0, t_2 = 0.0, t_3 = 0.0;
+		for (i = 0; i < m; i++)
+		{
+			t_4 = T[2 * i] - t_f;
+			t_5 = T[2 * i + 1] - t_g;
+			t_1 += 1.0*t_4*t_5;
+			t_2 += 1.0*t_4*t_4;
+			t_3 += 1.0*t_5*t_5;
+		}
+
+		t_2 = sqrt(t_2*t_3);
+		if (t_2 < 1e-10)
+			t_2 = 1e-10;
+
+		ZNCC = t_1 / t_2; //This is the zncc score
+		if (abs(ZNCC) > 1.0)
+			ZNCC = 0.0;
+	}
+	else
+		ZNCC = 1.0 - 0.5*DIC_Coeff_min; //from ZNSSD to ZNCC
+
+	if (abs(p[0]) > 0.005*widthTar || abs(p[1]) > 0.005*widthTar || p[0] != p[0] || p[1] != p[1] || ZNCC < ZNCCThreshold)
+	{
+		if (createMem)
+		{
+			delete[]Timg;
+			delete[]T;
+		}
+		return 0.0;
+	}
+
+	fufv[0] = p_best[0], fufv[1] = p_best[1];
+	if (oPara != NULL)
+		for (ii = 0; ii < 8; ii++)
+			oPara[ii] = p_best[ii];
+
+	if (createMem)
+	{
+		delete[]Timg;
+		delete[]T;
+	}
+	return ZNCC;
+}
+double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch, double *ShapePara, double *oPara, double *Timg, double *T, double *Znssd_reqd)
+{
+	//Also a fine ImgRef matching,.... some differences in the input as compared to TMatchingFine though
+	// NOTE: initial guess is of the form of the homography
+
+	int i, j, k, m, ii, kk, iii, jjj, iii_n, jjj_n, iii2, jjj2, ij;
+	double II, JJ, a, b, gx, gy, DIC_Coeff, DIC_Coeff_min, t_1, t_2, t_3, t_4, t_5, t_6, t_f, t_ff, t_g, m_F, m_G, S[6];
+	double conv_crit_1 = pow(10.0, -Convergence_Criteria - 2);
+	double conv_crit_2 = conv_crit_1*0.01;
+	int NN[] = { 8, 14, 6, 12 };
+	int nn = NN[advanced_tech - 1], nExtraParas = advanced_tech > 2 ? 0 : 2, _iter = 0;
+	int p_jump, p_jump_0 = 1, p_jump_incr = 1;
+	int TimgS = 2 * hsubset + 1, Tlength = TimgS*TimgS, RefLength = widthRef*heightRef, TarLength = widthTar*heightTar;
+
+	double 	AA[196 * 196], BB[14], CC[14], p[14], ip[14], p_best[14];
+	if (ShapePara == NULL)
+	{
+		for (ii = 0; ii < nn; ii++)
+			p[ii] = (ii == nn - nExtraParas ? 1.0 : 0.0);
+	}
+	else
+	{
+		if (advanced_tech == 1) //These are basically taylor approximation of the denumerator
+		{
+			p[0] = ShapePara[2] - PT.x, p[1] = ShapePara[5] - PT.y;
+			p[2] = ShapePara[0] - ShapePara[2] * ShapePara[6] - 1.0;
+			p[3] = ShapePara[1] - ShapePara[2] * ShapePara[7];
+			p[4] = ShapePara[3] - ShapePara[5] * ShapePara[6];
+			p[5] = ShapePara[4] - ShapePara[5] * ShapePara[7] - 1.0;
+			p[6] = 1.0, p[7] = 0.0;
+		}
+		else
+		{
+			p[0] = ShapePara[2] - PT.x, p[1] = ShapePara[5] - PT.y;
+			p[2] = ShapePara[0] - ShapePara[2] * ShapePara[6] - 1.0;
+			p[3] = ShapePara[1] - ShapePara[2] * ShapePara[7];
+			p[4] = ShapePara[3] - ShapePara[5] * ShapePara[6];
+			p[5] = ShapePara[4] - ShapePara[5] * ShapePara[7] - 1.0;
+			p[6] = -0.5*ShapePara[0] * ShapePara[6];
+			p[7] = -0.5*ShapePara[1] * ShapePara[7];
+			p[8] = -(ShapePara[0] * ShapePara[7] + ShapePara[1] * ShapePara[6]);
+			p[9] = -0.5*ShapePara[3] * ShapePara[6];
+			p[10] = -0.5*ShapePara[4] * ShapePara[7];
+			p[11] = -(ShapePara[3] * ShapePara[7] + ShapePara[4] * ShapePara[6]);
+			p[12] = 1.0, p[13] = 0.0;
+		}
+	}
+	for (i = 0; i < nn; i++)
+		ip[i] = p[i];
+
+	bool createMem = false;
+	if (Timg == NULL)
+	{
+		Timg = new double[Tlength*nchannels];
+		T = new double[2 * Tlength*nchannels];
+		Znssd_reqd = new double[6 * Tlength];
+		createMem = true;
+	}
+
+	for (jjj = -hsubset; jjj <= hsubset; jjj++)
+	{
+		for (iii = -hsubset; iii <= hsubset; iii++)
+		{
+			II = PR.x + iii, JJ = PR.y + jjj;
+			for (kk = 0; kk < nchannels; kk++)
+			{
+				Get_Value_Spline(RefPara + kk*RefLength, widthRef, heightRef, II, JJ, S, -1, InterpAlgo);
+				Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength] = S[0];
+			}
+		}
+	}
+
+	bool printout = false; FILE *fp = 0;
+	if (printout)
+	{
+		fp = fopen("C:/temp/src.txt", "w+");
+		for (jjj = -hsubset; jjj <= hsubset; jjj++)
+		{
+			for (iii = -hsubset; iii <= hsubset; iii++)
+				for (kk = 0; kk < nchannels; kk++)
+					fprintf(fp, "%.2f ", Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength]);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+
+	if (greedySearch)
+	{
+		/// Let's start with only translation and only match the at the highest level of the pyramid
+		double zncc, znccMin;
+		for (p_jump = p_jump_0; p_jump > 0; p_jump -= (advanced_tech == 0 ? 1 : 2))
+		{
+			znccMin = 1e10;
+			for (k = 0; k < Iter_Max; k++)
+			{
+				t_1 = 0.0;
+				t_2 = 0.0;
+				for (i = 0; i < 4; i++)
+					AA[i] = 0.0;
+				for (i = 0; i < 2; i++)
+					BB[i] = 0.0;
+
+				for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+				{
+					for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+					{
+						II = PT.x + iii + p[0], JJ = PT.y + jjj + p[1];
+						if (II<0.0 || II>(double)(widthTar - 2) || JJ<0.0 || JJ>(double)(heightTar - 2))
+							continue;
+
+						for (kk = 0; kk < nchannels; kk++)
+						{
+							Get_Value_Spline(TarPara + kk*TarLength, widthTar, heightTar, II, JJ, S, 0, InterpAlgo);
+
+							m_F = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
+							m_G = S[0];
+
+							t_3 = m_G - m_F;
+							CC[0] = S[1], CC[1] = S[2];
+
+							for (i = 0; i < 2; i++)
+								BB[i] += t_3*CC[i];
+
+							for (j = 0; j < 2; j++)
+								for (i = 0; i < 2; i++)
+									AA[j * 2 + i] += CC[i] * CC[j];
+
+							t_1 += t_3*t_3, t_2 += m_F*m_F;
+						}
+					}
+				}
+				zncc = t_1 / t_2;
+
+				QR_Solution_Double(AA, BB, 2, 2);
+				for (i = 0; i < 2; i++)
+					p[i] -= BB[i];
+
+				if (abs(p[0]) > 0.005*widthTar || abs(p[1]) > 0.005*widthTar || !IsFiniteNumber(p[0]))
+				{
+					if (createMem)
+					{
+						delete[]Timg;
+						delete[]T;
+					}
+					return 0.0;
+				}
+
+				if (zncc < znccMin)	// If the iteration does not converge, this can be helpful
+				{
+					znccMin = zncc;
+					p_best[0] = p[0], p_best[1] = p[1];
+				}
+
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+					break;
+			}
+		}
+		p[0] = p_best[0], p[1] = p_best[1];
+	}
+
+	/// DIC Iteration: Begin
+	bool Break_Flag;
+	DIC_Coeff_min = 1e10;
+	for (p_jump = p_jump_0; p_jump > 0; p_jump -= p_jump_incr)
+	{
+		Break_Flag = false;
+		for (k = 0; k < Iter_Max; k++)
+		{
+			m = -1, t_1 = 0.0, t_2 = 0.0;
+			for (iii = 0; iii < nn*nn; iii++)
+				AA[iii] = 0.0;
+			for (iii = 0; iii < nn; iii++)
+				BB[iii] = 0.0;
+
+			a = p[nn - 2], b = p[nn - 1];
+			if (printout)
+				fp = fopen("C:/temp/tar.txt", "w+");
+
+			for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+			{
+				for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+				{
+					if (advanced_tech % 2 == 1)
+						II = PT.x + iii + p[0] + p[2] * iii + p[3] * jjj, JJ = PT.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+					else if (advanced_tech == 0)
+					{
+						iii2 = iii*iii, jjj2 = jjj*jjj, ij = iii*jjj;
+						II = PT.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * iii2*0.5 + p[7] * jjj2*0.5 + p[8] * ij;
+						JJ = PT.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[9] * iii2*0.5 + p[10] * jjj2*0.5 + p[11] * ij;
+					}
+
+					if (II<5.0 || II>(double)(widthTar - 5) || JJ<5.0 || JJ>(double)(heightTar - 5))
+						continue;
+
+					for (kk = 0; kk < nchannels; kk++)
+					{
+						m_F = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
+						Get_Value_Spline(TarPara + kk*TarLength, widthTar, heightTar, II, JJ, S, 0, InterpAlgo);
+						m_G = S[0], gx = S[1], gy = S[2];
+						m++;
+
+						if (printout)
+							fprintf(fp, "%.2f ", m_G);
+
+						if (advanced_tech < 2)
+						{
+							t_3 = a*m_G + b - m_F, t_4 = a;
+
+							t_5 = t_4*gx, t_6 = t_4*gy;
+							CC[0] = t_5, CC[1] = t_6;
+							CC[2] = t_5*iii, CC[3] = t_5*jjj;
+							CC[4] = t_6*iii, CC[5] = t_6*jjj;
+							CC[6] = m_G, CC[7] = 1.0;
+
+							for (j = 0; j < nn; j++)
+								BB[j] += t_3*CC[j];
+
+							for (j = 0; j < nn; j++)
+								for (i = 0; i < nn; i++)
+									AA[j*nn + i] += CC[i] * CC[j];
+
+							t_1 += t_3*t_3, t_2 += m_F*m_F;
+						}
+						else
+						{
+							Znssd_reqd[6 * m + 0] = m_F, Znssd_reqd[6 * m + 1] = m_G;
+							Znssd_reqd[6 * m + 2] = gx, Znssd_reqd[6 * m + 3] = gy;
+							Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
+							t_1 += m_F, t_2 += m_G;
+						}
+					}
+				}
+				if (printout)
+					fprintf(fp, "\n");
+			}
+			if (printout)
+				fclose(fp);
+
+			if (advanced_tech < 3)
+			{
+				DIC_Coeff = t_1 / t_2;
+				if (t_2 < 10.0e-9)
+					break;
+			}
+			else
+			{
+				if (k == 0)
+				{
+					t_f = t_1 / (m + 1);
+					t_1 = 0.0;
+					for (iii = 0; iii <= m; iii++)
+					{
+						t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+						t_1 += t_4*t_4;
+					}
+					t_ff = sqrt(t_1);
+				}
+				t_g = t_2 / (m + 1);
+				t_2 = 0.0;
+				for (iii = 0; iii <= m; iii++)
+				{
+					t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+					t_2 += t_5*t_5;
+				}
+				t_2 = sqrt(t_2);
+
+				DIC_Coeff = 0.0;
+				for (iii = 0; iii <= m; iii++)
+				{
+					t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+					t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+					t_6 = t_5 / t_2 - t_4 / t_ff;
+					t_3 = t_6 / t_2;
+					gx = Znssd_reqd[6 * iii + 2], gy = Znssd_reqd[6 * iii + 3];
+					iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
+					CC[0] = gx, CC[1] = gy;
+					CC[2] = gx*iii_n, CC[3] = gx*jjj_n;
+					CC[4] = gy*iii_n, CC[5] = gy*jjj_n;
+					if (advanced_tech == 4)
+					{
+						CC[6] = gx*iii_n*iii_n*0.5, CC[7] = gx*jjj_n*jjj_n*0.5, CC[8] = gx*iii_n*jjj_n;
+						CC[9] = gy*iii_n*iii_n*0.5, CC[10] = gy*jjj_n*jjj_n*0.5, CC[11] = gy*iii_n*jjj_n;
+					}
+					for (j = 0; j < nn; j++)
+					{
+						BB[j] += t_3*CC[j];
+						for (i = 0; i < nn; i++)
+							AA[j*nn + i] += CC[i] * CC[j] / (t_2*t_2);
+					}
+
+					DIC_Coeff += t_6*t_6;
+				}
+				if (!IsNumber(DIC_Coeff))
+					return 9e9;
+				if (!IsFiniteNumber(DIC_Coeff))
+					return 9e9;
+			}
+
+			QR_Solution_Double(AA, BB, nn, nn);
+			for (iii = 0; iii < nn; iii++)
+				p[iii] -= BB[iii];
+
+			if (abs(p[0]) > 0.005*widthTar || abs(p[1]) > 0.005*widthTar || !IsFiniteNumber(p[0]))
+			{
+				if (createMem)
+				{
+					delete[]Timg;
+					delete[]T;
+				}
+				return 0.0;
+			}
+
+			if (DIC_Coeff < DIC_Coeff_min)	// If the iteration does not converge, this can be helpful
+			{
+				DIC_Coeff_min = DIC_Coeff;
+				for (iii = 0; iii < nn; iii++)
+					p_best[iii] = p[iii];
+				if (!IsNumber(p[0]) || !IsNumber(p[1]))
+					return 0.0;
+			}
+
+			if (advanced_tech < 3)
+			{
+				if (abs(p[0] - ip[0]) > hsubset || abs(p[1] - ip[1]) > hsubset)
+					return 0.0;
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+				{
+					for (iii = 2; iii < nn - nExtraParas; iii++)
+					{
+						if (fabs(BB[iii]) > conv_crit_2)
+							break;
+					}
+					if (iii == nn - nExtraParas)
+						Break_Flag = true;
+				}
+			}
+			else if (advanced_tech == 3)
+			{
+				if (abs(p[0] - ip[0]) > hsubset || abs(p[1] - ip[1]) > hsubset)
+					return 0.0;
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+				{
+					for (iii = 2; iii < nn - nExtraParas; iii++)
+						if (fabs(BB[iii]) > conv_crit_2)
+							break;
+					if (iii == nn - nExtraParas)
+						Break_Flag = true;
+				}
+			}
+			else
+			{
+				if (abs(p[0] - ip[0]) > hsubset || abs(p[1] - ip[1]) > hsubset)
+					return 0.0;
+				if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+				{
+					for (iii = 2; iii < nn; iii++)
+						if (fabs(BB[iii]) > conv_crit_2)
+							break;
+					if (iii == nn)
+						Break_Flag = true;
+				}
+			}
+			if (Break_Flag)
+				break;
+		}
+		_iter += k;
+
+		// In case the iteration converges to "wrong" points, always use the data that lead to the least-square value.
+		for (iii = 0; iii < nn; iii++)
+			p[iii] = p_best[iii];
+	}
+	/// DIC Iteration: End
+
+	//Now, dont really trust the pssad error too much, compute zncc score instead! 
+	//They are usually close when the convergence goes smothly, but in case of trouble, zncc is more reliable.
+	double ZNCC;
+	if (advanced_tech < 3)
+	{
+		int m = 0;
+		double t_1, t_2, t_3, t_4, t_5, t_f = 0.0, t_g = 0.0;
+		if (printout)
+			fp = fopen("C:/temp/tar.txt", "w+");
+		for (jjj = -hsubset; jjj <= hsubset; jjj++)
+		{
+			for (iii = -hsubset; iii <= hsubset; iii++)
+			{
+				II = PT.x + iii + p[0] + p[2] * iii + p[3] * jjj;
+				JJ = PT.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+
+				if (II<0.0 || II>(double)(widthTar - 1) || JJ<0.0 || JJ>(double)(heightTar - 1))
+					continue;
+
+				for (kk = 0; kk < nchannels; kk++)
+				{
+					Get_Value_Spline(TarPara + kk*TarLength, widthTar, heightTar, II, JJ, S, -1, InterpAlgo);
+					if (printout)
+						fprintf(fp, "%.4f ", S[0]);
+
+					T[2 * m] = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength];
+					T[2 * m + 1] = S[0];
+					t_f += T[2 * m];
+					t_g += T[2 * m + 1];
+					m++;
+				}
+			}
+			if (printout)
+				fprintf(fp, "\n");
+		}
+		if (printout)
+			fclose(fp);
+
+		t_f = t_f / m;
+		t_g = t_g / m;
+		t_1 = 0.0, t_2 = 0.0, t_3 = 0.0;
+		for (i = 0; i < m; i++)
+		{
+			t_4 = T[2 * i] - t_f;
+			t_5 = T[2 * i + 1] - t_g;
+			t_1 += 1.0*t_4*t_5;
+			t_2 += 1.0*t_4*t_4;
+			t_3 += 1.0*t_5*t_5;
+		}
+
+		t_2 = sqrt(t_2*t_3);
+		if (t_2 < 1e-10)
+			t_2 = 1e-10;
+
+		ZNCC = t_1 / t_2; //This is the zncc score
+		if (abs(ZNCC) > 1.0)
+			ZNCC = 0.0;
+	}
+	else
+		ZNCC = 1.0 - 0.5*DIC_Coeff_min; //from ZNSSD to ZNCC
+
+	if (abs(p[0]) > 0.005*widthTar || abs(p[1]) > 0.005*widthTar || p[0] != p[0] || p[1] != p[1] || ZNCC < ZNCCThreshold)
+	{
+		if (createMem)
+		{
+			delete[]Timg;
+			delete[]T;
+		}
+		return 0.0;
+	}
+
+	fufv[0] = p_best[0], fufv[1] = p_best[1];
+	if (oPara != NULL)
+		for (ii = 0; ii < 8; ii++)
+			oPara[ii] = p_best[ii];
+
+	if (createMem)
+	{
+		delete[]Timg;
+		delete[]T;
+	}
+	return ZNCC;
+}
+
+void DetectBlobCorrelation(char *ImgName, vector<KeyPoint> &kpts, int nOctaveLayers, int nScalePerOctave, double sigma, int PatternSize, int NMS_BW, double thresh)
+{
+	int jump = 1, numPatterns = 1;
+	char Fname[200];
+
+	ImgPyr imgpyrad;
+	double starttime = omp_get_wtime();
+	BuildImgPyr(ImgName, imgpyrad, nOctaveLayers, nScalePerOctave, false, 1, 1.0);
+	for (int ii = 0; ii < imgpyrad.ImgPyrImg.size(); ii++)
+	{
+		sprintf(Fname, "C:/temp/L%d.png", ii);
+		SaveDataToImage(Fname, imgpyrad.ImgPyrImg[ii], imgpyrad.wh[ii].x, imgpyrad.wh[ii].y, 1);
+	}
+	printf("Building Image pyramid: %.fs\n", omp_get_wtime() - starttime);
+
+	//build template
+	int hsubset = PatternSize / 2, PatternLength = PatternSize*PatternSize;
+	int IntensityProfile[] = { 10, 240 };
+	double RingInfo[1] = { 0.9 };
+	double *maskSmooth = new double[PatternLength];
+	synthesize_concentric_circles_mask(maskSmooth, IntensityProfile, PatternSize, 1, PatternSize, RingInfo, 0, 1);
+	//SaveDataToImage("C:/temp/mask.png", maskSmooth, PatternSize, PatternSize);
+
+	Mat tpl = Mat::zeros(PatternSize, PatternSize, CV_32F);
+	for (int ii = 0; ii < PatternLength; ii++)
+		tpl.at<float>(ii) = maskSmooth[ii];
+
+	int width = imgpyrad.wh[0].x, height = imgpyrad.wh[0].y;
+	float *response = new float[width*height];
+
+	for (int scaleID = 0; scaleID < imgpyrad.ImgPyrImg.size(); scaleID++)
+	{
+		starttime = omp_get_wtime();
+		printf("Layer %d ....", scaleID);
+		int width = imgpyrad.wh[scaleID].x, height = imgpyrad.wh[scaleID].y;
+
+		Mat ref = Mat::zeros(height, width, CV_32F);
+		for (int ii = 0; ii < width*height; ii++)
+			ref.at<float>(ii) = (float)(int)imgpyrad.ImgPyrImg[scaleID][ii];
+
+		Mat dst;
+		cv::matchTemplate(ref, tpl, dst, CV_TM_CCORR_NORMED);
+		for (int ii = 0; ii < dst.rows*dst.cols; ii++)
+			response[ii] = dst.at<float>(ii);
+
+		//sprintf(Fname, "C:/temp/x_%d.dat", scaleID);
+		//WriteGridBinary(Fname, response, dst.cols, dst.rows);
+
+		//Non-max suppression:
+		bool breakflag;
+		int ScoreW = dst.cols, ScoreH = dst.rows;
+		for (int jj = hsubset; jj < ScoreH - hsubset; jj += jump)
+		{
+			for (int ii = hsubset; ii < ScoreW - hsubset; ii += jump)
+			{
+				breakflag = false;
+				if (response[ii + jj*ScoreW] < thresh)
+					response[ii + jj*ScoreW] = 0.0;
+				else
+				{
+					for (int j = -NMS_BW; j <= NMS_BW && !breakflag; j += jump)
+					{
+						for (int i = -NMS_BW; i <= NMS_BW&& !breakflag; i += jump)
+						{
+							if (i == 0 && j == 0)
+								continue;
+							if (ii + i< 0 || ii + i>ScoreW || jj + j < 0 || jj + j>ScoreH)
+								continue;
+							if (response[ii + jj*ScoreW] < response[(ii + i) + (jj + j)*ScoreW])
+							{
+								response[ii + jj*ScoreW] = 0.0;
+								breakflag = true;
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
+		//WriteGridBinary("C:/temp/x.dat", response, dst.cols, dst.rows);
+
+		for (int jj = hsubset; jj < ScoreH - hsubset; jj += jump)
+		{
+			for (int ii = hsubset; ii < ScoreW - hsubset; ii += jump)
+			{
+				if (response[ii + jj*ScoreW] > thresh)
+				{
+					KeyPoint kpt;
+					kpt.pt.x = (1.0*ii + PatternSize / 2) / imgpyrad.factor[scaleID];
+					kpt.pt.y = (1.0*jj + PatternSize / 2) / imgpyrad.factor[scaleID];
+					kpt.size = 1.0*PatternSize * imgpyrad.factor[scaleID];
+					kpts.push_back(kpt);
+				}
+			}
+		}
+		printf(" %.2fs\n", omp_get_wtime() - starttime);
+	}
+	printf(" %.2fs\n", omp_get_wtime() - starttime);
+	delete[]maskSmooth, delete[]response;
+
+	width = imgpyrad.wh[0].x, height = imgpyrad.wh[0].y;
+	Mat ref_gray = Mat::zeros(height, width, CV_8UC1);
+	for (int ii = 0; ii < width*height; ii++)
+		ref_gray.data[ii] = imgpyrad.ImgPyrImg[0][ii];
+	cv::cvtColor(ref_gray, ref_gray, CV_GRAY2BGR);
+	for (int ii = 0; ii < kpts.size(); ii++)
+	{
+		KeyPoint kpt = kpts[ii];
+		int startX = kpt.pt.x - kpt.size / 2, startY = kpt.pt.y - kpt.size / 2;
+		int stopX = kpt.pt.x + kpt.size / 2, stopY = kpt.pt.y + kpt.size / 2;
+		cv::rectangle(ref_gray, Point2i(startX, startY), cv::Point(stopX, stopY), CV_RGB(0, 255, 0), 2);
+	}
+	cvNamedWindow("result", CV_WINDOW_NORMAL);
+	imshow("result", ref_gray); waitKey();
+
+
+	return;
+}
+int DetectRGBBallCorrelation(char *ImgName, vector<KeyPoint> &kpts, vector<int> &ballType, int nOctaveLayers, int nScalePerOctave, double sigma, int PatternSize, int NMS_BW, double thresh, bool visualize)
+{
+	char Fname[200];
+	int nscales = nOctaveLayers*nScalePerOctave + 1;
+	ImgPyr imgpyrad;
+	double starttime = omp_get_wtime();
+	if (BuildImgPyr(ImgName, imgpyrad, nOctaveLayers, nScalePerOctave, false, 1, 1.0) == 1)
+		return 1;
+	for (int ii = 0; ii < imgpyrad.ImgPyrImg.size() && visualize; ii++)
+	{
+		sprintf(Fname, "C:/temp/L%d.png", ii);
+		SaveDataToImage(Fname, imgpyrad.ImgPyrImg[ii], imgpyrad.wh[ii].x, imgpyrad.wh[ii].y, 1);
+	}
+	printf("Building Image pyramid: %.fs\n", omp_get_wtime() - starttime);
+
+	//build template
+	int hsubset = PatternSize / 2, PatternLength = PatternSize*PatternSize;
+	int IntensityProfile[] = { 10, 240 };
+	double RingInfo[1] = { 0.9 };
+	double *maskSmooth = new double[PatternLength*nscales*nscales];
+	synthesize_concentric_circles_mask(maskSmooth, IntensityProfile, PatternSize, 1, PatternSize, RingInfo, 0, 1);
+	SaveDataToImage("C:/temp/mask.png", maskSmooth, PatternSize, PatternSize);
+
+
+	Mat tpl = Mat::zeros(PatternSize, PatternSize, CV_32F);
+	for (int ii = 0; ii < PatternLength; ii++)
+		tpl.at<float>(ii) = maskSmooth[ii];
+
+	// Standard multiscale correlation detection
+	vector<KeyPoint> potentialPts;
+	int width = imgpyrad.wh[0].x, height = imgpyrad.wh[0].y, length = width*height;
+	/*float *response = new float[width*height];
+	for (int scaleID = 0; scaleID < imgpyrad.ImgPyrImg.size(); scaleID++)
+	{
+	starttime = omp_get_wtime();
+	printf("Layer %d ....", scaleID);
+	int width = imgpyrad.wh[scaleID].x, height = imgpyrad.wh[scaleID].y;
+
+	Mat ref = Mat::zeros(height, width, CV_32F);
+	for (int ii = 0; ii < width*height; ii++)
+	ref.at<float>(ii) = (float)(int)imgpyrad.ImgPyrImg[scaleID][ii];
+
+	Mat dst;
+	cv::matchTemplate(ref, tpl, dst, CV_TM_CCOEFF_NORMED);
+	for (int ii = 0; ii < dst.rows*dst.cols; ii++)
+	response[ii] = dst.at<float>(ii);
+	sprintf(Fname, "C:/temp/L_%d.dat", scaleID);	WriteGridBinary(Fname, response, dst.cols, dst.rows);
+
+	//Non-max suppression:
+	bool breakflag;
+	int ScoreW = dst.cols, ScoreH = dst.rows;
+	for (int jj = hsubset; jj < ScoreH - hsubset; jj ++)
+	{
+	for (int ii = hsubset; ii < ScoreW - hsubset; ii ++)
+	{
+	breakflag = false;
+	if (response[ii + jj*ScoreW] < thresh)
+	response[ii + jj*ScoreW] = 0.0;
+	else
+	{
+	for (int j = -NMS_BW; j <= NMS_BW && !breakflag; j ++)
+	{
+	for (int i = -NMS_BW; i <= NMS_BW&& !breakflag; i ++)
+	{
+	if (i == 0 && j == 0)
+	continue;
+	if (ii + i< 0 || ii + i>ScoreW || jj + j < 0 || jj + j>ScoreH)
+	continue;
+	if (response[ii + jj*ScoreW] < response[(ii + i) + (jj + j)*ScoreW])
+	{
+	response[ii + jj*ScoreW] = 0.0;
+	breakflag = true;
+	break;
+	}
+	}
+	}
+	}
+	}
+	}
+
+
+	Mat ref_gray = Mat::zeros(height, width, CV_8UC1);
+	for (int ii = 0; ii < width*height; ii++)
+	ref_gray.data[ii] = imgpyrad.ImgPyrImg[scaleID][ii];
+	cv::cvtColor(ref_gray, ref_gray, CV_GRAY2BGR);
+
+	for (int jj = hsubset; jj < ScoreH - hsubset; jj ++)
+	{
+	for (int ii = hsubset; ii < ScoreW - hsubset; ii ++)
+	{
+	if (response[ii + jj*ScoreW] > thresh)
+	{
+	KeyPoint kpt;
+	kpt.pt.x = (1.0*ii + PatternSize / 2) / imgpyrad.factor[scaleID];
+	kpt.pt.y = (1.0*jj + PatternSize / 2) / imgpyrad.factor[scaleID];
+	kpt.size = 1.0*PatternSize / imgpyrad.factor[scaleID]; //size of what the template should be
+	kpt.response = response[ii + jj*ScoreW];
+	kpt.octave = scaleID;
+	cv::rectangle(ref_gray, Point2i(ii, jj), cv::Point(ii + PatternSize, jj + PatternSize), CV_RGB(0, 255, 0), 2);
+	potentialPts.push_back(kpt);
+	}
+	}
+	}
+
+	cvNamedWindow("result", CV_WINDOW_NORMAL);
+	imshow("result", ref_gray); waitKey();
+	printf(" %.2fs\n", omp_get_wtime() - starttime);
+	}
+	delete[]response;
+
+	FILE *fp = fopen("C:/temp/kpts.txt", "w+");
+	for (int kk = 0; kk < potentialPts.size(); kk++)
+	fprintf(fp, "%.1f %.1f %.3f %.1f %d\n", potentialPts[kk].pt.x, potentialPts[kk].pt.y, potentialPts[kk].response, potentialPts[kk].size, potentialPts[kk].octave);
+	fclose(fp);*/
+
+
+	FILE *fp = fopen("C:/temp/kpts.txt", "r");
+	int oct;
+	float x, y, s, r;
+	while (fscanf(fp, "%f %f %f %f %d", &x, &y, &r, &s, &oct) != EOF)
+	{
+		KeyPoint kpt;
+		kpt.pt.x = x, kpt.pt.y = y, kpt.response = r, kpt.size = s;
+		kpt.octave = oct;
+		potentialPts.push_back(kpt);
+	}
+	fclose(fp);
+
+	//Prune close-by points with lower response;
+	vector<int> pointsToBeRemoved;
+	for (int ll = 0; ll < potentialPts.size() - 1; ll++)
+	{
+		for (int kk = ll + 1; kk < potentialPts.size(); kk++)
+		{
+			if (abs(potentialPts[ll].pt.x - potentialPts[kk].pt.x) < potentialPts[ll].size / 2 && abs(potentialPts[ll].pt.y - potentialPts[kk].pt.y) < potentialPts[ll].size / 2)
+				if (potentialPts[ll].response > potentialPts[kk].response)
+					pointsToBeRemoved.push_back(kk);
+				else
+					pointsToBeRemoved.push_back(ll);
+		}
+	}
+
+	vector<KeyPoint> potentialPts2;
+	for (int ii = 0; ii < potentialPts.size(); ii++)
+	{
+		int jj;
+		for (jj = 0; jj < pointsToBeRemoved.size(); jj++)
+			if (ii == pointsToBeRemoved[jj])
+				break;
+		if (jj == pointsToBeRemoved.size())
+			potentialPts2.push_back(potentialPts[ii]);
+	}
+
+	//Figure out RGB Ball:  the small regions around the detected point must have good color matching
+	width = imgpyrad.wh[0].x, height = imgpyrad.wh[0].y;
+	unsigned char *Img = new unsigned char[width*height * 3];
+	GrabImage(ImgName, Img, width, height, 3);
+
+	int count = 0, bw = width > 640 ? 5 : 3;
+	vector<KeyPoint>potentialPts3;
+	vector<int> potentialBallType;
+	for (int kk = 0; kk < potentialPts2.size(); kk++)
+	{
+		KeyPoint kpt = potentialPts2[kk];
+		int startX = kpt.pt.x - bw, startY = kpt.pt.y - bw;
+		int stopX = kpt.pt.x + bw, stopY = kpt.pt.y + bw;
+
+		double r = 0, g = 0, b = 0;
+		for (int jj = startY; jj < stopY; jj++)
+		{
+			for (int ii = startX; ii < stopX; ii++)
+			{
+				b += Img[ii + jj*width], //b
+					g += Img[ii + jj*width + length],//g
+					r += Img[ii + jj*width + 2 * length];//r
+			}
+		}
+		if (r>1.2*g && r>1.2*b)
+			potentialPts3.push_back(kpt), potentialBallType.push_back(0);
+		if (g > 1.2*r && g > 1.2*b)
+			potentialPts3.push_back(kpt), potentialBallType.push_back(1);
+		if (b > 1.2*g && b > 1.2*r)
+			potentialPts3.push_back(kpt), potentialBallType.push_back(2);
+	}
+	if (potentialPts3.size() < 3)
+		printf("Cannot detect all the balls in %s\n", ImgName);
+
+	//Refine the detection
+	double *DImg = new double[width*height];
+	GrabImage(ImgName, DImg, width, height, 1); //Get gray-scale imge
+
+	int InterpAlgo = 1;
+	double *ImgPara = new double[width*height];
+	Generate_Para_Spline(DImg, ImgPara, width, height, InterpAlgo);
+
+	double *Znssd_reqd = new double[6 * PatternLength*nscales*nscales];
+	pointsToBeRemoved.clear();
+	for (int kk = 0; kk < potentialPts3.size(); kk++)
+	{
+		int PatternSize = potentialPts3[kk].size, hsubset = PatternSize / 2, PatternLength = PatternSize*PatternSize;
+		synthesize_concentric_circles_mask(maskSmooth, IntensityProfile, PatternSize, 1, PatternSize, RingInfo, 0, 1);
+		//SaveDataToImage("C:/temp/mask.png", maskSmooth, PatternSize, PatternSize);
+
+		Point2i POI(potentialPts3[kk].pt.x, potentialPts3[kk].pt.y);
+		double zncc = TMatchingSuperCoarse(maskSmooth, PatternSize, hsubset - 1, DImg, width, height, POI, 5, 0.5);
+		if (zncc < thresh)
+		{
+			printf("Cannot refine the %d balls in %s\n", kk + 1, ImgName);
+			pointsToBeRemoved.push_back(kk);
+			continue;
+		}
+
+		Point2d pt = POI;
+		zncc = TMatchingFine_ZNCC(maskSmooth, PatternSize, hsubset - 1, ImgPara, width, height, pt, 0, 1, thresh, InterpAlgo, Znssd_reqd);
+		if (zncc < thresh)
+		{
+			printf("Cannot refine the %d balls in %s\n", kk + 1, ImgName);
+			pointsToBeRemoved.push_back(kk);
+		}
+		else
+			potentialPts3[kk].pt.x = pt.x, potentialPts3[kk].pt.y = pt.y;
+	}
+	delete[]maskSmooth, delete[]DImg, delete[]ImgPara, delete[]Znssd_reqd;
+
+	for (int ii = 0; ii < potentialPts3.size(); ii++)
+	{
+		int jj;
+		for (jj = 0; jj < pointsToBeRemoved.size(); jj++)
+			if (ii == pointsToBeRemoved[jj])
+				break;
+		if (jj == pointsToBeRemoved.size())
+			kpts.push_back(potentialPts3[ii]), ballType.push_back(potentialBallType[ii]);
+	}
+
+	if (visualize)
+	{
+		Mat ref_gray = Mat::zeros(height, width, CV_8UC1);
+		for (int ii = 0; ii < width*height; ii++)
+			ref_gray.data[ii] = imgpyrad.ImgPyrImg[0][ii];
+		cv::cvtColor(ref_gray, ref_gray, CV_GRAY2BGR);
+		for (int ii = 0; ii < kpts.size(); ii++)
+		{
+			KeyPoint kpt = kpts[ii];
+			int startX = kpt.pt.x - kpt.size / 2, startY = kpt.pt.y - kpt.size / 2;
+			int stopX = kpt.pt.x + kpt.size / 2, stopY = kpt.pt.y + kpt.size / 2;
+			circle(ref_gray, Point2i(kpt.pt.x, kpt.pt.y), 2, CV_RGB(0, 255, 0), 2);
+			rectangle(ref_gray, Point2i(startX, startY), cv::Point(stopX, stopY), CV_RGB(0, 255, 0), 2);
+		}
+		cvNamedWindow("result", CV_WINDOW_NORMAL);
+		imshow("result", ref_gray); waitKey();
+	}
+
+	return 0;
+}
+
+int ComputeAverageImage(char *Path, unsigned char *MeanImg, int width, int height, int camID, int panelID, int startF, int stopF)
+{
+	char Fname[200];
+	int length = width*height;
+
+	sprintf(Fname, "%s/%02d_%02d.png", Path, panelID, camID);
+	if (GrabImage(Fname, MeanImg, width, height, 3, true))
+		return 0;
+
+	float *Mean = new float[length * 3];
+	for (int ii = 0; ii < length * 3; ii++)
+		Mean[ii] = 0.0f;
+
+	int count = 0;
+	float	*Img = new float[length * 3];
+	for (int frameID = startF; frameID <= stopF; frameID++)
+	{
+		sprintf(Fname, "%s/%08d/%08d_%02d_%02d.png", Path, frameID, frameID, panelID, camID);
+		if (!GrabImage(Fname, Img, width, height, 3, true))
+			continue;
+
+		count++;
+		for (int kk = 0; kk < 3; kk++)
+			for (int jj = 0; jj < height; jj++)
+				for (int ii = 0; ii < width; ii++)
+					Mean[ii + jj*width + kk*length] += Img[ii + jj*width + kk*length];
+	}
+
+	if (count < 10)
+	{
+		//#pragma omp critical
+		//printf("Cannot gather sufficient statistic for Cam %d Panel %d\n", camID, panelID);
+		return 1;
+	}
+
+	for (int ii = 0; ii < length * 3; ii++)
+		MeanImg[ii] = (unsigned char)(int)(Mean[ii] / count + 0.5);
+
+	sprintf(Fname, "%s/%02d_%02d.png", Path, panelID, camID);
+	SaveDataToImage(Fname, MeanImg, width, height, 3);
+
+	delete[]Mean;
+	return 0;
+}
+int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, unsigned char *MeanImg, vector<Point2d> &kpts, double sigma, int PatternSize, int nscales, int NMS_BW, double thresh, bool visualize,
+	unsigned char *ColorImg, float *colorResponse, double *DImg, double *ImgPara, double *maskSmooth, double *Znssd_reqd)
+{
+	int length = width*height;
+
+	bool createMem = false;
+	if (ColorImg == NULL)
+	{
+		createMem = true;
+		ColorImg = new unsigned char[length * 3];
+		colorResponse = new float[width*height];
+		DImg = new double[width*height];
+		ImgPara = new double[width*height];
+		Znssd_reqd = new double[6 * PatternSize*PatternSize];
+		maskSmooth = new double[PatternSize*PatternSize*nscales];
+	}
+
+	if (createMem)
+	{
+		Mat view = imread(ImgName);
+		if (view.data == NULL)
+		{
+			//cout << "Cannot load: " << ImgName << endl;
+			return 1;
+		}
+		for (int kk = 0; kk < 3; kk++)
+		{
+			for (int jj = 0; jj < height; jj++)
+			{
+				for (int ii = 0; ii < width; ii++)
+				{
+					ColorImg[ii + jj*width + kk*length] = view.data[3 * ii + jj * 3 * width + kk];
+				}
+			}
+		}
+	}
+
+	//Find places with red color through NMS
+	float r, g, b;
+	for (int jj = NMS_BW; jj < height - NMS_BW; jj++)
+	{
+		for (int ii = NMS_BW; ii < width - NMS_BW; ii++)
+		{
+			r = ColorImg[ii + jj*width + 2 * length] - MeanImg[ii + jj*width + 2 * length],
+				g = ColorImg[ii + jj*width + length] - MeanImg[ii + jj*width + length],
+				b = ColorImg[ii + jj*width] - MeanImg[ii + jj*width];
+			colorResponse[ii + jj*width] = 2.0*(int)r - (int)g - (int)b;
+		}
+	}
+
+	bool breakflag;
+	for (int jj = NMS_BW; jj < height - NMS_BW; jj++)
+	{
+		for (int ii = NMS_BW; ii < width - NMS_BW; ii++)
+		{
+			breakflag = false;
+			if (colorResponse[ii + jj*width] < 20)
+				colorResponse[ii + jj*width] = 0.0;
+			else
+			{
+				for (int j = -NMS_BW; j <= NMS_BW && !breakflag; j++)
+				{
+					for (int i = -NMS_BW; i <= NMS_BW&& !breakflag; i++)
+					{
+						if (i == 0 && j == 0)
+							continue;
+						if (ii + i< 0 || ii + i>width || jj + j < 0 || jj + j>height)
+							continue;
+						if (colorResponse[ii + jj*width] <= colorResponse[(ii + i) + (jj + j)*width])
+						{
+							colorResponse[ii + jj*width] = 0.0;
+							breakflag = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	//find points left:
+	vector<Point2d> redPoints;
+	for (int jj = NMS_BW; jj < height - NMS_BW; jj++)
+	{
+		for (int ii = NMS_BW; ii < width - NMS_BW; ii++)
+		{
+			if (colorResponse[ii + jj*width] >0.0)
+				redPoints.push_back(Point2d(ii, jj));
+		}
+	}
+
+	if (visualize)
+	{
+		Mat view = imread(ImgName);
+		if (view.data == NULL)
+			cout << "Cannot load: " << ImgName << endl;
+		else
+		{
+			for (int ii = 0; ii < redPoints.size(); ii++)
+				rectangle(view, Point2i(redPoints[ii].x - 10, redPoints[ii].y - 10), cv::Point(redPoints[ii].x + 10, redPoints[ii].y + 10), CV_RGB(0, 255, 0), 2);
+			cvNamedWindow("result", CV_WINDOW_NORMAL);
+			imshow("result", view); waitKey();
+		}
+	}
+
+	//build template
+	int PatternLength = PatternSize*PatternSize;
+	int IntensityProfile[] = { 10, 240 };
+	int *hsubset = new int[nscales];
+	double *RingInfo = new double[nscales];
+	double maxScale = 0.9, minScale = 0.1, step = (maxScale - minScale) / nscales;
+	for (int ii = 0; ii < nscales; ii++)
+		RingInfo[ii] = maxScale - ii*step, hsubset[ii] = RingInfo[ii] / 2 * PatternSize;
+
+	//double *maskSmooth = new double[PatternLength*nscales];
+	for (int ii = 0; ii < nscales; ii++)
+	{
+		if (hsubset[ii] > 10)
+			synthesize_concentric_circles_mask(maskSmooth + PatternLength*ii, IntensityProfile, PatternSize, 1, PatternSize, &RingInfo[ii], 0, 1);
+		else
+		{
+			Gaussian(maskSmooth + PatternLength*ii, hsubset[ii], PatternSize);//LaplacianOfGaussian(maskSmooth + PatternLength*ii, hsubset[ii], PatternSize);
+			RescaleMat(maskSmooth + PatternLength*ii, 0, 255, PatternLength);
+		}
+
+		//sprintf(Fname, "C:/temp/mask_%d.png", ii + 1);	SaveDataToImage(Fname, maskSmooth + PatternLength*ii, PatternSize, PatternSize);
+	}
+
+	//Refine the detection
+	int InterpAlgo = 1;
+	GrabImage(ImgName, DImg, width, height, 1, true); //Get gray-scale imge
+	Generate_Para_Spline(DImg, ImgPara, width, height, InterpAlgo);
+
+	Point2i POI;
+	double zncc, bestzncc = 0.0;
+	int bestscale = -1, bestPattern = -1;
+	for (int kk = 0; kk < redPoints.size(); kk++)
+	{
+		//find the scale with the best response
+		for (int jj = 0; jj < nscales; jj++)
+		{
+			POI.x = redPoints[kk].x, POI.y = redPoints[kk].y;
+			zncc = TMatchingSuperCoarse(maskSmooth + jj*PatternLength, PatternSize, hsubset[jj], DImg, width, height, POI, 3, 0.5);
+			if (zncc > bestzncc)
+				bestzncc = abs(zncc), bestscale = hsubset[jj], bestPattern = jj;
+		}
+		if (bestzncc < thresh)
+			continue;
+
+		Point2d pt = POI;
+		bestzncc = TMatchingFine_ZNCC(maskSmooth + bestPattern*PatternLength, PatternSize, 2 * (bestscale + 2) > PatternSize ? bestscale : bestscale + 2, ImgPara, width, height, pt, 0, 1, thresh, InterpAlgo, Znssd_reqd);
+		if (bestzncc > thresh)
+			kpts.push_back(pt);
+	}
+
+	if (createMem)
+		delete[]ColorImg, delete[]colorResponse, delete[]DImg, delete[] ImgPara, delete[]Znssd_reqd, delete[]maskSmooth;
+
+	//if (kpts.size() == 0)
+	//	printf("Cannot find the laser point in %s\n", ImgName);
+
+	if (visualize)
+	{
+		Mat view = imread(ImgName);
+		if (view.data == NULL)
+			cout << "Cannot load: " << ImgName << endl;
+		else
+		{
+			for (int ii = 0; ii < kpts.size(); ii++)
+				rectangle(view, Point2i(kpts[ii].x - 5, kpts[ii].y - 5), cv::Point(kpts[ii].x + 5, kpts[ii].y + 5), CV_RGB(0, 255, 0), 1);
+			cvNamedWindow("result", CV_WINDOW_NORMAL);
+			imshow("result", view); waitKey();
+		}
+	}
+
+	return 0;
+}
+
+void TransformImage(double *oImg, double *iImg, double *Trans, int width, int height, int nchannels, int interpAlgo, double *iPara = NULL)
+{
+	//Trans if of a 3x3 matrix with Trans[8] = 1
+	int ii, jj, kk, length = width*height;
+
+	bool createMem = false;
+	if (iPara == NULL)
+	{
+		createMem = true;
+		iPara = new double[length*nchannels];
+		for (ii = 0; ii < nchannels; ii++)
+			Generate_Para_Spline(iImg + ii*length, iPara + ii*length, width, height, interpAlgo);
+	}
+
+	double u, v, denum, val[3];
+	for (jj = 0; jj < height; jj++)
+	{
+		for (ii = 0; ii < width; ii++)
+		{
+			denum = Trans[6] * ii + Trans[7] * jj + 1.0;
+			u = (Trans[0] * ii + Trans[1] * jj + Trans[2]) / denum;
+			v = (Trans[3] * ii + Trans[4] * jj + Trans[5]) / denum;
+			if (u<0 || u>width - 1 || v<0 || v>height - 1)
+			{
+				for (kk = 0; kk < nchannels; kk++)
+					oImg[ii + jj*width + kk*length] = 0.0;
+				continue;
+			}
+
+			for (kk = 0; kk < nchannels; kk++)
+			{
+				Get_Value_Spline(iPara + kk*length, width, height, u, v, val, -1, interpAlgo);
+				val[0] = min(max(val[0], 0.0), 255.0);
+				oImg[ii + jj*width + kk*length] = val[0];
+			}
+		}
+	}
+
+	if (createMem)
+		delete[]iPara;
+
+	return;
+}
+void DetectCornersCorrelation(double *img, int width, int height, Point2d *Checker, int &npts, vector<double> PatternAngles, int hsubset, int search_area, double thresh)
+{
+	int i, j, ii, jj, kk, jump = 2, nMaxCorners = npts, numPatterns = PatternAngles.size();
+
+	int bi_graylevel[2] = { 0, 255 }, PatternSize = 48, PatternLength = PatternSize*PatternSize; //Note that the pattern size is deliberately make bigger than the subset because small size give very blurry checkercorner
+	double *maskSmooth = new double[PatternLength*numPatterns];
+
+	//synthesize_square_mask(maskSmooth, bi_graylevel, PatternSize, 1.0, 0, false);
+	double trans[9], temp[9], iH1[9], H1[9] = { 1, 0, -PatternSize / 2, 0, 1, -PatternSize / 2, 0, 0, 1 };
+	for (ii = 1; ii < PatternAngles.size(); ii++)
+	{
+		double c = cos(PatternAngles.at(ii)*3.14159265359 / 180), s = sin(PatternAngles.at(ii)*3.14159265359 / 180);
+		double H2[9] = { c, -s, 0, s, c, 0, 0, 0, 1 };
+		mat_invert(H1, iH1, 3);
+		mat_mul(H2, H1, temp, 3, 3, 3);
+		mat_mul(iH1, temp, trans, 3, 3, 3);
+		TransformImage(maskSmooth + ii*PatternLength, maskSmooth, trans, PatternSize, PatternSize, 1, 1, NULL);
+		//SaveDataToImage("C:/temp/rS.png", maskSmooth+ii*PatternLength, PatternSize, PatternSize, 1);
+	}
+
+	double *Cornerness = new double[width*height];
+	for (ii = 0; ii < width*height; ii++)
+		Cornerness[ii] = 0.0;
+
+	double zncc;
+	Point2i POI;
+	for (kk = 0; kk < numPatterns; kk++)
+	{
+		for (jj = 3 * hsubset; jj < height - 3 * hsubset; jj += jump)
+		{
+			for (ii = 3 * hsubset; ii < width - 3 * hsubset; ii += jump)
+			{
+				POI.x = ii, POI.y = jj;
+				//TMatchingSuperCoarse(maskSmooth + kk*PatternLength, PatternSize, hsubset, img, width, height, POI, search_area, thresh, zncc);
+				Cornerness[ii + jj*width] = max(zncc, Cornerness[ii + jj*width]);
+			}
+		}
+	}
+
+	double *Cornerness2 = new double[width*height];
+	for (ii = 0; ii < width*height; ii++)
+		Cornerness2[ii] = Cornerness[ii];
+	//WriteGridBinary("C:/temp/cornerness.dat", Cornerness, width, height);
+
+	//Non-max suppression
+	bool breakflag;
+	for (jj = 3 * hsubset; jj < height - 3 * hsubset; jj += jump)
+	{
+		for (ii = 3 * hsubset; ii < width - 3 * hsubset; ii += jump)
+		{
+			breakflag = false;
+			if (Cornerness[ii + jj*width] < thresh)
+			{
+				Cornerness[ii + jj*width] = 0.0;
+				Cornerness2[ii + jj*width] = 0.0;
+			}
+			else
+			{
+				for (j = -jump; j <= jump; j += jump)
+				{
+					for (i = -jump; i <= jump; i += jump)
+					{
+						if (Cornerness[ii + jj*width] < Cornerness[ii + i + (jj + j)*width] - 0.001) //avoid comparing with itself
+						{
+							Cornerness2[ii + jj*width] = 0.0;
+							breakflag = true;
+							break;
+						}
+					}
+				}
+			}
+			if (breakflag == true)
+				break;
+		}
+	}
+
+	npts = 0;
+	for (jj = 3 * hsubset; jj < height - 3 * hsubset; jj += jump)
+	{
+		for (ii = 3 * hsubset; ii < width - 3 * hsubset; ii += jump)
+		{
+			if (Cornerness2[ii + jj*width] > thresh)
+			{
+				Checker[npts].x = ii;
+				Checker[npts].y = jj;
+				npts++;
+			}
+			if (npts > nMaxCorners)
+				break;
+		}
+	}
+
+	delete[]maskSmooth;
+	delete[]Cornerness;
+	delete[]Cornerness2;
+
+	return;
+}
+void RefineCorners(double *Para, int width, int height, Point2d *Checker, Point2d *Fcorners, int *FStype, int &npts, vector<double>PatternAngles, int hsubset1, int hsubset2, int searchArea, double ZNCCCoarseThresh, double ZNCCthresh, int InterpAlgo)
+{
+	int ii, jj, kk, boundary = 50;
+	int numPatterns = PatternAngles.size();
+	int bi_graylevel[2] = { 0, 255 }, PatternSize = 48, PatternLength = PatternSize*PatternSize; //Note that the pattern size is deliberately make bigger than the hsubset because small size give very blurry checkercorner
+	double *maskSmooth = new double[PatternLength*numPatterns * 2];
+
+	//synthesize_square_mask(maskSmooth, bi_graylevel, PatternSize, 1.0, 0, false);
+	//synthesize_square_mask(maskSmooth + PatternLength, bi_graylevel, PatternSize, 1.0, 1, false);
+
+	double trans[9], temp[9], iH1[9], H1[9] = { 1, 0, -PatternSize / 2, 0, 1, -PatternSize / 2, 0, 0, 1 };
+	for (ii = 1; ii < PatternAngles.size(); ii++)
+	{
+		double c = cos(PatternAngles.at(ii)*3.14159265359 / 180), s = sin(PatternAngles.at(ii)*3.14159265359 / 180);
+		double H2[9] = { c, -s, 0, s, c, 0, 0, 0, 1 };
+		mat_invert(H1, iH1, 3), mat_mul(H2, H1, temp, 3, 3, 3), mat_mul(iH1, temp, trans, 3, 3, 3);
+		TransformImage(maskSmooth + 2 * ii*PatternLength, maskSmooth, trans, PatternSize, PatternSize, 1, 1, NULL);
+		TransformImage(maskSmooth + (2 * ii + 1)*PatternLength, maskSmooth + PatternLength, trans, PatternSize, PatternSize, 1, 1, NULL);
+	}
+	/*	FILE *fp = fopen("C:/temp/coarse.txt", "w+");
+	for(ii=0; ii<npts; ii++)
+	fprintf(fp, "%.2f %.2f \n", Checker[ii].x, Checker[ii].y);
+	fclose(fp);*/
+
+	//Detect coarse corners:
+	int *goodCandiates = new int[npts];
+	Point2d *goodCorners = new Point2d[npts];
+	int count = 0, ngoodCandiates = 0, squaretype;
+
+	int percent = 10, increP = 10;
+	double start = omp_get_wtime(), elapsed;
+	cout << "Coarse refinement ..." << endl;
+	double zncc, bestzncc;
+	for (ii = 0; ii < npts; ii++)
+	{
+		if ((ii * 100 / npts - percent) >= 0)
+		{
+			elapsed = omp_get_wtime() - start;
+			printf("\r %.2f%% TE: %f TR: %f", 100.0*ii / npts, elapsed, elapsed / percent*(100.0 - percent));
+			percent += increP;
+		}
+
+		if ((Checker[ii].x < boundary) || (Checker[ii].y < boundary) || (Checker[ii].x > 1.0*width - boundary) || (Checker[ii].y > 1.0*height - boundary))
+			continue;
+
+		zncc = 0.0, bestzncc = 0.0;
+		for (jj = 0; jj<numPatterns; jj++)
+		{
+			//squaretype = TMatchingCoarse(maskSmooth + 2 * jj*PatternLength, PatternSize, hsubset1, Para, width, height, Checker[ii], searchArea, ZNCCCoarseThresh, zncc, InterpAlgo);
+			if (squaretype >-1 && zncc > bestzncc)
+			{
+				goodCorners[count].x = Checker[ii].x;
+				goodCorners[count].y = Checker[ii].y;
+				goodCandiates[count] = squaretype + 2 * jj;
+				bestzncc = zncc;
+			}
+		}
+		if (bestzncc > ZNCCCoarseThresh)
+			count++;
+	}
+	ngoodCandiates = count;
+	elapsed = omp_get_wtime() - start;
+	printf("\r %.2f%% TE: %f TR: %f\n", 100.0, elapsed, elapsed / percent*(100.0 - percent));
+	cout << "finished with " << ngoodCandiates << " points" << endl;
+
+	/*FILE *fp = fopen("C:/temp/coarseR.txt", "w+");
+	for(ii=0; ii<ngoodCandiates; ii++)
+	fprintf(fp, "%.2f %.2f %d\n", goodCorners[ii].x, goodCorners[ii].y, goodCandiates[ii]);
+	fclose(fp);*/
+
+	//Merege coarsely detected candidates:
+	npts = ngoodCandiates;
+	int STACK[30]; //Maximum KNN
+	int *squareType = new int[npts];
+	Point2d *mergeCorners = new Point2d[npts];
+	int *marker = new int[2 * npts];
+	for (jj = 0; jj < 2 * npts; jj++)
+		marker[jj] = -1;
+
+	int flag, KNN;
+	double t1, t2, megre_thresh = 5.0;
+	count = 0, ngoodCandiates = 0;
+	for (jj = 0; jj < npts; jj++)
+	{
+		KNN = 0;
+		flag = 0;
+		for (ii = 0; ii < count; ii++)
+		{
+			if (marker[ii] == jj)
+			{
+				flag = 1;
+				break;
+			}
+		}
+		if (flag == 1)
+			continue;
+
+		for (ii = jj + 1; ii < npts; ii++)
+		{
+			t1 = goodCorners[ii].x - goodCorners[jj].x;
+			t2 = goodCorners[ii].y - goodCorners[jj].y;
+
+			if (t1*t1 + t2*t2 < megre_thresh*megre_thresh &&goodCandiates[ii] == goodCandiates[jj])
+			{
+				STACK[KNN] = ii;
+				KNN++;
+			}
+		}
+		STACK[KNN] = jj;// include itself
+
+		for (kk = 0; kk < KNN + 1; kk++)
+		{
+			marker[count] = STACK[kk];
+			count++;
+		}
+
+		mergeCorners[ngoodCandiates].x = 0.0, mergeCorners[ngoodCandiates].y = 0.0;
+		for (kk = 0; kk <= KNN; kk++)
+		{
+			mergeCorners[ngoodCandiates].x += goodCorners[STACK[kk]].x;
+			mergeCorners[ngoodCandiates].y += goodCorners[STACK[kk]].y;
+		}
+		mergeCorners[ngoodCandiates].x /= (KNN + 1);
+		mergeCorners[ngoodCandiates].y /= (KNN + 1);
+		squareType[ngoodCandiates] = goodCandiates[jj];
+		ngoodCandiates++;
+	}
+
+	/*FILE *fp = fopen("c:/temp/coarseRM.txt", "w+");
+	for(ii=0; ii<ngoodCandiates; ii++)
+	fprintf(fp, "%lf %lf %d\n", mergeCorners[ii].x, mergeCorners[ii].y, squareType[ii]);
+	fclose(fp);*/
+
+	//Refine corners:
+	int advanced_tech = 1; // affine only
+	count = 0;
+	double *Znssd_reqd = new double[6 * PatternLength];
+
+	percent = 10;
+	start = omp_get_wtime();
+	cout << "Fine refinement ..." << endl;
+	for (ii = 0; ii < ngoodCandiates; ii++)
+	{
+		if ((ii * 100 / ngoodCandiates - percent) >= 0)
+		{
+			elapsed = omp_get_wtime() - start;
+			printf("\r %.2f%% TE: %f TR: %f", 100.0*ii / ngoodCandiates, elapsed, elapsed / percent*(100.0 - percent));
+			percent += increP;
+		}
+
+		if ((mergeCorners[ii].x < boundary) || (mergeCorners[ii].y < boundary) || (mergeCorners[ii].x > 1.0*width - boundary) || (mergeCorners[ii].y > 1.0*height - boundary))
+			continue;
+
+		zncc = TMatchingFine_ZNCC(maskSmooth + squareType[ii] * PatternLength, PatternSize, hsubset2, Para, width, height, mergeCorners[ii], 0, 1, ZNCCthresh, InterpAlgo, Znssd_reqd);
+		if (zncc > ZNCCthresh)
+		{
+			squareType[ii] = squareType[ii];
+			count++;
+		}
+		else
+			squareType[ii] = -1;
+	}
+	delete[]Znssd_reqd;
+	elapsed = omp_get_wtime() - start;
+	printf("\r %.2f%% TE: %f TR: %f\n", 100.0, elapsed, elapsed / percent*(100.0 - percent));
+	cout << "finished with " << count << " points" << endl;
+
+	//Final merging:
+	count = 0;
+	for (ii = 0; ii < ngoodCandiates; ii++)
+	{
+		if (squareType[ii] != -1)
+		{
+			goodCorners[count].x = mergeCorners[ii].x;
+			goodCorners[count].y = mergeCorners[ii].y;
+			goodCandiates[count] = squareType[ii];
+			count++;
+		}
+	}
+
+	npts = count;
+	for (jj = 0; jj < npts; jj++)
+		marker[jj] = -1;
+
+	megre_thresh = 4.0, count = 0, ngoodCandiates = 0;
+	for (jj = 0; jj < npts; jj++)
+	{
+		KNN = 0, flag = 0;
+		for (ii = 0; ii < count; ii++)
+		{
+			if (marker[ii] == jj)
+			{
+				flag = 1;
+				break;
+			}
+		}
+		if (flag == 1)
+			continue;
+
+		for (ii = jj + 1; ii < npts; ii++)
+		{
+			t1 = goodCorners[ii].x - goodCorners[jj].x;
+			t2 = goodCorners[ii].y - goodCorners[jj].y;
+			if (t1*t1 + t2*t2 < megre_thresh*megre_thresh)
+			{
+				STACK[KNN] = ii;
+				KNN++;
+			}
+		}
+		STACK[KNN] = jj;// include itself
+
+		for (kk = 0; kk < KNN + 1; kk++)
+		{
+			marker[count] = STACK[kk];
+			count++;
+		}
+
+		Fcorners[ngoodCandiates].x = goodCorners[jj].x, Fcorners[ngoodCandiates].y = goodCorners[jj].y;
+		for (kk = 0; kk < KNN; kk++)
+		{
+			Fcorners[ngoodCandiates].x += goodCorners[STACK[kk]].x;
+			Fcorners[ngoodCandiates].y += goodCorners[STACK[kk]].y;
+		}
+		Fcorners[ngoodCandiates].x /= (KNN + 1);
+		Fcorners[ngoodCandiates].y /= (KNN + 1);
+		FStype[ngoodCandiates] = goodCandiates[jj];
+		ngoodCandiates++;
+	}
+
+	npts = ngoodCandiates;
+	cout << "After merging points: " << npts << endl;
+
+	delete[]maskSmooth;
+	delete[]goodCorners;
+	delete[]goodCandiates;
+	delete[]marker;
+	delete[]squareType;
+	delete[]mergeCorners;
+
+	return;
+}
+void RunCornersDetector(Point2d *CornerPts, int *CornersType, int &nCpts, double *Img, double *IPara, int width, int height, vector<double>PatternAngles, int hsubset1, int hsubset2, int searchArea, double ZNCCCoarseThresh, double ZNCCThresh, int InterpAlgo)
+{
+	int npts = 500000;
+	Point2d *Checker = new Point2d[npts];
+
+	//int SuppressType = 1;
+	//double Gsigma = 2.5, GDsigma = 3.0, ResponseThresh = 0.9;
+	//DetectCorners(img, width, height, HarrisC, npts, Gsigma, GDsigma, ResponseThresh, 0.04, SuppressType, 0.9);
+#pragma omp critical
+	cout << "Sliding window for detection..." << endl;
+
+	DetectCornersCorrelation(Img, width, height, Checker, npts, PatternAngles, hsubset1, searchArea, ZNCCCoarseThresh);
+	/*FILE *fp = fopen("C:/temp/cornerCorr.txt", "w+");
+	for (int ii = 0; ii < npts; ii++)
+	fprintf(fp, "%.1f %1f\n", Checker[ii].x, Checker[ii].y);
+	fclose(fp);
+	FILE *fp = fopen("C:/temp/cornerCorr.txt", "r");
+	npts = 0;
+	while (fscanf(fp, "%lf %lf ", &Checker[npts].x, &Checker[npts].y) != EOF)
+	npts++;
+	fclose(fp);*/
+
+#pragma omp critical
+	cout << "finished width " << npts << " points. Refine detected corners..." << endl;
+
+	RefineCorners(IPara, width, height, Checker, CornerPts, CornersType, npts, PatternAngles, hsubset1, hsubset2, searchArea, ZNCCCoarseThresh, ZNCCThresh, InterpAlgo);
+	nCpts = npts;
+
+	delete[]Checker;
+	return;
+}
+int DetectMarkersandCorrespondence(char *PATH, Point2d *Pcorners, int *PcorType, double *PPara, LKParameters LKArg, double *CamProScale, vector<double>PatternAngles, int checkerSize, int nPpts, int PSncols, Point2i *ProjectorCorressBoundary, double EpipThresh, int frameID, int CamID, int nPros, int width, int height, int pwidth, int pheight)
+{
+	int length = width*height;
+	const int maxPts = 5000, SearchArea = 1;
+	int CheckerhSubset1 = (int)(0.5*checkerSize + 0.5), CheckerhSubset2 = (int)(0.5*checkerSize + 0.5); //A reasonable checkerhsubset gives better result than using the huge subset
+
+	int  ii, jj, nCPts, nCCorres = maxPts, CType1[maxPts];
+	Point2d CPts1[maxPts], Ppts[maxPts], CPts[maxPts * 2];
+	Point2i CCorresID[maxPts];
+	int T[maxPts], TT[maxPts];
+
+	IplImage *view = 0;
+	char *Img = new char[2 * width*height];
+	double *SImg = new double[width*height];
+	double *IPara = new double[2 * width*height];
+
+	char Fname[100];
+	sprintf(Fname, "%s/Image/C%d_%05d.png", PATH, CamID + 1, frameID);
+	view = cvLoadImage(Fname, 0);
+	if (view == NULL)
+	{
+		cout << "cannot load " << Fname << endl;
+		delete[]Img;
+		delete[]SImg;
+		delete[]IPara;
+		return 1;
+	}
+	cout << "Loaded " << Fname << endl;
+	for (jj = 0; jj < height; jj++)
+		for (ii = 0; ii < width; ii++)
+			Img[ii + (height - 1 - jj)*width] = view->imageData[ii + jj*width];
+	cvReleaseImage(&view);
+
+	Gaussian_smooth(Img, SImg, height, width, 255.0, LKArg.Gsigma);
+	Generate_Para_Spline(SImg, IPara, width, height, LKArg.InterpAlgo);
+
+	RunCornersDetector(CPts1, CType1, nCPts, SImg, IPara, width, height, PatternAngles, CheckerhSubset1, CheckerhSubset2, SearchArea, LKArg.ZNCCThreshold - 0.35, LKArg.ZNCCThreshold, LKArg.InterpAlgo);
+	/*FILE *fp = fopen("C:/temp/pts.txt", "w+");
+	for (int ii = 0; ii < nCPts; ii++)
+	fprintf(fp, "%f %f %d \n", CPts1[ii].x, CPts1[ii].y, CType1[ii]);
+	fclose(fp);
+
+	{
+	nCPts = 0;
+	FILE *fp = fopen("C:/temp/pts.txt", "r");
+	while (fscanf(fp, "lf %lf %d %", &CPts1[nCPts].x, &CPts1[nCPts].y, &CType1[nCPts]) != EOF)
+	nCPts++;
+	fclose(fp);
+	}*/
+	for (int ProID = 0; ProID < nPros; ProID++)
+	{
+		for (ii = 0; ii < nCCorres; ii++)
+		{
+			T[ii] = CCorresID[ii].y;
+			TT[ii] = ii;
+		}
+		Quick_Sort_Int(T, TT, 0, nCCorres - 1);
+
+		for (ii = 0; ii < nCCorres; ii++)
+		{
+			Ppts[ii].x = Pcorners[CCorresID[TT[ii]].y].x;
+			Ppts[ii].y = Pcorners[CCorresID[TT[ii]].y].y;
+			CPts[ii].x = CPts1[CCorresID[TT[ii]].x].x;
+			CPts[ii].y = CPts1[CCorresID[TT[ii]].x].y;
+		}
+
+		sprintf(Fname, "%s/Sparse/P%dC%d_%05d.txt", PATH, ProID + 1, CamID + 1, frameID);
+		FILE *fp = fopen(Fname, "w+");
+		for (ii = 0; ii < nCCorres; ii++)
+			fprintf(fp, "%d %.8f %.8f \n", CCorresID[TT[ii]].y, Ppts[ii].x, Ppts[ii].y);
+		fclose(fp);
+
+		sprintf(Fname, "%s/Sparse/C%dP%d_%05d.txt", PATH, CamID + 1, ProID + 1, frameID);
+		fp = fopen(Fname, "w+");
+		for (ii = 0; ii < nCCorres; ii++)
+			fprintf(fp, "%.8f %.8f \n", CPts[ii].x, CPts[ii].y);
+		fclose(fp);
+
+		if (nCCorres < 10)
+			cout << "Something wrong with #sparse points." << endl;
+		cout << nCCorres << " pts dected for frame " << frameID << endl;
+	}
+
+	delete[]Img;
+	delete[]SImg;
+	delete[]IPara;
+
+	return 0;
 }

@@ -105,9 +105,9 @@ int PrismMST(char *Path, int nvideos)
 	sprintf(Fname, "%s/timeConstrantoffset.txt", Path);	fp = fopen(Fname, "w+");
 	for (int kk = 0; kk < nvideos; kk++)
 	{
-	for (int ll = 0; ll < nvideos; ll++)
-	fprintf(fp, "%.4f ", TimeOffset[kk + ll*nvideos]);
-	fprintf(fp, "\n");
+		for (int ll = 0; ll < nvideos; ll++)
+			fprintf(fp, "%.4f ", TimeOffset[kk + ll*nvideos]);
+		fprintf(fp, "\n");
 	}
 	fclose(fp);
 
@@ -168,7 +168,7 @@ int PrismMST(char *Path, int nvideos)
 	}
 	fclose(fp);
 
-	delete[]weights, delete[]weightTable, delete[]TimeOffset, delete []edges;
+	delete[]weights, delete[]weightTable, delete[]TimeOffset, delete[]edges;
 
 	return 0;
 }
@@ -267,20 +267,19 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 			SubSeq[jj] = Seq4[jj + MinSample*ii];
 
 		//Correlate the subsequence with the smaller sequence
-		ZNCC1D(SubSeq, nsamplesSubSeq, Seq3, ns3, res);
+		ZNCC1D(Seq3, ns3, SubSeq, nsamplesSubSeq, res);
 
-		float a = res[jj], b = Seq3[jj], c = SubSeq[jj];
 		//Quality check: how many peaks, are they close?
 		nonMaximaSuppression1D(res, ns3 + nsamplesSubSeq - 1, MaxLocID, nMaxLoc, hbandwidth);
 		for (jj = 0; jj < ns3 + nsamplesSubSeq - 1; jj++)
 			nres[jj] = 0.0;
-		for (jj = 0; jj<nMaxLoc; jj++)
+		for (jj = 0; jj < nMaxLoc; jj++)
 			nres[MaxLocID[jj]] = res[MaxLocID[jj]];
+
+		Mat zncc(1, ns3 + nsamplesSubSeq - 1, CV_32F, nres);
 
 		/// Localizing the best match with minMaxLoc
 		double minVal; double maxVal, maxVal2; Point minLoc; Point maxLoc, maxLoc2;
-		Mat zncc(1, ns3 + nsamplesSubSeq - 1, CV_32F, nres);
-
 		minMaxLoc(zncc, &minVal, &maxVal, &minLoc, &maxLoc, Mat());
 		MaxCorr[ii] = maxVal;
 		soffset[ii] = maxLoc.x - nsamplesSubSeq + 1 - MinSample*ii;
@@ -288,7 +287,42 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 
 		zncc.at<float>(maxLoc.x) = 0.0;
 		minMaxLoc(zncc, &minVal, &maxVal2, &minLoc, &maxLoc2, Mat());
-		if (maxVal2 / maxVal>0.5 && abs(maxLoc2.x - maxLoc.x) < hbandwidth * 2 + 1)
+
+		double bestscore = maxVal;
+
+		if (ns3 == nsamplesSubSeq)
+		{//sometimes, reversr the order leads to different result. The one with the highest ZNCC score is chosen.
+			ZNCC1D(SubSeq, nsamplesSubSeq, Seq3, ns3, res);
+
+			//Quality check: how many peaks, are they close?
+			nonMaximaSuppression1D(res, ns3 + nsamplesSubSeq - 1, MaxLocID, nMaxLoc, hbandwidth);
+			for (jj = 0; jj < ns3 + nsamplesSubSeq - 1; jj++)
+				nres[jj] = 0.0;
+			for (jj = 0; jj < nMaxLoc; jj++)
+				nres[MaxLocID[jj]] = res[MaxLocID[jj]];
+
+			for (jj = 0; jj < ns3 + nsamplesSubSeq - 1; jj++)
+				zncc.at<float>(jj) = nres[jj];
+
+			/// Localizing the best match with minMaxLoc
+			double minVal_, maxVal_; Point minLoc_; Point maxLoc_, maxLoc2_;
+			minMaxLoc(zncc, &minVal_, &maxVal_, &minLoc_, &maxLoc_, Mat());
+
+			if (bestscore < maxVal_)
+			{
+				Switch = !Switch;
+				maxVal = maxVal_, minLoc = minLoc_, maxLoc = maxLoc_;
+
+				MaxCorr[ii] = maxVal;
+				soffset[ii] = maxLoc.x - nsamplesSubSeq + 1 - MinSample*ii;
+				foffset[ii] = 1.0*(soffset[ii]) / sampleRate*fps4;
+
+				zncc.at<float>(maxLoc.x) = 0.0;
+				minMaxLoc(zncc, &minVal, &maxVal2, &minLoc, &maxLoc2, Mat());
+			}
+		}
+
+		if (maxVal2 / maxVal > 0.5 && abs(maxLoc2.x - maxLoc.x) < hbandwidth * 2 + 1)
 		{
 			Goodness[ii] = false;
 			printf("Caution! Distance to the 2nd best peak (%.4f /%.4f): %d or %.2fs\n", maxVal, maxVal2, abs(maxLoc2.x - maxLoc.x), 1.0*abs(maxLoc2.x - maxLoc.x) / sampleRate*fps4);

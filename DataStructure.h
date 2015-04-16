@@ -18,6 +18,7 @@ using namespace std;
 #define LIMIT3D 1e-6
 #define Pi 3.1415926535897932
 #define MaxnFrame 7000
+#define OPTICALFLOW_BIDIRECT_DIST_THRESH 3.0
 
 struct ImgPyr
 {
@@ -48,7 +49,7 @@ struct CameraData
 	double threshold, ninlierThresh;
 	std::string filename;
 	int nviews, width, height;
-	bool notCalibrated;
+	bool notCalibrated, valid;
 };
 
 struct Corpus
@@ -82,11 +83,13 @@ struct VideoData
 
 struct CamInfo
 {
+	int frameID;
 	float camCenter[3];
 	GLfloat Rgl[16];
 };
 struct ImgPtEle
 {
+	int frameID;
 	Point2d pt2D;
 	Point3d pt3D;
 	double ray[3], camcenter[3], d;
@@ -154,7 +157,7 @@ struct PerCamNonRigidTrajectory
 struct Trajectory2D
 {
 	int timeID, nViews;
-	vector<int>viewIDs;
+	vector<int>viewIDs, frameID;
 	vector<Point2d> uv;
 	vector<float>angle;
 };
@@ -185,7 +188,7 @@ struct VisualizationManager
 	vector<Point3f> CorpusPointColor, CorpusPointColor2, PointColor, PointColor2, PointColor3;
 	vector<Point3d>PointNormal, PointNormal2, PointNormal3;
 	vector<CamInfo> glCorpusCameraInfo, *glCameraPoseInfo;
-	vector<Point3d> *catPointPosition, *catPointPosition3;
+	vector<Point3d> *catPointPosition, *catPointPosition2;
 	vector<Trajectory3D* > Traject3D;
 	vector<int> Track3DLength;
 	vector<Trajectory3D* > Traject3D2;

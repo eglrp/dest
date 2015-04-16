@@ -600,6 +600,28 @@ void ZNCC1D(double *A, int Asize, double *B, int Bsize, double *Result)
 
 	return;
 }
+void XCORR1D(float *s, const int sdim, float *b, const int bdim, float *res)
+{
+	Mat ms(1, bdim, CV_32F, Scalar(0.0));
+	Mat mb(1, bdim * 3 - 2, CV_32F, Scalar(0.0));
+	Mat result(1, 2 * bdim - 1, CV_32F);
+
+#pragma omp parallel for
+	for (int ii = 0; ii < sdim; ii++)
+		ms.at<float>(ii) = s[ii];
+
+#pragma omp parallel for
+	for (int ii = 0; ii < bdim; ii++)
+		mb.at<float>(ii + bdim - 1) = b[ii];
+
+	matchTemplate(mb, ms, result, CV_TM_CCORR);
+
+#pragma omp parallel for
+	for (int ii = 0; ii < 2 * bdim - 1; ii++)
+		res[ii] = mb.at<float>(ii);
+
+	return;
+}
 double ComputeZNCCPatch(double *RefPatch, double *TarPatch, int hsubset, int nchannels, double *T)
 {
 	int i, kk, iii, jjj;
@@ -2937,6 +2959,55 @@ void DecodePhaseShift2(char *Image, char *PBM, double *PhaseUW, int width, int h
 	return;
 }
 
+bool RoateImage180(char *fname, char *Img, int &width, int &height, int nchannels, bool silent)
+{
+	Mat view = imread(fname, nchannels == 1 ? 0 : 1);
+	if (view.data == NULL)
+	{
+		if (!silent)
+			cout << "Cannot load: " << fname << endl;
+		return false;
+	}
+	width = view.cols, height = view.rows;
+	if (Img == NULL)
+		Img = new char[width*height*nchannels];
+	int length = width*height;
+	for (int kk = 0; kk < nchannels; kk++)
+	{
+		for (int jj = 0; jj < height; jj++)
+			for (int ii = 0; ii < width; ii++)
+				Img[(width - 1 - ii) + (height - 1 - jj)*width + kk*length] = (char)view.data[nchannels*ii + jj*nchannels*width + kk];
+	}
+
+	for (int jj = 0; jj < height; jj++)
+		for (int ii = 0; ii < width; ii++)
+			for (int kk = 0; kk < nchannels; kk++)
+				view.data[nchannels*ii + kk + nchannels*jj*width] = Img[ii + jj*width + kk*length];
+
+	return imwrite(fname, view);
+}
+bool GrabImageCVFormat(char *fname, char *Img, int &width, int &height, int nchannels, bool silent)
+{
+	Mat view = imread(fname, nchannels == 1 ? 0 : 1);
+	if (view.data == NULL)
+	{
+		if (!silent)
+			cout << "Cannot load: " << fname << endl;
+		return false;
+	}
+	width = view.cols, height = view.rows;
+	if (Img == NULL)
+		Img = new char[width*height*nchannels];
+	int length = width*height;
+	for (int kk = 0; kk < nchannels; kk++)
+	{
+		for (int jj = 0; jj < height; jj++)
+			for (int ii = 0; ii < width; ii++)
+				Img[nchannels*ii + jj*nchannels*width + kk] = (char)view.data[nchannels*ii + jj*nchannels*width + kk];
+	}
+
+	return true;
+}
 bool GrabImage(char *fname, char *Img, int &width, int &height, int nchannels, bool silent)
 {
 	Mat view = imread(fname, nchannels == 1 ? 0 : 1);
@@ -3018,11 +3089,7 @@ bool GrabImage(char *fname, double *Img, int &width, int &height, int nchannels,
 			cout << "Cannot load: " << fname << endl;
 		return false;
 	}
-	if (Img == NULL)
-	{
-		width = view.cols, height = view.rows;
-		Img = new double[width*height*nchannels];
-	}
+	width = view.cols, height = view.rows;
 	int length = width*height;
 	for (int kk = 0; kk < nchannels; kk++)
 	{
@@ -3053,6 +3120,18 @@ void ShowDataToImage(char *Fname, char *Img, int width, int height, int nchannel
 	cvShowImage(Fname, cvImg);
 
 	return;
+}
+bool SaveDataToImageCVFormat(char *fname, char *Img, int width, int height, int nchannels)
+{
+	int ii, jj, kk, length = width*height;
+
+	Mat M = Mat::zeros(height, width, nchannels == 1 ? CV_8UC1 : CV_8UC3);
+	for (jj = 0; jj < height; jj++)
+		for (ii = 0; ii < width; ii++)
+			for (kk = 0; kk < nchannels; kk++)
+				M.data[nchannels*ii + kk + nchannels*jj*width] = (unsigned char)Img[nchannels*ii + kk + nchannels*jj*width];
+
+	return imwrite(fname, M);
 }
 bool SaveDataToImage(char *fname, char *Img, int width, int height, int nchannels)
 {
@@ -4412,7 +4491,11 @@ int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, v
 	{
 		int x1 = keypoints1.at(pair.at(ii)).pt.x, y1 = keypoints1.at(pair.at(ii)).pt.y;
 		int x2 = keypoints2.at(pair.at(ii + 1)).pt.x + offsetX, y2 = keypoints2.at(pair.at(ii + 1)).pt.y + offsetY;
-		cvLine(correspond, cvPoint(x1, y1), cvPoint(x2, y2), colors[ii % 9], 1, 4);
+
+		cvCircle(correspond, cvPoint(x1, y1), 2, colors[ii % 9], 2),
+			cvCircle(correspond, cvPoint(x2, y2), 2, colors[ii % 9], 2);
+		if (0)
+			cvLine(correspond, cvPoint(x1, y1), cvPoint(x2, y2), colors[ii % 9], 1, 4);
 	}
 
 	cvNamedWindow("Correspondence", CV_WINDOW_NORMAL);
@@ -4657,7 +4740,7 @@ int ReadCumulativePoints(char *Path, int nviews, int timeID, vector<int>&cumulat
 	if (timeID < 0)
 		sprintf(Fname, "%s/CumlativePoints.txt", Path);
 	else
-		sprintf(Fname, "%s/CumlativePoints_%d.txt", Path, timeID);
+		sprintf(Fname, "%s/Dynamic/CumlativePoints_%d.txt", Path, timeID);
 	FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
@@ -4938,6 +5021,21 @@ void GetrtFromRT(CameraData *AllViewsParas, int nviews)
 			AllViewsParas[viewID].rt[jj] = r.at<double>(jj), AllViewsParas[viewID].rt[3 + jj] = AllViewsParas[viewID].T[jj];
 	}
 }
+void GetrtFromRT(CameraData &cam)
+{
+	Mat Rmat(3, 3, CV_64F), r(3, 1, CV_64F);
+
+	for (int jj = 0; jj < 9; jj++)
+		Rmat.at<double>(jj) = cam.R[jj];
+
+	Rodrigues(Rmat, r);
+
+	for (int jj = 0; jj < 3; jj++)
+		cam.rt[jj] = r.at<double>(jj), cam.rt[3 + jj] = cam.T[jj];
+
+	return;
+}
+
 void GetrtFromRT(double *rt, double *R, double *T)
 {
 	Mat Rmat(3, 3, CV_64F), r(3, 1, CV_64F);
@@ -5727,7 +5825,7 @@ int BAVisualSfMDriver(char *Path, char *nvmName, char *camInfo, char *IntrinsicI
 	return 0;
 }
 
-bool loadNVMLite(const string filepath, Corpus &CorpusData, int sharedIntrinsics)
+bool loadNVMLite(const string filepath, Corpus &CorpusData, int sharedIntrinsics, int nHDs, int nVGAs, int nPanels)
 {
 	ifstream ifs(filepath);
 	if (ifs.fail())
@@ -5768,20 +5866,52 @@ bool loadNVMLite(const string filepath, Corpus &CorpusData, int sharedIntrinsics
 		vector<double> q(4), c(3), d(2);
 		ifs >> filename >> f >> Quaterunion[0] >> Quaterunion[1] >> Quaterunion[2] >> Quaterunion[3] >> CamCenter[0] >> CamCenter[1] >> CamCenter[2] >> d[0] >> d[1];
 
-		std::size_t pos = filename.find(".ppm");
-		filename.erase(pos, 4);
-		const char * str = filename.c_str();
-		int viewID = atoi(str);
+		int viewID, panelID, camID, width, height;
+		std::size_t posDot = filename.find(".");
+		if (posDot < 5)
+		{
+			std::size_t pos = filename.find(".ppm");
+			filename.erase(pos, 4);
+			const char * str = filename.c_str();
+			int viewID = atoi(str);
+		}
+		else
+		{
+			std::size_t pos1 = filename.find("_");
+			string PanelName; PanelName = filename.substr(0, 2);
+			const char * str = PanelName.c_str();
+			panelID = atoi(str);
+
+			string CamName; CamName = filename.substr(pos1 + 1, 2);
+			str = CamName.c_str();
+			camID = atoi(str);
+
+			viewID = panelID == 0 ? camID : nHDs + nVGAs*(panelID - 1) + camID - 1;
+			width = viewID > nHDs ? 640 : 1920, height = viewID > nHDs ? 480 : 1080;
+		}
+
+		CorpusData.camera[viewID].intrinsic[0] = f, CorpusData.camera[viewID].intrinsic[1] = f,
+			CorpusData.camera[viewID].intrinsic[2] = 0, CorpusData.camera[viewID].intrinsic[3] = width / 2, CorpusData.camera[viewID].intrinsic[4] = height / 2;
 
 		ceres::QuaternionToRotation(Quaterunion, CorpusData.camera[viewID].R);
 		mat_mul(CorpusData.camera[viewID].R, CamCenter, T, 3, 3, 1); //t = -RC
 		CorpusData.camera[viewID].T[0] = -T[0], CorpusData.camera[viewID].T[1] = -T[1], CorpusData.camera[viewID].T[2] = -T[2];
+
+		CorpusData.camera[viewID].LensModel = 0;
+		CorpusData.camera[viewID].distortion[0] = -d[0];
+		for (int jj = 1; jj < 7; jj++)
+			CorpusData.camera[viewID].distortion[jj] = 0.0;
+
+		GetrtFromRT(CorpusData.camera[viewID]);
+		GetKFromIntrinsic(CorpusData.camera[viewID]);
+		AssembleP(CorpusData.camera[viewID]);
 	}
 
 	return true;
 }
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 {
+	const int nHDs = 30, nVGAs = 24, nPanels = 20;
 	FILE *fp = fopen(BAfileName, "r");
 	if (fp == NULL)
 	{
@@ -5794,26 +5924,50 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 	double fx, fy, skew, u0, v0, r1, r2, r3, t1, t2, p1, p2, omega, DistCtrX, DistCtrY, rv[3], T[3];
 
 	fscanf(fp, "%d ", &CorpusData.nCamera);
-	CorpusData.camera = new CameraData[CorpusData.nCamera];
+	CorpusData.camera = new CameraData[CorpusData.nCamera + 20];
 
 	for (int ii = 0; ii < CorpusData.nCamera; ii++)
 	{
 		if (fscanf(fp, "%s %d %d %d", &Fname, &lensType, &width, &height) == EOF)
 			break;
 		string filename = Fname;
-		std::size_t pos = filename.find(".ppm");
-		if (pos > 1000)
+		size_t dotpos = filename.find(".");
+		int viewID, camID, panelID;
+		if (dotpos < 4)
 		{
-			pos = filename.find(".png");
+			std::size_t pos = filename.find(".ppm");
 			if (pos > 1000)
 			{
-				printf("Something wrong with the image name in the BA file!\n");
-				abort();
+				pos = filename.find(".png");
+				if (pos > 1000)
+				{
+					pos = filename.find(".jpg");
+					if (pos > 1000)
+					{
+						{ printf("Something wrong with the image name in the BA file!\n");
+						abort();
+						}
+					}
+				}
 			}
+			filename.erase(pos, 4);
+			const char * str = filename.c_str();
+			viewID = atoi(str);
 		}
-		filename.erase(pos, 4);
-		const char * str = filename.c_str();
-		int viewID = atoi(str);
+		else
+		{
+			std::size_t pos1 = filename.find("_");
+			string PanelName; PanelName = filename.substr(0, 2);
+			const char * str = PanelName.c_str();
+			panelID = atoi(str);
+
+			string CamName; CamName = filename.substr(pos1 + 1, 2);
+			str = CamName.c_str();
+			camID = atoi(str);
+
+			viewID = panelID == 0 ? camID : nHDs + nVGAs*(panelID - 1) + camID - 1;
+		}
+
 
 		CorpusData.camera[viewID].LensModel = lensType;
 		CorpusData.camera[viewID].width = width, CorpusData.camera[viewID].height = height;
@@ -5859,8 +6013,10 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 		GetKFromIntrinsic(CorpusData.camera[viewID]);
 		GetRTFromrt(CorpusData.camera[viewID].rt, CorpusData.camera[viewID].R, CorpusData.camera[viewID].T);
 		GetRCGL(CorpusData.camera[viewID]);
+		AssembleP(CorpusData.camera[viewID]);
 	}
 	fclose(fp);
+
 	return true;
 }
 bool saveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
@@ -6035,7 +6191,7 @@ bool ReSaveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData, double
 		for (int jj = 0; jj < 3; jj++)
 		{
 			CorpusData.camera[viewID].T[jj] *= ScaleFactor;
-			rv[jj] = CorpusData.camera[viewID].rt[jj], T[jj] = CorpusData.camera[viewID].T[jj];
+			rv[jj] = CorpusData.camera[viewID].rt[jj], T[jj] = CorpusData.camera[viewID].rt[jj + 3] * ScaleFactor;
 		}
 		AssembleP(CorpusData.camera[viewID]);
 		GetRCGL(CorpusData.camera[viewID]);
@@ -6840,6 +6996,100 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 
 	return 0;
 }
+int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime)
+{
+	char Fname[200];
+	int frameID, LensType, width, height;
+	int nframes = max(MaxnFrame, stopTime);
+
+	VideoInfo.startTime = startTime, VideoInfo.stopTime = stopTime;
+	VideoInfo.VideoInfo = new CameraData[nframes];
+	for (int ii = 0; ii < nframes; ii++)
+		VideoInfo.VideoInfo[ii].valid = false;
+
+	//READ INTRINSIC: START
+	sprintf(Fname, "%s/intrinsic_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		cout << "Cannot load " << Fname << endl;
+		return 1;
+	}
+	double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1, omega, DistCtrX, DistCtrY;
+	while (fscanf(fp, "%d %d %lf %lf %lf %lf %lf ", &frameID, &LensType, &fx, &fy, &skew, &u0, &v0) != EOF)
+	{
+		if (frameID >= 0)
+		{
+			VideoInfo.VideoInfo[frameID].valid = true;
+			VideoInfo.VideoInfo[frameID].K[0] = fx, VideoInfo.VideoInfo[frameID].K[1] = skew, VideoInfo.VideoInfo[frameID].K[2] = u0,
+				VideoInfo.VideoInfo[frameID].K[3] = 0.0, VideoInfo.VideoInfo[frameID].K[4] = fy, VideoInfo.VideoInfo[frameID].K[5] = v0,
+				VideoInfo.VideoInfo[frameID].K[6] = 0.0, VideoInfo.VideoInfo[frameID].K[7] = 0.0, VideoInfo.VideoInfo[frameID].K[8] = 1.0;
+
+			mat_invert(VideoInfo.VideoInfo[frameID].K, VideoInfo.VideoInfo[frameID].invK, 3);
+			GetIntrinsicFromK(VideoInfo.VideoInfo[frameID]);
+			mat_invert(VideoInfo.VideoInfo[frameID].K, VideoInfo.VideoInfo[frameID].invK);
+
+			VideoInfo.VideoInfo[frameID].LensModel = LensType, VideoInfo.VideoInfo[frameID].threshold = 3.0, VideoInfo.VideoInfo[frameID].ninlierThresh = 40;
+		}
+
+		if (LensType == RADIAL_TANGENTIAL_PRISM)
+		{
+			fscanf(fp, "%lf %lf %lf %lf %lf %lf %lf ", &r0, &r1, &r2, &t0, &t1, &p0, &p1);
+			if (frameID >= 0)
+			{
+				VideoInfo.VideoInfo[frameID].distortion[0] = r0, VideoInfo.VideoInfo[frameID].distortion[1] = r1, VideoInfo.VideoInfo[frameID].distortion[2] = r2;
+				VideoInfo.VideoInfo[frameID].distortion[3] = t0, VideoInfo.VideoInfo[frameID].distortion[4] = t1;
+				VideoInfo.VideoInfo[frameID].distortion[5] = p0, VideoInfo.VideoInfo[frameID].distortion[6] = p1;
+			}
+		}
+		else
+		{
+			fscanf(fp, "%lf %lf %lf ", &omega, &DistCtrX, &DistCtrY);
+			if (frameID >= 0)
+				VideoInfo.VideoInfo[frameID].distortion[0] = omega, VideoInfo.VideoInfo[frameID].distortion[1] = DistCtrX, VideoInfo.VideoInfo[frameID].distortion[2] = DistCtrY;
+		}
+		fscanf(fp, "%d %d ", &width, &height);
+		if (frameID >= 0)
+			VideoInfo.VideoInfo[frameID].width = width, VideoInfo.VideoInfo[frameID].height = height;
+	}
+	fclose(fp);
+	//END
+
+	//READ POSE FROM VIDEO POSE: START
+	sprintf(Fname, "%s/PinfoGL_%d.txt", Path, viewID); fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		return 1;
+	}
+	double R[9], C[3], t2, t3, t4, t5, t6, t7;
+	while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ",
+		&frameID, &R[0], &R[1], &R[2], &t1, &R[3], &R[4], &R[5], &t2, &R[6], &R[7], &R[8], &t3, &t4, &t5, &t6, &t7, &C[0], &C[1], &C[2]) != EOF)
+	{
+		if (frameID >= 0)
+		{
+			for (int jj = 0; jj < 9; jj++)
+				VideoInfo.VideoInfo[frameID].R[jj] = R[jj];
+
+			for (int jj = 0; jj < 3; jj++)
+				VideoInfo.VideoInfo[frameID].camCenter[jj] = C[jj];
+
+			//T = -R*Center;
+			mat_mul(R, C, VideoInfo.VideoInfo[frameID].T, 3, 3, 1);
+			for (int jj = 0; jj < 3; jj++)
+				VideoInfo.VideoInfo[frameID].T[jj] = -VideoInfo.VideoInfo[frameID].T[jj];
+
+			mat_invert(VideoInfo.VideoInfo[frameID].R, VideoInfo.VideoInfo[frameID].invR);
+			GetrtFromRT(VideoInfo.VideoInfo[frameID].rt,
+				VideoInfo.VideoInfo[frameID].R, VideoInfo.VideoInfo[frameID].T);
+			AssembleP(VideoInfo.VideoInfo[frameID].K, VideoInfo.VideoInfo[frameID].R,
+				VideoInfo.VideoInfo[frameID].T, VideoInfo.VideoInfo[frameID].P);
+		}
+	}
+	fclose(fp);
+	//READ FROM VIDEO POSE: END
+
+	return 0;
+}
 
 
 
@@ -7125,8 +7375,7 @@ void GenerateViewAll_3D_2DInliers(char *Path, int viewID, int startID, int stopI
 		fclose(fp);
 	}
 
-	sprintf(Fname, "%s/%d/Inliers_3D2D.txt", Path, viewID);
-	FILE *fp = fopen(Fname, "w+");
+	sprintf(Fname, "%s/%d/Inliers_3D2D.txt", Path, viewID);	FILE *fp = fopen(Fname, "w+");
 	for (int ii = 0; ii < n3Dcorpus; ii++)
 	{
 		fprintf(fp, "%d\n", All3DviewIDper3D[ii].size());
@@ -7489,6 +7738,97 @@ double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, doub
 	delete[]T;
 	return zncc;
 }
+double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, int nchannels, Point2i &POI, int search_area, double thresh)
+{
+	//No interpolation at all, just slide the template around to compute the ZNCC
+	int m, i, j, ii, jj, iii, jjj, II, JJ, length = width*height, patternLength = pattern_size*pattern_size;
+	double t_f, t_g, t_1, t_2, t_3, t_4, t_5, m_F, m_G;
+
+	Point2d w_pt, ima_pt;
+	int Pattern_cen_x = pattern_size / 2;
+	int Pattern_cen_y = pattern_size / 2;
+
+	FILE *fp1, *fp2;
+	bool printout = false;
+
+	Point2i orgPOI = POI;
+	double *T = new double[2 * (2 * hsubset + 1)*(2 * hsubset + 1)*nchannels];
+	double zncc = 0.0;
+	for (j = -search_area; j <= search_area; j++)
+	{
+		for (i = -search_area; i <= search_area; i++)
+		{
+			m = -1;
+			t_f = 0.0;
+			t_g = 0.0;
+
+			if (printout)
+			{
+				fp1 = fopen("C:/temp/src.txt", "w+");
+				fp2 = fopen("C:/temp/tar.txt", "w+");
+			}
+
+			for (jjj = -hsubset; jjj <= hsubset; jjj++)
+			{
+				for (iii = -hsubset; iii <= hsubset; iii++)
+				{
+					for (int kk = 0; kk < nchannels; kk++)
+					{
+						jj = Pattern_cen_y + jjj, ii = Pattern_cen_x + iii;
+
+						JJ = orgPOI.y + jjj + j, II = orgPOI.x + iii + i;
+
+						m_F = Pattern[ii + jj*pattern_size + kk*patternLength], m_G = Image[II + JJ*width + kk*length];
+
+						if (printout)
+							fprintf(fp1, "%.2f ", m_F), fprintf(fp2, "%.2f ", m_G);
+
+						m++;
+						T[2 * m] = m_F, T[2 * m + 1] = m_G;
+						t_f += m_F, t_g += m_G;
+					}
+				}
+				if (printout)
+					fprintf(fp1, "\n"), fprintf(fp2, "\n");
+			}
+			if (printout)
+				fclose(fp1), fclose(fp2);
+
+			t_f = t_f / (m + 1);
+			t_g = t_g / (m + 1);
+			t_1 = 0.0, t_2 = 0.0, t_3 = 0.0;
+			for (iii = 0; iii <= m; iii++)
+			{
+				t_4 = *(T + 2 * iii + 0) - t_f;
+				t_5 = *(T + 2 * iii + 1) - t_g;
+				t_1 += (t_4*t_5), t_2 += (t_4*t_4), t_3 += (t_5*t_5);
+			}
+
+			t_2 = sqrt(t_2*t_3);
+			if (t_2 < 1e-10)
+				t_2 = 1e-10;
+
+			t_3 = t_1 / t_2;
+			if (t_3 > 1.0 || t_3 < -1.0)
+				t_3 = 0.0;
+
+			if (t_3>thresh && t_3 > zncc)
+			{
+				zncc = t_3;
+				POI.x = orgPOI.x + i, POI.y = orgPOI.y + j;
+			}
+			else if (t_3 < -thresh && t_3 < zncc)
+			{
+				zncc = t_3;
+				POI.x = orgPOI.x + i, POI.y = orgPOI.y + j;
+			}
+		}
+	}
+	zncc = abs(zncc);
+
+	delete[]T;
+	return zncc;
+}
 double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd)
 {
 	int i, j, k, m, ii, jj, iii, jjj, iii2, jjj2;
@@ -7675,6 +8015,206 @@ double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double
 	if (createMem)
 		delete[]Znssd_reqd;
 	if (abs(p[0]) > hsubset || abs(p[1]) > hsubset || p[0] != p[0] || p[1] != p[1] || DIC_Coeff_min > 1.0 - 0.5*ZNCCthresh)
+		return false;
+
+	POI.x += p[0], POI.y += p[1];
+
+	return 1.0 - 0.5*DIC_Coeff_min;
+}
+double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, int nchannels, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd)
+{
+	int i, j, k, m, ii, jj, kk, iii, jjj, iii2, jjj2;
+	double II, JJ, iii_n, jjj_n, gx, gy, DIC_Coeff, DIC_Coeff_min, t_1, t_2, t_3, t_4, t_5, t_6, m_F, m_G, t_f, t_ff, t_g, S[6];
+	double conv_crit_1 = pow(10.0, -Convergence_Criteria - 2);
+	double conv_crit_2 = conv_crit_1*0.1;
+	int NN[] = { 3, 6, 12 }, P_Jump_Incr[] = { 1, 1 };
+	int nn = NN[advanced_tech], _iter = 0, Iter_Max = 20;
+	int p_jump, p_jump_0 = 1, p_jump_incr = P_Jump_Incr[advanced_tech];
+	int length = width*height, pattern_length = pattern_size*pattern_size;
+
+	double AA[144], BB[12], CC[12];
+
+	bool createMem = false;
+	if (Znssd_reqd == NULL)
+	{
+		createMem = true;
+		Znssd_reqd = new double[6 * (2 * hsubset + 1)*(2 * hsubset + 1)*nchannels];
+	}
+
+	int Pattern_cen_x = pattern_size / 2;
+	int Pattern_cen_y = pattern_size / 2;
+
+	double p[12], p_best[12];
+	for (i = 0; i < 12; i++)
+		p[i] = 0.0;
+
+	nn = NN[advanced_tech];
+	int pixel_increment_in_subset[] = { 1, 2, 2, 3 };
+
+	bool printout = false;
+	FILE *fp1 = 0, *fp2 = 0;
+
+	/// Iteration: Begin
+	bool Break_Flag = false;
+	DIC_Coeff_min = 4.0;
+	for (p_jump = p_jump_0; p_jump > 0; p_jump -= p_jump_incr)
+	{
+		for (k = 0; k < Iter_Max; k++)
+		{
+			m = -1;
+			t_1 = 0.0, t_2 = 0.0;
+			for (iii = 0; iii < 144; iii++)
+				AA[iii] = 0.0;
+			for (iii = 0; iii < 12; iii++)
+				BB[iii] = 0.0;
+
+			if (printout)
+				fp1 = fopen("C:/temp/src.txt", "w+"), fp2 = fopen("C:/temp/tar.txt", "w+");
+
+			for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+			{
+				for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+				{
+					ii = Pattern_cen_x + iii, jj = Pattern_cen_y + jjj;
+					if (ii<0 || ii>(width - 1) || jj<0 || jj>(height - 1))
+						continue;
+
+					iii2 = iii*iii, jjj2 = jjj*jjj;
+					if (advanced_tech == 0)
+					{
+						II = POI.x + iii + p[0] + p[2] * iii;
+						JJ = POI.y + jjj + p[1] + p[2] * jjj;
+					}
+					else if (advanced_tech == 1)
+					{
+						II = POI.x + iii + p[0] + p[2] * iii + p[3] * jjj;
+						JJ = POI.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+					}
+					else if (advanced_tech == 2)
+					{
+						II = POI.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * iii2*0.5 + p[7] * jjj2*0.5 + p[8] * iii*jjj;
+						JJ = POI.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[9] * iii2*0.5 + p[10] * jjj2*0.5 + p[11] * iii*jjj;
+					}
+
+					if (II<0.0 || II>(double)(width - 1) - (1e-10) || JJ<0.0 || JJ>(double)(height - 1) - (1e-10))
+						continue;
+
+					for (kk = 0; kk < nchannels; kk++)
+					{
+						Get_Value_Spline(Para + kk*length, width, height, II, JJ, S, 0, InterpAlgo);
+						m_F = Pattern[ii + jj*pattern_size + kk*pattern_length];
+						m_G = S[0], gx = S[1], gy = S[2];
+						m++;
+
+						Znssd_reqd[6 * m + 0] = m_F, Znssd_reqd[6 * m + 1] = m_G;
+						Znssd_reqd[6 * m + 2] = gx, Znssd_reqd[6 * m + 3] = gy;
+						Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
+						t_1 += m_F, t_2 += m_G;
+
+						if (printout)
+							fprintf(fp1, "%e ", m_F), fprintf(fp2, "%e ", m_G);
+					}
+				}
+				if (printout)
+					fprintf(fp1, "\n"), fprintf(fp2, "\n");
+			}
+			if (printout)
+				fclose(fp1), fclose(fp2);
+
+			if (k == 0)
+			{
+				t_f = t_1 / (m + 1);
+				t_1 = 0.0;
+				for (iii = 0; iii <= m; iii++)
+				{
+					t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+					t_1 += t_4*t_4;
+				}
+				t_ff = sqrt(t_1);
+			}
+
+			t_g = t_2 / (m + 1);
+			t_2 = 0.0;
+			for (iii = 0; iii <= m; iii++)
+			{
+				t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+				t_2 += t_5*t_5;
+			}
+			t_2 = sqrt(t_2);
+
+			DIC_Coeff = 0.0;
+			for (iii = 0; iii <= m; iii++)
+			{
+				t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+				t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+				t_6 = t_5 / t_2 - t_4 / t_ff;
+				t_3 = t_6 / t_2;
+				gx = Znssd_reqd[6 * iii + 2], gy = Znssd_reqd[6 * iii + 3];
+				iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
+				CC[0] = gx, CC[1] = gy;
+				if (advanced_tech == 0)
+					CC[2] = gx*iii_n + gy*jjj_n;
+				if (advanced_tech > 0)
+				{
+					CC[2] = gx*iii_n, CC[3] = gx*jjj_n;
+					CC[4] = gy*iii_n, CC[5] = gy*jjj_n;
+				}
+				if (advanced_tech == 2)
+				{
+					CC[6] = gx*iii_n*iii_n*0.5, CC[7] = gx*jjj_n*jjj_n*0.5, CC[8] = gx*iii_n*jjj_n;
+					CC[9] = gy*iii_n*iii_n*0.5, CC[10] = gy*jjj_n*jjj_n*0.5, CC[11] = gy*iii_n*jjj_n;
+				}
+				for (j = 0; j < nn; j++)
+				{
+					BB[j] += t_3*CC[j];
+					for (i = 0; i < nn; i++)
+						AA[j*nn + i] += CC[i] * CC[j] / (t_2*t_2);
+				}
+
+				DIC_Coeff += t_6*t_6;
+			}
+
+			QR_Solution_Double(AA, BB, nn, nn);
+			for (iii = 0; iii < nn; iii++)
+				p[iii] -= BB[iii];
+
+			if (!IsNumber(p[0]) || abs(p[0]) > hsubset || abs(p[1]) > hsubset)
+			{
+				if (createMem)
+					delete[]Znssd_reqd;
+				return false;
+			}
+
+			if (DIC_Coeff < DIC_Coeff_min)	// If the iteration does not converge, this can be helpful
+			{
+				DIC_Coeff_min = DIC_Coeff;
+				for (iii = 0; iii < nn; iii++)
+					p_best[iii] = p[iii];
+			}
+
+			if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+			{
+				for (iii = 2; iii < nn; iii++)
+				{
+					if (fabs(BB[iii]) > conv_crit_2)
+						break;
+				}
+				if (iii == nn)
+					Break_Flag = true;
+			}
+
+			if (Break_Flag)
+				break;
+		}
+		// In case the iteration converges to "wrong" points, always use the data that lead to the least-square value.
+		for (iii = 0; iii < nn; iii++)
+			p[iii] = p_best[iii];
+	}
+	/// Iteration: End
+
+	if (createMem)
+		delete[]Znssd_reqd;
+	if (abs(p[0]) > hsubset || abs(p[1]) > hsubset || p[0] != p[0] || p[1] != p[1] || 1.0 - 0.5*DIC_Coeff_min < ZNCCthresh)
 		return false;
 
 	POI.x += p[0], POI.y += p[1];
@@ -8592,6 +9132,523 @@ double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, i
 		delete[]T;
 	}
 	return ZNCC;
+}
+int TrackOpenCVLK(char *Path, int startFrame, int stopFrame)
+{
+	Mat colorImg, gray, prevGray, tImg, backGround, bestFrameInWind;
+	vector<Point2f> points[2];
+	vector<uchar> status;
+	vector<float> err;
+
+	char Fname[200];
+	cvNamedWindow("Static Image detection with LK", WINDOW_NORMAL);
+
+	bool needToInit = true;
+	int MAX_COUNT = 5000, frameID = 0;
+
+	TermCriteria termcrit(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.03);
+	Size subPixWinSize(21, 21), winSize(31, 31);
+
+	for (int frameID = startFrame; frameID <= stopFrame; frameID++)
+	{
+		sprintf(Fname, "%s/%d.png", Path, frameID);
+		colorImg = imread(Fname, 1);
+		if (colorImg.empty())
+			break;
+
+		cvtColor(colorImg, gray, CV_BGR2GRAY);
+		cvtColor(gray, backGround, CV_GRAY2BGR);
+
+		if (frameID == startFrame) // automatic initialization
+		{
+			goodFeaturesToTrack(gray, points[1], MAX_COUNT, 0.01, 10, Mat(), 3, 0, 0.04);
+			cornerSubPix(gray, points[1], subPixWinSize, Size(-1, -1), termcrit);
+			for (int jj = 0; jj < points[1].size(); jj++)
+				circle(backGround, points[1][jj], 5, Scalar(83, 185, 255), -1, 8);
+
+			sprintf(Fname, "%s/%d.txt", Path, frameID);	FILE *fp = fopen(Fname, "w+");
+			for (int jj = 0; jj < points[1].size(); jj++)
+				fprintf(fp, "%.3f %.3f\n", points[1][jj].x, points[1][jj].y);
+			fclose(fp);
+		}
+
+		if (!points[0].empty())
+		{
+			status.clear(); err.clear();
+			if (prevGray.empty())
+				gray.copyTo(prevGray);
+			calcOpticalFlowPyrLK(prevGray, gray, points[0], points[1], status, err, winSize, 3, termcrit, 0, 0.001);
+
+			size_t i, k;
+			int succeded = 0;
+			for (i = k = 0; i < points[1].size(); i++)
+			{
+				if (!status[i])
+					continue;
+				succeded++;
+				points[1][k++] = points[1][i];
+				circle(backGround, points[1][i], 5, Scalar(83, 185, 255), -1, 8);
+			}
+			points[1].resize(k);
+
+			sprintf(Fname, "%s/%d.txt", Path, frameID);	FILE *fp = fopen(Fname, "w+");
+			for (int jj = 0; jj < points[1].size(); jj++)
+				fprintf(fp, "%.3f %.3f\n", points[1][jj].x, points[1][jj].y);
+			fclose(fp);
+
+			if (succeded < 0.5*points[1].size())
+			{
+				printf("Redected @ frame %d due to low # of features", frameID);
+				goodFeaturesToTrack(gray, points[1], MAX_COUNT, 0.01, 10, Mat(), 3, 0, 0.04);
+				cornerSubPix(gray, points[1], subPixWinSize, Size(-1, -1), termcrit);
+			}
+		}
+
+		needToInit = false;
+		imshow("Static Image detection with LK", backGround);
+		char c = (char)waitKey(-1);
+		if (c == 27)
+			break;
+
+		std::swap(points[1], points[0]);
+		swap(prevGray, gray);
+		frameID++;
+	}
+
+	return 0;
+}
+int ReadCorresAndRunTracking(char *Path, int nviews, int startFrame, int beginFrame, int endFrame, int *FrameOffset, int HighFrameRateFactor)
+{
+	char Fname[200];
+
+	double u, v;
+	int nvis, viewid, TrajCount = 0;
+	sprintf(Fname, "%s/Dynamic/Corres_%d.txt", Path, startFrame); FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		return 1;
+	}
+	while (fscanf(fp, "%d ", &nvis) != EOF)
+	{
+		for (int ii = 0; ii < nvis; ii++)
+			fscanf(fp, "%d %lf %lf ", &viewid, &u, &v);
+		TrajCount++;
+	}
+	fclose(fp);
+
+	TrajectoryData TrajInfo;
+	TrajInfo.nTrajectories = TrajCount;
+	TrajInfo.trajectoryUnit = new vector<Trajectory2D>[TrajCount];
+
+	TrajCount = 0;
+	sprintf(Fname, "%s/Dynamic/Corres_%d.txt", Path, startFrame); fp = fopen(Fname, "r");
+	while (fscanf(fp, "%d ", &nvis) != EOF)
+	{
+		Trajectory2D traj2d;
+		traj2d.nViews = nvis;
+
+		for (int ii = 0; ii < nvis; ii++)
+		{
+			fscanf(fp, "%d %lf %lf ", &viewid, &u, &v);
+			traj2d.viewIDs.push_back(viewid);
+			traj2d.uv.push_back(Point2d(u, v));
+			traj2d.frameID.push_back((startFrame + FrameOffset[ii] - 1)*HighFrameRateFactor + 1);
+		}
+
+		TrajInfo.trajectoryUnit[TrajCount].push_back(traj2d);
+		TrajCount++;
+	}
+	fclose(fp);
+	//May need to do refinement on the inital corres
+
+	Mat *cImg = new Mat[nviews], *nImg = new Mat[nviews];
+	static const int arr[] = { 15, 19, 23 };
+	vector<int> pyrSizeVector(arr, arr + sizeof(arr) / sizeof(arr[0]));
+
+	Mat Oimg, Nimg; int c = 0;
+
+	//forward track
+	double starttime = omp_get_wtime();
+	printf("Forward flow: ");
+	for (int frameID = (startFrame - 1)*HighFrameRateFactor + 1; frameID <= (endFrame - 1)*HighFrameRateFactor + 1 - 1; frameID++)
+	{
+		//Read Image
+		printf("%d ... ", frameID);
+		if (frameID == (startFrame - 1)*HighFrameRateFactor + 1)
+		{
+			for (int jj = 0; jj < nviews; jj++)
+			{
+				if (HighFrameRateFactor == 1)
+					sprintf(Fname, "%s/%d/%d.png", Path, jj, frameID + FrameOffset[jj]);
+				else
+					sprintf(Fname, "%s/%d/F/%d.png", Path, jj, frameID + FrameOffset[jj] * HighFrameRateFactor);
+				cImg[jj] = imread(Fname, 0);
+				if (cImg[jj].empty() && frameID + FrameOffset[jj] * HighFrameRateFactor <= (endFrame - 1)*HighFrameRateFactor)
+					printf("cannot load %s\n", Fname);
+			}
+		}
+		for (int jj = 0; jj < nviews; jj++)
+		{
+			if (HighFrameRateFactor == 1)
+				sprintf(Fname, "%s/%d/%d.png", Path, jj, frameID + FrameOffset[jj]);
+			else
+				sprintf(Fname, "%s/%d/F/%d.png", Path, jj, frameID + FrameOffset[jj] * HighFrameRateFactor + 1);
+			nImg[jj] = imread(Fname, 0);
+			if (nImg[jj].empty() && frameID + FrameOffset[jj] * HighFrameRateFactor + 1 <= (endFrame - 1)*HighFrameRateFactor)
+				printf("cannot load %s\n", Fname);
+		}
+
+		//Run tracking
+		bool addedPt = false;
+		for (int trajID = 0; trajID < TrajCount; trajID++)
+		{
+			Trajectory2D traj2d;
+#pragma omp parallel for
+			for (int view = 0; view < TrajInfo.trajectoryUnit[trajID].back().viewIDs.size(); view++)
+			{
+				int viewID = TrajInfo.trajectoryUnit[trajID].back().viewIDs[view];
+				Mat cImage = cImg[viewID].clone(), nImage = nImg[viewID].clone();
+				if (cImage.empty() || nImage.empty())
+					continue;
+
+				vector<Point2f> prePts; prePts.push_back(TrajInfo.trajectoryUnit[trajID].back().uv[view]);
+				vector<Point2f> newPts; newPts.push_back(Point2f(0, 0));
+
+				bool success = false;
+				double MinFlowBackFore = 9e9;
+				for (int pyamidIdx = 0; pyamidIdx < pyrSizeVector.size(); pyamidIdx++)
+				{
+					vector<Point2f> foreTrackPts, backTrackedPts;
+					vector<uchar> tempOutputStatus, tempOutputStatus_2;
+					vector<float> tempOutputError, tempOutputError_2;
+
+					int tempPyramidSize = pyrSizeVector[pyamidIdx];
+					calcOpticalFlowPyrLK(cImage, nImage, prePts, foreTrackPts, tempOutputStatus, tempOutputError, cvSize(tempPyramidSize, tempPyramidSize), 2);
+					calcOpticalFlowPyrLK(nImage, cImage, foreTrackPts, backTrackedPts, tempOutputStatus_2, tempOutputError_2, cvSize(tempPyramidSize, tempPyramidSize), 2);
+
+					double tempBackTrackDist = Distance2D(prePts[0], backTrackedPts[0]);
+					if (!tempOutputStatus[0] || !tempOutputStatus_2[0] || tempBackTrackDist > OPTICALFLOW_BIDIRECT_DIST_THRESH)  //invalid optical flow
+						continue;
+					else
+					{
+						if (MinFlowBackFore > tempBackTrackDist)
+						{
+							MinFlowBackFore = tempBackTrackDist;
+							newPts[0] = foreTrackPts[0], success = true;
+						}
+					}
+				}
+
+#pragma omp critical
+				if (success)
+				{
+					traj2d.viewIDs.push_back(viewID);
+					traj2d.uv.push_back(newPts[0]);
+					traj2d.frameID.push_back(frameID + FrameOffset[viewID] * HighFrameRateFactor + 1);
+					if (frameID + FrameOffset[viewID] * HighFrameRateFactor + 1 >= 599)
+						int a = 0;
+
+					if (0)
+					{
+						if (c == 0)
+						{
+							cvtColor(cImage, Oimg, CV_GRAY2BGR);
+							circle(Oimg, prePts[0], 5, Scalar(83, 185, 255), 1, 8);
+							sprintf(Fname, "C:/temp/%d.png", c); c++;
+							imwrite(Fname, Oimg);
+						}
+
+						cvtColor(nImage, Nimg, CV_GRAY2BGR);
+						circle(Nimg, newPts[0], 5, Scalar(83, 185, 255), 1, 8);
+						sprintf(Fname, "C:/temp/%d.png", c); c++;
+						imwrite(Fname, Nimg);
+					}
+				}
+			}
+
+#pragma omp critical
+			if (traj2d.viewIDs.size() > 0)
+			{
+				addedPt = true;
+				TrajInfo.trajectoryUnit[trajID].push_back(traj2d);
+			}
+		}
+
+		if (!addedPt)
+			break;
+
+		for (int jj = 0; jj < nviews; jj++)
+			swap(nImg[jj], cImg[jj]);
+	}
+	printf("takes %.2fs\n", omp_get_wtime() - starttime);
+
+	//backward track
+	printf("\nBackward flow: ");
+	starttime = omp_get_wtime();
+	for (int frameID = (startFrame - 1)*HighFrameRateFactor + 1; frameID >= (beginFrame - 1)*HighFrameRateFactor + 1 + 1; frameID--)
+	{
+		//Read Image
+		printf("%d ... ", frameID);
+		if (frameID == (startFrame - 1)*HighFrameRateFactor + 1)
+		{
+			for (int jj = 0; jj < nviews; jj++)
+			{
+				if (HighFrameRateFactor == 1)
+					sprintf(Fname, "%s/%d/%d.png", Path, jj, frameID + FrameOffset[jj]);
+				else
+					sprintf(Fname, "%s/%d/F/%d.png", Path, jj, frameID + FrameOffset[jj] * HighFrameRateFactor);
+				cImg[jj] = imread(Fname, 0);
+				if (cImg[jj].empty() && frameID + FrameOffset[jj] * HighFrameRateFactor >= (beginFrame - 1)*HighFrameRateFactor + 1)
+					printf("cannot load %s\n", Fname);
+			}
+		}
+		for (int jj = 0; jj < nviews; jj++)
+		{
+			if (HighFrameRateFactor == 1)
+				sprintf(Fname, "%s/%d/%d.png", Path, jj, frameID + FrameOffset[jj]);
+			else
+				sprintf(Fname, "%s/%d/F/%d.png", Path, jj, frameID + FrameOffset[jj] * HighFrameRateFactor - 1);
+			nImg[jj] = imread(Fname, 0);
+			if (nImg[jj].empty() && frameID + FrameOffset[jj] * HighFrameRateFactor + 1 >= (beginFrame - 1)*HighFrameRateFactor + 1)
+				printf("cannot load %s\n", Fname);
+		}
+
+		//Run tracking
+		bool addedPt = false;
+#pragma omp parallel for
+		for (int trajID = 0; trajID < TrajCount; trajID++)
+		{
+			Trajectory2D traj2d;
+			int firstnVis = (frameID == (startFrame - 1)*HighFrameRateFactor + 1) ? TrajInfo.trajectoryUnit[trajID][0].viewIDs.size() : TrajInfo.trajectoryUnit[trajID].back().viewIDs.size();
+			for (int view = 0; view < firstnVis; view++)
+			{
+				int viewID = (frameID == (startFrame - 1)*HighFrameRateFactor + 1) ? TrajInfo.trajectoryUnit[trajID][0].viewIDs[view] : TrajInfo.trajectoryUnit[trajID].back().viewIDs[view];
+				Mat cImage = cImg[viewID].clone(), nImage = nImg[viewID].clone();
+				if (cImage.empty() || nImage.empty())
+					continue;
+				//imwrite("C:/temp/c.png", cImage), imwrite("C:/temp/n.png", nImage);
+
+				vector<Point2f> prePts;
+				if (frameID == (startFrame - 1)*HighFrameRateFactor + 1)
+					prePts.push_back(TrajInfo.trajectoryUnit[trajID][0].uv[view]);
+				else
+					prePts.push_back(TrajInfo.trajectoryUnit[trajID].back().uv[view]);
+
+				vector<Point2f> newPts; newPts.push_back(Point2f(0, 0));
+
+				bool success = false;
+				double MinFlowBackFore = 9e9;
+				for (int pyamidIdx = 0; pyamidIdx < pyrSizeVector.size(); pyamidIdx++)
+				{
+					vector<Point2f> foreTrackPts, backTrackedPts;
+					vector<uchar> tempOutputStatus, tempOutputStatus_2;
+					vector<float> tempOutputError, tempOutputError_2;
+
+					int tempPyramidSize = pyrSizeVector[pyamidIdx];
+					calcOpticalFlowPyrLK(cImage, nImage, prePts, foreTrackPts, tempOutputStatus, tempOutputError, cvSize(tempPyramidSize, tempPyramidSize), 3);
+					calcOpticalFlowPyrLK(nImage, cImage, foreTrackPts, backTrackedPts, tempOutputStatus_2, tempOutputError_2, cvSize(tempPyramidSize, tempPyramidSize), 3);
+
+					double tempBackTrackDist = Distance2D(prePts[0], backTrackedPts[0]);
+					if (!tempOutputStatus[0] || !tempOutputStatus_2[0] || tempBackTrackDist > OPTICALFLOW_BIDIRECT_DIST_THRESH)  //invalid optical flow
+						continue;
+					else
+					{
+						if (MinFlowBackFore > tempBackTrackDist)
+						{
+							MinFlowBackFore = tempBackTrackDist;
+							newPts[0] = foreTrackPts[0], success = true;
+						}
+					}
+				}
+
+#pragma omp critical
+				if (success)
+				{
+					traj2d.viewIDs.push_back(viewID);
+					traj2d.uv.push_back(newPts[0]);
+					traj2d.frameID.push_back(frameID + FrameOffset[viewID] * HighFrameRateFactor - 1);
+
+					if (0)
+					{
+						cvtColor(nImage, Nimg, CV_GRAY2BGR);
+						circle(Nimg, newPts[0], 5, Scalar(83, 185, 255), 1, 8);
+						sprintf(Fname, "C:/temp/%d.png", c); c++;
+						imwrite(Fname, Nimg);
+					}
+				}
+			}
+
+#pragma omp critical
+			if (traj2d.viewIDs.size() > 0)
+			{
+				addedPt = true;
+				TrajInfo.trajectoryUnit[trajID].push_back(traj2d);
+			}
+		}
+
+		if (!addedPt)
+			break;
+
+		for (int jj = 0; jj < nviews; jj++)
+			swap(nImg[jj], cImg[jj]);
+	}
+	printf("takes %.2fs\n", omp_get_wtime() - starttime);
+
+	//Write TrajData
+	printf("\nWrite results ...");
+	for (int viewID = 0; viewID < nviews; viewID++)
+	{
+		sprintf(Fname, "%s/Track2D/%d.txt", Path, viewID); FILE *fp = fopen(Fname, "a");
+		for (int trajID = 0; trajID < TrajCount; trajID++) // for all trajectories
+		{
+			int count = 0;
+			for (int fID = 0; fID < TrajInfo.trajectoryUnit[trajID].size(); fID++) //for all time instances in that trajectory
+				for (int vid = 0; vid < TrajInfo.trajectoryUnit[trajID][fID].viewIDs.size(); vid++) //for all visible cameras of that time instances
+					if (TrajInfo.trajectoryUnit[trajID][fID].viewIDs[vid] == viewID)
+						count++;
+
+			fprintf(fp, "%d %d", trajID, count);
+			for (int fID = 0; fID < TrajInfo.trajectoryUnit[trajID].size(); fID++) //for all time instances in that trajectory
+			{
+				for (int vid = 0; vid < TrajInfo.trajectoryUnit[trajID][fID].viewIDs.size(); vid++) //for all visible cameras of that time instances
+				{
+					if (TrajInfo.trajectoryUnit[trajID][fID].viewIDs[vid] == viewID)
+						fprintf(fp, "%d %.3f %.3f ", TrajInfo.trajectoryUnit[trajID][fID].frameID[vid], TrajInfo.trajectoryUnit[trajID][fID].uv[vid].x, TrajInfo.trajectoryUnit[trajID][fID].uv[vid].y);
+				}
+			}
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+	printf("done!\n");
+
+	delete[]cImg, delete[]nImg;
+
+	return 0;
+}
+int CleanUp2DTrackingByGradientConsistency(char *Path, int nviews, int ntrajects)
+{
+	double magThresh = 15.0;
+	int d1, frameCount;
+	double t1, t2;
+	char Fname[512];
+	vector<Point2d> UVList;
+
+	int ID[MaxnFrame], frameIDList[MaxnFrame];
+	double uList[MaxnFrame], vList[MaxnFrame];
+	double duList[MaxnFrame], dvList[MaxnFrame], direc[MaxnFrame], mag[MaxnFrame];
+
+	for (int viewID = 0; viewID < nviews; viewID++)
+	{
+		sprintf(Fname, "%s/Track2D/%d.txt", Path, viewID); FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+		{
+			printf("Cannot load %s\n", Fname);
+			return 1;
+		}
+		printf("Working on %s ...\n", Fname);
+		sprintf(Fname, "%s/Track2D/R_%d.txt", Path, viewID); FILE *fp2 = fopen(Fname, "w+");
+
+		fscanf(fp, "%d ", &d1);
+		if (abs(d1 + 1) < 0.01)
+			fscanf(fp, "%d ", &d1);
+
+		for (int trajID = 0; trajID < ntrajects; trajID++)
+		{
+			UVList.clear();
+			frameCount = 0;
+			while (true)
+			{
+				if (fscanf(fp, "%d ", &d1) == EOF)
+					break;
+
+				if (d1 == -1)
+				{
+					fscanf(fp, "%d ", &d1);//end of this traj;
+					break;
+				}
+				else
+				{
+					fscanf(fp, "%lf %lf ", &t1, &t2);
+					frameIDList[frameCount] = d1;
+					ID[frameCount] = frameCount;
+					UVList.push_back(Point2d(t1, t2));
+					frameCount++;
+				}
+			}
+
+			//Sort tracked points
+			Quick_Sort_Int(frameIDList, ID, 0, frameCount - 1);
+			for (int frameID = 0; frameID < frameCount; frameID++)
+				uList[frameID] = UVList[ID[frameID]].x, vList[frameID] = UVList[ID[frameID]].y;
+
+			//Compute the gradient
+			for (int frameID = 0; frameID < frameCount - 1; frameID++)
+				duList[frameID] = uList[frameID + 1] - uList[frameID], dvList[frameID] = vList[frameID + 1] - vList[frameID];
+
+			//Compute direction and mag
+			for (int frameID = 0; frameID < frameCount - 1; frameID++)
+				direc[frameID] = abs(atan2(dvList[frameID], duList[frameID])),
+				mag[frameID] = sqrt(pow(duList[frameID], 2) + pow(dvList[frameID], 2));
+
+			//check for large changes
+			int breakFrame = 0;
+			for (int frameID = 0; frameID < frameCount - 2; frameID++)
+				if (mag[frameID] * direc[frameID] > 0.3* mag[frameID + 1] * direc[frameID + 1] || mag[frameID + 1] < magThresh || mag[frameID] < 0.01)
+					breakFrame++;
+				else
+					break;
+			breakFrame -= 10;
+
+			fprintf(fp2, "%d %d ", trajID, breakFrame);
+			for (int frameID = 0; frameID < breakFrame; frameID++)
+				fprintf(fp2, "%d %.3f %.3f ", frameIDList[frameID], UVList[ID[frameID]].x, UVList[ID[frameID]].y);
+			fprintf(fp2, "\n");
+		}
+		fclose(fp), fclose(fp2);
+	}
+
+	return 0;
+}
+int ConvertTrackingLowFrameRate(char *Path, int nviews, int ntrajects, int HighFrameRateFactor)
+{
+	char Fname[200];
+	int d, nframes;
+	int frameIDList[MaxnFrame];
+	Point2d uvList[MaxnFrame];
+
+	for (int viewID = 0; viewID < nviews; viewID++)
+	{
+		sprintf(Fname, "%s/Track2D/R_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+		{
+			printf("Cannot load %s\n", Fname);
+			return 1;
+		}
+		printf("Working on %s ...\n", Fname);
+		sprintf(Fname, "%s/Track2D/RL_%d.txt", Path, viewID); FILE *fp2 = fopen(Fname, "w+");
+
+		for (int trajID = 0; trajID < ntrajects; trajID++)
+		{
+			fscanf(fp, "%d %d ", &d, &nframes);
+			for (int fid = 0; fid < nframes; fid++)
+				fscanf(fp, "%d %lf %lf ", &frameIDList[fid], &uvList[fid].x, &uvList[fid].y);
+			
+			int framecount = 0;
+			for (int fid = 0; fid < nframes; fid++)
+				if ((frameIDList[fid] - 1 )% 4 == 0)
+					framecount++;
+
+			fprintf(fp2, "%d %d ", trajID, framecount);
+			for (int fid = 0; fid < nframes; fid++)
+				if ((frameIDList[fid] - 1) % 4 == 0)
+					fprintf(fp2, "%d %.3f %.3f ", (frameIDList[fid] - 1) / 4 + 1, uvList[fid].x, uvList[fid].y);
+			fprintf(fp2, "\n");
+		}
+		fclose(fp), fclose(fp2);
+	}
+	return 0;
 }
 
 void DetectBlobCorrelation(char *ImgName, vector<KeyPoint> &kpts, int nOctaveLayers, int nScalePerOctave, double sigma, int PatternSize, int NMS_BW, double thresh)

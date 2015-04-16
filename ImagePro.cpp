@@ -3,7 +3,7 @@
 
 void filter1D_row_Double(double *kernel, int k_size, double *in, double *out, int width, int height)
 {
-	int ii, jj, i_in, iKernel, k_mid = (k_size - 1) / 2;
+	int ii, jj, i_in, iKernel, k_mid = k_size / 2;
 	double t_value;
 
 	for (ii = 0; ii < width*height; ii++)
@@ -27,7 +27,7 @@ void filter1D_row_Double(double *kernel, int k_size, double *in, double *out, in
 }
 void filter1D_row(double *kernel, int k_size, unsigned char *in, float *out, int width, int height)
 {
-	int ii, jj, i_in, iKernel, k_mid = (k_size - 1) / 2;
+	int ii, jj, i_in, iKernel, k_mid = k_size / 2;
 	float t_value;
 
 	for (ii = 0; ii < width*height; ii++)
@@ -51,7 +51,7 @@ void filter1D_row(double *kernel, int k_size, unsigned char *in, float *out, int
 }
 void filter1D_row(double *kernel, int k_size, char *in, float *out, int width, int height)
 {
-	int ii, jj, i_in, iKernel, k_mid = (k_size - 1) / 2;
+	int ii, jj, i_in, iKernel, k_mid = k_size/ 2;
 	float t_value;
 
 	for (ii = 0; ii < width*height; ii++)

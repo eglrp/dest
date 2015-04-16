@@ -40,11 +40,8 @@ void ReadCurrentSfmGL(char *path, bool hasColor, bool hasNormal);
 bool ReadCurrent3DGL(char *path, bool hasColor, bool hasNormal, int timeID, bool setCoordinate);
 bool ReadCurrent3DGL2(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
 bool ReadCurrent3DGL3(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
-void ReadCurrentTrajectory(char *path, int timeID);
-void ReadCurrentTrajectory2(char *path, int timeID);
-void ReadCurrentTrajectory3(char *path, int timeID);
-void ReadCurrentTrajectory4(char *path, int timeID);
-void ReadCurrentTrajectory5(char *path, int timeID);
+int ReadCurrentTrajectory(char *path, int timeID);
+int ReadCurrentTrajectory2(char *path);
 
 void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID);
 void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime = 0);

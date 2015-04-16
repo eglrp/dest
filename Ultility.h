@@ -33,6 +33,8 @@ void MConventional_PhaseShifting(char *lpD, char *lpPBM, double* lpFO, int nipf,
 void DecodePhaseShift2(char *Image, char *PBM, double *PhaseUW, int width, int height, int *frequency, int nfrequency, int sstep, int LFstep, int half_filter_size, int m_mask);
 
 //Image processing
+bool RoateImage180(char *fname, char *Img, int &width, int &height, int nchannels, bool silent = false);
+bool GrabImageCVFormat(char *fname, char *Img, int &width, int &height, int nchannels, bool silent = false);
 bool GrabImage(char *fname, char *Img, int &width, int &height, int nchannels, bool silent = false);
 bool GrabImage(char *fname, unsigned char *Img, int &width, int &height, int nchannels, bool silent = false);
 bool GrabImage(char *fname, float *Img, int &width, int &height, int nchannels, bool silent = false);
@@ -40,6 +42,7 @@ bool GrabImage(char *fname, double *Img, int &width, int &height, int nchannels,
 
 void ShowDataToImage(char *Fname, char *Img, int width, int height, int nchannels, IplImage *cvImg = 0);
 
+bool SaveDataToImageCVFormat(char *fname, char *Img, int width, int height, int nchannels = 1) ;
 bool SaveDataToImage(char *fname, char *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, unsigned char *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, float *Img, int width, int height, int nchannels = 1);
@@ -149,6 +152,7 @@ void conv(float *A, int lenA, float *B, int lenB, float *C);
 void conv(double *A, int lenA, double *B, int lenB, double *C);
 void ZNCC1D(float *A, const int dimA, float *B, const int dimB, float *Result, float *nB = NULL);
 void ZNCC1D(double *A, int Asize, double *B, int Bsize, double *Result);
+void XCORR1D(float *s, const int sdim, float *b, const int bdim, float *res);
 
 void mat_invert(double* mat, double* imat, int dims = 3);
 void mat_invert(float* mat, float* imat, int dims = 3);
@@ -546,6 +550,7 @@ void GetKFromIntrinsic(CameraData &camera);
 
 void GetrtFromRT(CameraData *AllViewsParas, vector<int> AvailViews);
 void GetrtFromRT(CameraData *AllViewsParas, int nviews);
+void GetrtFromRT(CameraData &cam);
 void GetrtFromRT(double *rt, double *R, double *T);
 void GetRTFromrt(CameraData *AllViewsParas, vector<int> AvailViews);
 void GetRTFromrt(CameraData *AllViewsParas, int nviews);
@@ -573,7 +578,7 @@ int IsBlurred(const unsigned char* const luminance, const int width, const int h
 void BlurDetectionDriver(char *Path, int nimages, int width, int height, float blurThresh);
 
 int BAVisualSfMDriver(char *Path, char *nvmName, char *camInfo, char *IntrinsicInfo = NULL, bool lensconversion = 1, int sharedIntrinsics = 0);
-bool loadNVMLite(const string filepath, Corpus &CorpusData, int sharedIntrinsics);
+bool loadNVMLite(const string filepath, Corpus &CorpusData, int sharedIntrinsics, int nHDs = 30, int nVGAs = 24, int nPanels = 20);
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool saveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor = 1.0);
@@ -584,6 +589,7 @@ int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool inputtext = false, bool 
 bool loadIndividualNVMforpose(char *Path, CameraData *CameraInfo, vector<int>availViews, int timeIDstart, int timeIDstop, int nviews, bool sharedIntrinsics);
 int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel = RADIAL_TANGENTIAL_PRISM, int distortionCorrected = 1);
 int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime);
+int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime);
 
 void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker, int &npts, double sigma, int search_area, int NMS_BW, double thresh);
 
@@ -619,8 +625,14 @@ int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, un
 	unsigned char *ColorImg, float *colorResponse, double *DImg, double *ImgPara, double *maskSmooth, double *Znssd_reqd);
 
 double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, Point2i &POI, int search_area, double thresh);
+double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, int nchannels, Point2i &POI, int search_area, double thresh);
 double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd = 0);
+double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, int nchannels, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd = 0);
 double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
 double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
+int TrackOpenCVLK(char *Path, int startFrame, int stopFrame);
+int ReadCorresAndRunTracking(char *Path, int nviews, int startFrame, int beginFrame, int endFrame, int *FrameOffset, int HighFrameRateFactor = 4);
+int CleanUp2DTrackingByGradientConsistency(char *Path, int nviews, int ntrajects);
+int ConvertTrackingLowFrameRate(char *Path, int nviews, int ntrajects, int HighFrameRateFactor);
 
 #endif

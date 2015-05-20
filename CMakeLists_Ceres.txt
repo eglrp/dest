@@ -1,0 +1,20 @@
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
+PROJECT(EventReconstruction)
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -O4")
+
+FIND_PACKAGE( OpenCV REQUIRED )
+
+FIND_PACKAGE(Boost REQUIRED)
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
+INCLUDE_DIRECTORIES(${Boost_LIBRARY_DIR})
+
+FIND_PACKAGE(Ceres REQUIRED)
+INCLUDE_DIRECTORIES(${CERES_INCLUDE_DIRS})
+
+add_executable(  EventReconstruction main.cpp VideoSequence.cpp Visualization.cpp Geometry.cpp BAutil.cpp ImagePro.cpp  Matrix.cpp Ultility.cpp USAC.cpp FundamentalMatrixEstimator.cpp HomographyEstimator.cpp)
+target_link_libraries( EventReconstruction ${OpenCV_LIBS}  ${CERES_LIBRARIES} ${Boost_LIBRARIES})
+
+
+
+
+

@@ -196,11 +196,9 @@ int siftgpu(char *Fname1, char *Fname2, const float nndrRatio, const double frac
 		return 1;
 	}
 
-	IplImage* correspond = cvCreateImage(cvSize(Img1->width + Img2->width, Img1->height), 8, nchannels);
-	cvSetImageROI(correspond, cvRect(0, 0, Img1->width, Img1->height));
-	cvCopy(Img1, correspond);
-	cvSetImageROI(correspond, cvRect(Img1->width, 0, correspond->width, correspond->height));
-	cvCopy(Img2, correspond);
+	IplImage* correspond = cvCreateImage(cvSize(Img1->width + Img2->width, max(Img1->height, Img2->height)), 8, nchannels);
+	cvSetImageROI(correspond, cvRect(0, 0, Img1->width, Img1->height));	cvCopy(Img1, correspond);
+	cvSetImageROI(correspond, cvRect(Img1->width, 0, Img2->width, Img2->height));	cvCopy(Img2, correspond);
 	cvResetImageROI(correspond);
 	DisplayImageCorrespondence(correspond, Img1->width, 0, Keys1, Keys2, CorresID, fractionMatchesDisplayed);
 
@@ -346,6 +344,8 @@ void normalize(double *x, int dim)
 	for (int ii = 0; ii < dim; ii++)
 		tt += x[ii] * x[ii];
 	tt = sqrt(tt);
+	if (tt < FLT_EPSILON)
+		return;
 	for (int ii = 0; ii < dim; ii++)
 		x[ii] = x[ii] / tt;
 	return;
@@ -1018,7 +1018,7 @@ int ReadDomeCalibFile(char *Path, CameraData *AllCamInfo)
 	}
 
 
-	sprintf(Fname, "%s/PinfoGL_%d.txt", Path, 0);
+	sprintf(Fname, "%s/CamPose_%d.txt", Path, 0);
 	FILE *fp = fopen(Fname, "a+");
 	for (int ii = 0; ii < nHDs + nVGAs; ii++)
 	{
@@ -1036,7 +1036,7 @@ int ReadDomeCalibFile(char *Path, CameraData *AllCamInfo)
 bool LoadTrackData(char* filePath, int CurrentFrame, TrajectoryData &TrajectoryInfo, bool loadVis)
 {
 	char trackingFilePath[512];
-	sprintf(trackingFilePath, "%s/Out/reconResult%.8d.track", filePath, CurrentFrame);
+	sprintf(trackingFilePath, "%s/%d.track", filePath, CurrentFrame);
 	ifstream fin(trackingFilePath);
 	if (fin.is_open() == false)
 	{
@@ -1071,7 +1071,7 @@ bool LoadTrackData(char* filePath, int CurrentFrame, TrajectoryData &TrajectoryI
 		int ptIdx, trackedNum;
 		Point3d t3D, cur3D, past3D, future3D;
 
-		//For cuurrentTrackUnit
+		//For currentTrackUnit
 		fin >> dummy >> ptIdx;  //"Pt3d"
 		fin >> cur3D.x >> cur3D.y >> cur3D.z;
 		fin >> t3D.x >> t3D.y >> t3D.z >> t3D.x >> t3D.y >> t3D.z >> t3D.x >> t3D.y >> t3D.z;
@@ -1105,7 +1105,7 @@ bool LoadTrackData(char* filePath, int CurrentFrame, TrajectoryData &TrajectoryI
 		return true;
 
 	int TrueCamID[480 + 30], ii = 0;
-	for (int ii = 0; ii < 9; ii++)
+	for (int ii = 0; ii < 8; ii++)
 		TrueCamID[ii] = ii;
 	/*sprintf(trackingFilePath, "%s/camId.txt", filePath);
 	FILE *fp = fopen(trackingFilePath, "r");//read from Han flow program
@@ -1412,7 +1412,7 @@ void Genrate2DTrajectory2(char *Path, int CurrentFrame, TrajectoryData InfoTraj,
 	for (int ii = 0; ii < 9; ii++)
 		TrueCamID[ii] = ii;
 
-	int nframes = MaxnFrame;
+	int nframes = MaxnFrames;
 
 	vector<Point2d> *Traj2D = new vector<Point2d>[InfoTraj.nViews];
 	vector<int> *TimeLine = new vector<int>[InfoTraj.nViews];
@@ -1446,8 +1446,8 @@ void Genrate2DTrajectory2(char *Path, int CurrentFrame, TrajectoryData InfoTraj,
 				PtoC = Point3d(AllVideoData.VideoInfo[camID].camCenter[0] - t3D.x, AllVideoData.VideoInfo[camID].camCenter[1] - t3D.y, AllVideoData.VideoInfo[camID].camCenter[2] - t3D.z);
 				normPtoC = sqrt(pow(PtoC.x, 2) + pow(PtoC.y, 2) + pow(PtoC.z, 2));
 				angle = (n3D.x*PtoC.x + n3D.y*PtoC.y + n3D.z*PtoC.z) / normNormal / normPtoC;
-				if (angle < angleThreshold)
-					continue;
+				//	if (angle < angleThreshold)
+				//	continue;
 
 				ProjectandDistort(t3D, &pt, AllVideoData.VideoInfo[camID].P);
 				viewIDs.push_back(TrueCamID[ii]);
@@ -1473,8 +1473,8 @@ void Genrate2DTrajectory2(char *Path, int CurrentFrame, TrajectoryData InfoTraj,
 				PtoC = Point3d(AllVideoData.VideoInfo[camID].camCenter[0] - t3D.x, AllVideoData.VideoInfo[camID].camCenter[1] - t3D.y, AllVideoData.VideoInfo[camID].camCenter[2] - t3D.z);
 				normPtoC = sqrt(pow(PtoC.x, 2) + pow(PtoC.y, 2) + pow(PtoC.z, 2));
 				angle = (n3D.x*PtoC.x + n3D.y*PtoC.y + n3D.z*PtoC.z) / normNormal / normPtoC;
-				if (angle < angleThreshold)
-					continue;
+				//if (angle < angleThreshold)
+				//	continue;
 
 				ProjectandDistort(t3D, &pt, AllVideoData.VideoInfo[camID].P);
 				viewIDs.push_back(TrueCamID[ii]);
@@ -1488,6 +1488,115 @@ void Genrate2DTrajectory2(char *Path, int CurrentFrame, TrajectoryData InfoTraj,
 		}
 		fclose(fp);
 	}
+	return;
+}
+void Genrate2DTrajectory3(char *Path, int CurrentFrame, TrajectoryData InfoTraj, VideoData &AllVideoData, vector<int> trajectoriesUsed)
+{
+	char Fname[200];
+	int ntrajectoriesUsed = trajectoriesUsed.size();
+	if (ntrajectoriesUsed > InfoTraj.nTrajectories)
+	{
+		printf("# trajectories input error\n");
+		return;
+	}
+
+	int TrueCamID[50];
+	for (int ii = 0; ii < 9; ii++)
+		TrueCamID[ii] = ii;
+
+	int nframes = MaxnFrames;
+
+	vector<Point2d> *Traj2D = new vector<Point2d>[InfoTraj.nViews];
+	vector<int> *TimeLine = new vector<int>[InfoTraj.nViews];
+
+	int frameOffset[] = { -30, -32, 29, -25, 0, -17, -10, -35 };
+
+	vector<int>viewIDs;
+	vector<Point3d> PtA;
+	for (int ll = 0; ll < 8; ll++)
+	{
+		sprintf(Fname, "%s/CT%d.txt", Path, ll); FILE *fp = fopen(Fname, "a+");
+		for (int kk = 0; kk < ntrajectoriesUsed; kk++)
+		{
+			int sTraj = trajectoriesUsed[kk];
+			int nftracked = InfoTraj.cpNormal[sTraj].size() + InfoTraj.fThreeD[sTraj].size();
+			if (nftracked < 4)
+				fprintf(fp, "%d %d \n", kk, 0);
+			else
+			{
+				fprintf(fp, "%d %d ", kk, nftracked);
+
+				std::reverse(InfoTraj.cpNormal[sTraj].begin(), InfoTraj.cpNormal[sTraj].end());
+				std::reverse(InfoTraj.cpThreeD[sTraj].begin(), InfoTraj.cpThreeD[sTraj].end());
+				std::reverse(InfoTraj.cpVis[sTraj].begin(), InfoTraj.cpVis[sTraj].end());
+
+				for (int jj = 0; jj < InfoTraj.nViews; jj++)
+					Traj2D[jj].clear(), TimeLine[jj].clear();
+
+				double normNormal, normPtoC, angle;
+				Point3d t3D, n3D, PtoC;
+				Point2d pt;
+
+				int ntracks = InfoTraj.cpVis[sTraj].size();
+				for (int jj = 0; jj < ntracks; jj++)
+				{
+					t3D = InfoTraj.cpThreeD[sTraj].at(jj);
+					n3D = InfoTraj.cpNormal[sTraj].at(jj);
+					normNormal = sqrt(pow(n3D.x, 2) + pow(n3D.y, 2) + pow(n3D.z, 2));
+					viewIDs.clear(), PtA.clear();
+					for (int ii = 0; ii < InfoTraj.nViews; ii++)
+					{
+						if (TrueCamID[ii] != ll)
+							continue;
+						int camID = TrueCamID[ii] * nframes + CurrentFrame - ntracks + jj + frameOffset[ll];
+						PtoC = Point3d(AllVideoData.VideoInfo[camID].camCenter[0] - t3D.x, AllVideoData.VideoInfo[camID].camCenter[1] - t3D.y, AllVideoData.VideoInfo[camID].camCenter[2] - t3D.z);
+						normPtoC = sqrt(pow(PtoC.x, 2) + pow(PtoC.y, 2) + pow(PtoC.z, 2));
+						angle = (n3D.x*PtoC.x + n3D.y*PtoC.y + n3D.z*PtoC.z) / normNormal / normPtoC;
+						//	if (angle < angleThreshold)
+						//	continue;
+
+						ProjectandDistort(t3D, &pt, AllVideoData.VideoInfo[camID].P);
+						viewIDs.push_back(TrueCamID[ii]);
+						PtA.push_back(Point3d(pt.x, pt.y, angle));
+					}
+
+					if (viewIDs.size() > 0)
+						fprintf(fp, "%d %.3f %.3f ", CurrentFrame - ntracks + jj + frameOffset[ll], PtA[0].x, PtA[0].y);
+				}
+
+				for (int jj = 0; jj < InfoTraj.fThreeD[sTraj].size(); jj++)
+				{
+					t3D = InfoTraj.fThreeD[sTraj].at(jj);
+					n3D = InfoTraj.fNormal[sTraj].at(jj);
+					normNormal = sqrt(pow(n3D.x, 2) + pow(n3D.y, 2) + pow(n3D.z, 2));
+
+					viewIDs.clear(), PtA.clear();
+					for (int ii = 0; ii < InfoTraj.nViews; ii++)
+					{
+						if (TrueCamID[ii] != ll)
+							continue;
+
+						int camID = TrueCamID[ii] * nframes + CurrentFrame + jj + frameOffset[ll];
+						PtoC = Point3d(AllVideoData.VideoInfo[camID].camCenter[0] - t3D.x, AllVideoData.VideoInfo[camID].camCenter[1] - t3D.y, AllVideoData.VideoInfo[camID].camCenter[2] - t3D.z);
+						normPtoC = sqrt(pow(PtoC.x, 2) + pow(PtoC.y, 2) + pow(PtoC.z, 2));
+						angle = (n3D.x*PtoC.x + n3D.y*PtoC.y + n3D.z*PtoC.z) / normNormal / normPtoC;
+						//if (angle < angleThreshold)
+						//	continue;
+
+						ProjectandDistort(t3D, &pt, AllVideoData.VideoInfo[camID].P);
+						viewIDs.push_back(TrueCamID[ii]);
+						PtA.push_back(Point3d(pt.x, pt.y, angle));
+					}
+
+					if (viewIDs.size() > 0)
+						fprintf(fp, "%d %.3f %.3f ", CurrentFrame + jj + frameOffset[ll], PtA[0].x, PtA[0].y);
+				}
+				fprintf(fp, "\n");
+			}
+		}
+		fclose(fp);
+	}
+
 	return;
 }
 int Load2DTrajectory(char *Path, TrajectoryData &inoTraj, int ntrajectories)
@@ -2567,7 +2676,7 @@ int Compute3DTrajectoryError2DTracking(char *Path, TrajectoryData infoTraj, int 
 	double *T = new double[2 * patchlength * nchannels];
 	double *RGB = new double[2 * nchannels * patchlength];
 	double *Timg = new double[patchlength*nchannels];
-	double *Znssd_reqd = new double[6 * patchlength];
+	double *Znssd_reqd = new double[9 * patchlength];
 
 	vector<int> temporal;
 	vector<double>Error2D;
@@ -3116,7 +3225,6 @@ void ShowDataToImage(char *Fname, char *Img, int width, int height, int nchannel
 			for (kk = 0; kk < nchannels; kk++)
 				cvImg->imageData[nchannels*ii + kk + nchannels*jj*width] = Img[nchannels*ii + kk + nchannels*jj*width];//Img[ii+jj*width+kk*length];
 
-	//cvSaveImage("C:/temp/x.png", cvImg);
 	cvShowImage(Fname, cvImg);
 
 	return;
@@ -3180,6 +3288,61 @@ bool SaveDataToImage(char *fname, double *Img, int width, int height, int nchann
 				M.data[nchannels*ii + kk + nchannels*jj*width] = (unsigned char)(int)(Img[ii + jj*width + kk*length] + 0.5);
 
 	return imwrite(fname, M);
+}
+
+void ShowDataAsImage(char *fname, unsigned char *Img, int width, int height, int nchannels)
+{
+	int ii, jj, kk, length = width*height;
+
+	Mat M = Mat::zeros(height, width, nchannels == 1 ? CV_8UC1 : CV_8UC3);
+	for (jj = 0; jj < height; jj++)
+		for (ii = 0; ii < width; ii++)
+			for (kk = 0; kk < nchannels; kk++)
+				M.data[nchannels*ii + kk + nchannels*jj*width] = Img[ii + jj*width + kk*length];
+
+	if (nchannels == 3)
+	{
+		imshow(fname, M);
+		waitKey(-1);
+		destroyWindow(fname);
+	}
+	else
+	{
+		Mat cM;
+		cvtColor(M, cM, CV_GRAY2RGB);
+		imshow(fname, cM);
+		waitKey(-1);
+		destroyWindow(fname);
+	}
+
+	return;
+}
+void ShowDataAsImage(char *fname, double *Img, int width, int height, int nchannels)
+{
+	int ii, jj, kk, length = width*height;
+
+	Mat M = Mat::zeros(height, width, nchannels == 1 ? CV_8UC1 : CV_8UC3);
+	for (jj = 0; jj < height; jj++)
+		for (ii = 0; ii < width; ii++)
+			for (kk = 0; kk < nchannels; kk++)
+				M.data[nchannels*ii + kk + nchannels*jj*width] = (unsigned char)(int)(Img[ii + jj*width + kk*length] + 0.5);
+
+	if (nchannels == 3)
+	{
+		imshow(fname, M);
+		waitKey(-1);
+		destroyWindow(fname);
+	}
+	else
+	{
+		Mat cM;
+		cvtColor(M, cM, CV_GRAY2RGB);
+		imshow(fname, cM);
+		waitKey(-1);
+		destroyWindow(fname);
+	}
+
+	return;
 }
 
 
@@ -4478,24 +4641,19 @@ int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, v
 	step = step > 0 ? step : 2;
 	cout << step << endl;
 
-	FILE *fp = fopen("C:/temp/corres.txt", "w+");
 	for (int ii = 0; ii < pair.size(); ii += 2)
 	{
 		int x1 = keypoints1.at(pair.at(ii)).pt.x, y1 = keypoints1.at(pair.at(ii)).pt.y;
 		int x2 = keypoints2.at(pair.at(ii + 1)).pt.x + offsetX, y2 = keypoints2.at(pair.at(ii + 1)).pt.y + offsetY;
-		fprintf(fp, "%.1f %.1f %1.f %.1f\n", keypoints1.at(pair.at(ii)).pt.x, keypoints1.at(pair.at(ii)).pt.y, keypoints2.at(pair.at(ii + 1)).pt.x, keypoints2.at(pair.at(ii + 1)).pt.y);
 	}
-	fclose(fp);
 
 	for (int ii = 0; ii < pair.size(); ii += step)
 	{
 		int x1 = keypoints1.at(pair.at(ii)).pt.x, y1 = keypoints1.at(pair.at(ii)).pt.y;
 		int x2 = keypoints2.at(pair.at(ii + 1)).pt.x + offsetX, y2 = keypoints2.at(pair.at(ii + 1)).pt.y + offsetY;
 
-		cvCircle(correspond, cvPoint(x1, y1), 2, colors[ii % 9], 2),
-			cvCircle(correspond, cvPoint(x2, y2), 2, colors[ii % 9], 2);
-		if (0)
-			cvLine(correspond, cvPoint(x1, y1), cvPoint(x2, y2), colors[ii % 9], 1, 4);
+		cvCircle(correspond, cvPoint(x1, y1), 2, colors[ii % 9], 2), cvCircle(correspond, cvPoint(x2, y2), 2, colors[ii % 9], 2);
+		cvLine(correspond, cvPoint(x1, y1), cvPoint(x2, y2), colors[ii % 9], 1, 4);
 	}
 
 	cvNamedWindow("Correspondence", CV_WINDOW_NORMAL);
@@ -4522,14 +4680,11 @@ int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, v
 	step = step > 0 ? step : 2;
 	cout << step << endl;
 
-	FILE *fp = fopen("C:/temp/corres.txt", "w+");
 	for (int ii = 0; ii < pair.size(); ii += 2)
 	{
 		int x1 = keypoints1.at(pair.at(ii)).x, y1 = keypoints1.at(pair.at(ii)).y;
 		int x2 = keypoints2.at(pair.at(ii + 1)).x + offsetX, y2 = keypoints2.at(pair.at(ii + 1)).y + offsetY;
-		fprintf(fp, "%.1f %.1f %1.f %.1f\n", keypoints1.at(pair.at(ii)).x, keypoints1.at(pair.at(ii)).y, keypoints2.at(pair.at(ii + 1)).x, keypoints2.at(pair.at(ii + 1)).y);
 	}
-	fclose(fp);
 
 	for (int ii = 0; ii < pair.size(); ii += step)
 	{
@@ -4542,6 +4697,8 @@ int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, v
 	cvShowImage("Correspondence", correspond);
 	cvWaitKey(-1);
 	printf("Images closed\n");
+
+	cvSaveImage("C:/temp/sift.png", correspond);
 	return 0;
 }
 int DisplayImageCorrespondencesDriver(char *Path, vector<int>AvailViews, int timeID, int nchannels, double density)
@@ -4589,7 +4746,7 @@ int DisplayImageCorrespondencesDriver(char *Path, vector<int>AvailViews, int tim
 bool ReadIntrinsicResults(char *path, CameraData *AllViewsParas)
 {
 	//Note that visCamualSfm use different lens model than openCV or matlab or yours (inverse model)
-	char Fname[200];
+	char Fname[200], dummy[200];
 	int id = 0, lensType, width, height;
 	double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1, omega, DistCtrX, DistCtrY;
 
@@ -4599,7 +4756,7 @@ bool ReadIntrinsicResults(char *path, CameraData *AllViewsParas)
 		cout << "Cannot load " << Fname << endl;
 		return false;
 	}
-	while (fscanf(fp, "%d %d %d %lf %lf %lf %lf %lf ", &lensType, &width, &height, &fx, &fy, &skew, &u0, &v0) != EOF)
+	while (fscanf(fp, "%s %d %d %d %lf %lf %lf %lf %lf ", dummy, &lensType, &width, &height, &fx, &fy, &skew, &u0, &v0) != EOF)
 	{
 		AllViewsParas[id].LensModel = lensType, AllViewsParas[id].width = width, AllViewsParas[id].height = height;
 		AllViewsParas[id].K[0] = fx, AllViewsParas[id].K[1] = skew, AllViewsParas[id].K[2] = u0,
@@ -5264,7 +5421,6 @@ void Quaternion2Rotation(double *q, double *R)
 	R[7] = 2 * qy*qz + 2 * qx*qw;
 	R[8] = 1.0 - 2 * qx*qx - 2 * qy*qy;
 }
-
 void QuaternionLinearInterp(double *quad1, double *quad2, double *quadi, double u)
 {
 	const double DOT_THRESHOLD = 0.9995;
@@ -5286,92 +5442,6 @@ void QuaternionLinearInterp(double *quad1, double *quad2, double *quadi, double 
 	}
 	return;
 }
-
-int clickCount = 0;
-Point2i ClickPos[3];
-void ClickLocation(int event, int x, int y, int flags, void* userdata)
-{
-	if (event == EVENT_LBUTTONDOWN)
-	{
-		cout << "Right button of the mouse is clicked - position (" << x << ", " << y << ")" << endl;
-		ClickPos[clickCount].x = x, ClickPos[clickCount].y = y;
-		clickCount++;
-	}
-	if (clickCount > 3)
-		waitKey(-27);
-}
-double DistanceOfTwoPointsSfM(char *Path, int id1, int id2, int id3)
-{
-	printf("Reading Corpus and camera info");
-	char Fname[200];
-
-	Corpus corpusData;
-	sprintf(Fname, "%s/BA_Camera_AllParams_after.txt", Path);
-	if (!loadBundleAdjustedNVMResults(Fname, corpusData))
-		return 1;
-
-	int nviews = corpusData.nCamera;
-	for (int ii = 0; ii < nviews; ii++)
-	{
-		corpusData.camera[ii].threshold = 1.5, corpusData.camera[ii].ninlierThresh = 50, corpusData.camera[ii];
-		GetrtFromRT(corpusData.camera[ii].rt, corpusData.camera[ii].R, corpusData.camera[ii].T);
-		GetIntrinsicFromK(corpusData.camera[ii]);
-		AssembleP(corpusData.camera[ii].K, corpusData.camera[ii].R, corpusData.camera[ii].T, corpusData.camera[ii].P);
-	}
-	printf("...Done\n");
-
-
-	namedWindow("Image", CV_WINDOW_NORMAL);
-	setMouseCallback("Image", ClickLocation, NULL);
-	printf("Left button to click, ESC  to stop\n");
-
-	clickCount = 0;
-	sprintf(Fname, "%s/%d.png", Path, id1);
-	Mat img = imread(Fname, 1);
-	if (img.empty())
-		printf("Cannot load %s\n", Fname);
-	imshow("Image", img);
-	waitKey(0);
-	Point2d pos1[2] = { Point2d(ClickPos[0].x, ClickPos[0].y), Point2d(ClickPos[1].x, ClickPos[1].y) };
-
-	clickCount = 0;
-	sprintf(Fname, "%s/%d.png", Path, id2);
-	img = imread(Fname, 1);
-	if (img.empty())
-		printf("Cannot load %s\n", Fname);
-	imshow("Image", img);
-	waitKey(0);
-	Point2d pos2[2] = { Point2d(ClickPos[0].x, ClickPos[0].y), Point2d(ClickPos[1].x, ClickPos[1].y) };
-
-	clickCount = 0;
-	sprintf(Fname, "%s/%d.png", Path, id3);
-	img = imread(Fname, 1);
-	if (img.empty())
-		printf("Cannot load %s\n", Fname);
-	imshow("Image", img);
-	waitKey(0);
-	Point2d pos3[2] = { Point2d(ClickPos[0].x, ClickPos[0].y), Point2d(ClickPos[1].x, ClickPos[1].y) };
-
-	Point3d WC[2];
-	Point2d allPts[2 * 3] = { pos1[0], pos2[0], pos3[0], pos1[1], pos2[1], pos3[1] };
-	bool passedPoints[3];
-	int allId[3] = { id1, id2, id3 };
-	double allP[12 * 3], allK[9 * 3], allDistortion[7 * 3];
-	for (int ii = 0; ii < 3; ii++)
-	{
-		for (int jj = 0; jj < 12; jj++)
-			allP[12 * ii + jj] = corpusData.camera[allId[ii]].P[jj];
-		for (int jj = 0; jj < 9; jj++)
-			allK[9 * ii + jj] = corpusData.camera[allId[ii]].K[jj];
-		for (int jj = 0; jj < 7; jj++)
-			allDistortion[7 * ii + jj] = corpusData.camera[allId[ii]].distortion[jj];
-	}
-
-	MultiViewQualityCheck(allPts, allP, corpusData.camera[0].LensModel, allK, allDistortion, passedPoints, 3, 2, 3.0, WC);
-
-	return sqrt(pow(WC[0].x - WC[1].x, 2) + pow(WC[0].y - WC[1].y, 2) + pow(WC[0].z - WC[1].z, 2));
-}
-
 
 // Author: Xiaotao Duan
 //
@@ -6847,13 +6917,13 @@ int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int S
 	//READ POSE FROM CORPUS: END
 
 	//READ POSE FROM VIDEO POSE: START
-	CorpusandVideoInfo.startTime = startTime, CorpusandVideoInfo.stopTime = stopTime, CorpusandVideoInfo.nVideos = nVideoViews;
-	CorpusandVideoInfo.VideoInfo = new CameraData[nVideoViews*(stopTime - startTime + 1)];
+	CorpusandVideoInfo.nVideos = nVideoViews;
+	CorpusandVideoInfo.VideoInfo = new CameraData[nVideoViews*MaxnFrames];
 	int id;
 	double R[9], C[3], t1, t2, t3, t4, t5, t6, t7;
 	for (int viewID = 0; viewID < nVideoViews; viewID++)
 	{
-		sprintf(Fname, "%s/PinfoGL_%d.txt", Path, viewID);
+		sprintf(Fname, "%s/CamPose_%d.txt", Path, viewID);
 		FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 		{
@@ -6864,23 +6934,23 @@ int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int S
 			&id, &R[0], &R[1], &R[2], &t1, &R[3], &R[4], &R[5], &t2, &R[6], &R[7], &R[8], &t3, &t4, &t5, &t6, &t7, &C[0], &C[1], &C[2]) != EOF)
 		{
 			for (int jj = 0; jj < 9; jj++)
-				CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].R[jj] = R[jj];
+				CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].R[jj] = R[jj];
 
 			//T = -R*Center;
-			mat_mul(R, C, CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].T, 3, 3, 1);
+			mat_mul(R, C, CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].T, 3, 3, 1);
 			for (int jj = 0; jj < 3; jj++)
-				CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].T[jj] = -CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].T[jj];
+				CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].T[jj] = -CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].T[jj];
 
 			for (int jj = 0; jj < 5; jj++)
-				CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].intrinsic[jj] = IntrinsicInfo[viewID].intrinsic[jj];
+				CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].intrinsic[jj] = IntrinsicInfo[viewID].intrinsic[jj];
 			for (int jj = 0; jj < 7; jj++)
-				CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].distortion[jj] = IntrinsicInfo[viewID].distortion[jj];
+				CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].distortion[jj] = IntrinsicInfo[viewID].distortion[jj];
 
-			GetKFromIntrinsic(CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)]);
-			GetrtFromRT(CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].rt,
-				CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].R, CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].T);
-			AssembleP(CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].K, CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].R,
-				CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].T, CorpusandVideoInfo.VideoInfo[id + viewID*(stopTime - startTime + 1)].P);
+			GetKFromIntrinsic(CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames]);
+			GetrtFromRT(CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].rt,
+				CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].R, CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].T);
+			AssembleP(CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].K, CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].R,
+				CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].T, CorpusandVideoInfo.VideoInfo[id + viewID*MaxnFrames].P);
 		}
 	}
 	//READ FROM VIDEO POSE: END
@@ -6891,17 +6961,20 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 {
 	char Fname[200];
 	int videoID, frameID, LensType, width, height;
-	int nframes = max(MaxnFrame, stopTime);
+	int nframes = max(MaxnFrames, stopTime);
 
 	AllVideoInfo.nVideos = nVideoViews;
 	AllVideoInfo.VideoInfo = new CameraData[nVideoViews*nframes];
 
+	for (int ii = 0; ii < nVideoViews*nframes; ii++)
+		AllVideoInfo.VideoInfo[ii].valid = false;
+
 	//READ INTRINSIC: START
-	int count = 0, timecount = startTime;
+	int count = 0;
 	for (int viewID = 0; viewID < nVideoViews; viewID++)
 	{
-		videoID = nframes*viewID, timecount = startTime;
-		sprintf(Fname, "%s/intrinsic_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "r");
+		videoID = nframes*viewID;
+		sprintf(Fname, "%s/Intrinsic_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 		{
 			cout << "Cannot load " << Fname << endl;
@@ -6909,11 +6982,9 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 			continue;
 		}
 		double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1, omega, DistCtrX, DistCtrY;
-		while (fscanf(fp, "%d %d %lf %lf %lf %lf %lf ", &frameID, &LensType, &fx, &fy, &skew, &u0, &v0) != EOF)
+		while (fscanf(fp, "%d %d %d %d %lf %lf %lf %lf %lf ", &frameID, &LensType, &width, &height, &fx, &fy, &skew, &u0, &v0) != EOF)
 		{
-			if (frameID == timecount)
-				timecount++;
-
+			AllVideoInfo.VideoInfo[frameID + videoID].valid = true;
 			AllVideoInfo.VideoInfo[frameID + videoID].K[0] = fx, AllVideoInfo.VideoInfo[frameID + videoID].K[1] = skew, AllVideoInfo.VideoInfo[frameID + videoID].K[2] = u0,
 				AllVideoInfo.VideoInfo[frameID + videoID].K[3] = 0.0, AllVideoInfo.VideoInfo[frameID + videoID].K[4] = fy, AllVideoInfo.VideoInfo[frameID + videoID].K[5] = v0,
 				AllVideoInfo.VideoInfo[frameID + videoID].K[6] = 0.0, AllVideoInfo.VideoInfo[frameID + videoID].K[7] = 0.0, AllVideoInfo.VideoInfo[frameID + videoID].K[8] = 1.0;
@@ -6935,13 +7006,9 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 				fscanf(fp, "%lf %lf %lf ", &omega, &DistCtrX, &DistCtrY);
 				AllVideoInfo.VideoInfo[frameID + videoID].distortion[0] = omega, AllVideoInfo.VideoInfo[frameID + videoID].distortion[1] = DistCtrX, AllVideoInfo.VideoInfo[frameID + videoID].distortion[2] = DistCtrY;
 			}
-			fscanf(fp, "%d %d ", &width, &height);
 			AllVideoInfo.VideoInfo[frameID + videoID].width = width, AllVideoInfo.VideoInfo[frameID + videoID].height = height;
-			if (timecount > stopTime)
-				break;
 		}
 		fclose(fp);
-		AllVideoInfo.stopTime = timecount - 1;
 	}
 	if (count == nVideoViews)
 		return 1;
@@ -6952,8 +7019,8 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 	count = 0;
 	for (int viewID = 0; viewID < nVideoViews; viewID++)
 	{
-		videoID = nframes*viewID, timecount = startTime;
-		sprintf(Fname, "%s/PinfoGL_%d.txt", Path, viewID);
+		videoID = nframes*viewID;
+		sprintf(Fname, "%s/CamPose_%d.txt", Path, viewID);
 		FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 		{
@@ -6965,9 +7032,6 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 		while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ",
 			&frameID, &R[0], &R[1], &R[2], &t1, &R[3], &R[4], &R[5], &t2, &R[6], &R[7], &R[8], &t3, &t4, &t5, &t6, &t7, &C[0], &C[1], &C[2]) != EOF)
 		{
-			if (frameID == timecount)
-				timecount++;
-
 			for (int jj = 0; jj < 9; jj++)
 				AllVideoInfo.VideoInfo[frameID + videoID].R[jj] = R[jj];
 
@@ -6984,9 +7048,6 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 				AllVideoInfo.VideoInfo[frameID + videoID].R, AllVideoInfo.VideoInfo[frameID + videoID].T);
 			AssembleP(AllVideoInfo.VideoInfo[frameID + videoID].K, AllVideoInfo.VideoInfo[frameID + videoID].R,
 				AllVideoInfo.VideoInfo[frameID + videoID].T, AllVideoInfo.VideoInfo[frameID + videoID].P);
-
-			if (timecount > stopTime)
-				break;
 		}
 		fclose(fp);
 	}
@@ -7000,26 +7061,24 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 {
 	char Fname[200];
 	int frameID, LensType, width, height;
-	int nframes = max(MaxnFrame, stopTime);
+	int nframes = max(MaxnFrames, stopTime);
 
-	VideoInfo.startTime = startTime, VideoInfo.stopTime = stopTime;
 	VideoInfo.VideoInfo = new CameraData[nframes];
 	for (int ii = 0; ii < nframes; ii++)
 		VideoInfo.VideoInfo[ii].valid = false;
 
 	//READ INTRINSIC: START
-	sprintf(Fname, "%s/intrinsic_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/Intrinsic_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
 		cout << "Cannot load " << Fname << endl;
 		return 1;
 	}
 	double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1, omega, DistCtrX, DistCtrY;
-	while (fscanf(fp, "%d %d %lf %lf %lf %lf %lf ", &frameID, &LensType, &fx, &fy, &skew, &u0, &v0) != EOF)
+	while (fscanf(fp, "%d %d %d %d %lf %lf %lf %lf %lf ", &frameID, &LensType, &width, &height, &fx, &fy, &skew, &u0, &v0) != EOF)
 	{
-		if (frameID >= 0)
+		if (frameID >= startTime && frameID <= stopTime)
 		{
-			VideoInfo.VideoInfo[frameID].valid = true;
 			VideoInfo.VideoInfo[frameID].K[0] = fx, VideoInfo.VideoInfo[frameID].K[1] = skew, VideoInfo.VideoInfo[frameID].K[2] = u0,
 				VideoInfo.VideoInfo[frameID].K[3] = 0.0, VideoInfo.VideoInfo[frameID].K[4] = fy, VideoInfo.VideoInfo[frameID].K[5] = v0,
 				VideoInfo.VideoInfo[frameID].K[6] = 0.0, VideoInfo.VideoInfo[frameID].K[7] = 0.0, VideoInfo.VideoInfo[frameID].K[8] = 1.0;
@@ -7034,7 +7093,7 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 		if (LensType == RADIAL_TANGENTIAL_PRISM)
 		{
 			fscanf(fp, "%lf %lf %lf %lf %lf %lf %lf ", &r0, &r1, &r2, &t0, &t1, &p0, &p1);
-			if (frameID >= 0)
+			if (frameID >= startTime && frameID <= stopTime)
 			{
 				VideoInfo.VideoInfo[frameID].distortion[0] = r0, VideoInfo.VideoInfo[frameID].distortion[1] = r1, VideoInfo.VideoInfo[frameID].distortion[2] = r2;
 				VideoInfo.VideoInfo[frameID].distortion[3] = t0, VideoInfo.VideoInfo[frameID].distortion[4] = t1;
@@ -7044,18 +7103,17 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 		else
 		{
 			fscanf(fp, "%lf %lf %lf ", &omega, &DistCtrX, &DistCtrY);
-			if (frameID >= 0)
+			if (frameID >= startTime && frameID <= stopTime)
 				VideoInfo.VideoInfo[frameID].distortion[0] = omega, VideoInfo.VideoInfo[frameID].distortion[1] = DistCtrX, VideoInfo.VideoInfo[frameID].distortion[2] = DistCtrY;
 		}
-		fscanf(fp, "%d %d ", &width, &height);
-		if (frameID >= 0)
+		if (frameID >= startTime && frameID <= stopTime)
 			VideoInfo.VideoInfo[frameID].width = width, VideoInfo.VideoInfo[frameID].height = height;
 	}
 	fclose(fp);
 	//END
 
 	//READ POSE FROM VIDEO POSE: START
-	sprintf(Fname, "%s/PinfoGL_%d.txt", Path, viewID); fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/CamPose_%d.txt", Path, viewID); fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
 		printf("Cannot load %s\n", Fname);
@@ -7065,8 +7123,11 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 	while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ",
 		&frameID, &R[0], &R[1], &R[2], &t1, &R[3], &R[4], &R[5], &t2, &R[6], &R[7], &R[8], &t3, &t4, &t5, &t6, &t7, &C[0], &C[1], &C[2]) != EOF)
 	{
-		if (frameID >= 0)
+		if (frameID >= startTime && frameID <= stopTime)
 		{
+			if (abs(C[0]) + abs(C[1]) + abs(C[2]) > 0.001)
+				VideoInfo.VideoInfo[frameID].valid = true;
+
 			for (int jj = 0; jj < 9; jj++)
 				VideoInfo.VideoInfo[frameID].R[jj] = R[jj];
 
@@ -7078,9 +7139,12 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 			for (int jj = 0; jj < 3; jj++)
 				VideoInfo.VideoInfo[frameID].T[jj] = -VideoInfo.VideoInfo[frameID].T[jj];
 
+			Rotation2Quaternion(VideoInfo.VideoInfo[frameID].R, VideoInfo.VideoInfo[frameID].Quat);
+
 			mat_invert(VideoInfo.VideoInfo[frameID].R, VideoInfo.VideoInfo[frameID].invR);
 			GetrtFromRT(VideoInfo.VideoInfo[frameID].rt,
 				VideoInfo.VideoInfo[frameID].R, VideoInfo.VideoInfo[frameID].T);
+			GetRCGL(VideoInfo.VideoInfo[frameID]);
 			AssembleP(VideoInfo.VideoInfo[frameID].K, VideoInfo.VideoInfo[frameID].R,
 				VideoInfo.VideoInfo[frameID].T, VideoInfo.VideoInfo[frameID].P);
 		}
@@ -7090,9 +7154,109 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 
 	return 0;
 }
+void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID)
+{
+	char Fname[200];
 
+	//Center = -iR*T 
+	double iR[9], center[3];
+	for (int ii = 0; ii < AvailViews.size(); ii++)
+	{
+		int viewID = AvailViews.at(ii);
+		if (viewID < 0)
+			continue;
+		mat_invert(AllViewParas[viewID].R, iR);
 
+		AllViewParas[viewID].Rgl[0] = AllViewParas[viewID].R[0], AllViewParas[viewID].Rgl[1] = AllViewParas[viewID].R[1], AllViewParas[viewID].Rgl[2] = AllViewParas[viewID].R[2], AllViewParas[viewID].Rgl[3] = 0.0;
+		AllViewParas[viewID].Rgl[4] = AllViewParas[viewID].R[3], AllViewParas[viewID].Rgl[5] = AllViewParas[viewID].R[4], AllViewParas[viewID].Rgl[6] = AllViewParas[viewID].R[5], AllViewParas[viewID].Rgl[7] = 0.0;
+		AllViewParas[viewID].Rgl[8] = AllViewParas[viewID].R[6], AllViewParas[viewID].Rgl[9] = AllViewParas[viewID].R[7], AllViewParas[viewID].Rgl[10] = AllViewParas[viewID].R[8], AllViewParas[viewID].Rgl[11] = 0.0;
+		AllViewParas[viewID].Rgl[12] = 0, AllViewParas[viewID].Rgl[13] = 0, AllViewParas[viewID].Rgl[14] = 0, AllViewParas[viewID].Rgl[15] = 1.0;
 
+		mat_mul(iR, AllViewParas[viewID].T, center, 3, 3, 1);
+		AllViewParas[viewID].camCenter[0] = -center[0], AllViewParas[viewID].camCenter[1] = -center[1], AllViewParas[viewID].camCenter[2] = -center[2];
+	}
+
+	sprintf(Fname, "%s/DinfoGL_%d.txt", path, timeID);
+	FILE *fp = fopen(Fname, "w+");
+	for (int ii = 0; ii < AvailViews.size(); ii++)
+	{
+		int viewID = AvailViews.at(ii);
+		fprintf(fp, "%d ", viewID);
+		for (int jj = 0; jj < 16; jj++)
+			fprintf(fp, "%.16f ", AllViewParas[viewID].Rgl[jj]);
+		for (int jj = 0; jj < 3; jj++)
+			fprintf(fp, "%.16f ", AllViewParas[viewID].camCenter[jj]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	return;
+}
+void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime)
+{
+	char Fname[200];
+
+	//Center = -iR*T 
+	double iR[9], center[3];
+	for (int ii = 0; ii < AvailTime.size(); ii++)
+	{
+		int timeID = AvailTime.at(ii);
+		if (timeID < 0)
+			continue;
+		mat_invert(AllViewParas[timeID].R, iR);
+
+		AllViewParas[timeID].Rgl[0] = AllViewParas[timeID].R[0], AllViewParas[timeID].Rgl[1] = AllViewParas[timeID].R[1], AllViewParas[timeID].Rgl[2] = AllViewParas[timeID].R[2], AllViewParas[timeID].Rgl[3] = 0.0;
+		AllViewParas[timeID].Rgl[4] = AllViewParas[timeID].R[3], AllViewParas[timeID].Rgl[5] = AllViewParas[timeID].R[4], AllViewParas[timeID].Rgl[6] = AllViewParas[timeID].R[5], AllViewParas[timeID].Rgl[7] = 0.0;
+		AllViewParas[timeID].Rgl[8] = AllViewParas[timeID].R[6], AllViewParas[timeID].Rgl[9] = AllViewParas[timeID].R[7], AllViewParas[timeID].Rgl[10] = AllViewParas[timeID].R[8], AllViewParas[timeID].Rgl[11] = 0.0;
+		AllViewParas[timeID].Rgl[12] = 0, AllViewParas[timeID].Rgl[13] = 0, AllViewParas[timeID].Rgl[14] = 0, AllViewParas[timeID].Rgl[15] = 1.0;
+
+		mat_mul(iR, AllViewParas[timeID].T, center, 3, 3, 1);
+		AllViewParas[timeID].camCenter[0] = -center[0], AllViewParas[timeID].camCenter[1] = -center[1], AllViewParas[timeID].camCenter[2] = -center[2];
+	}
+
+	sprintf(Fname, "%s/CamPose_%d.txt", path, camID);
+	FILE *fp = fopen(Fname, "a+");
+	for (int ii = 0; ii < AvailTime.size(); ii++)
+	{
+		int timeID = AvailTime.at(ii);
+		fprintf(fp, "%d ", timeID + StartTime);
+		for (int jj = 0; jj < 16; jj++)
+			fprintf(fp, "%.16f ", AllViewParas[timeID].Rgl[jj]);
+		for (int jj = 0; jj < 3; jj++)
+			fprintf(fp, "%.16f ", AllViewParas[timeID].camCenter[jj]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	return;
+}
+int DownSampleSpatialCalib(char *Path, int nviews, int startFrame, int stopFrame, int Factor)
+{
+	char Fname[200];
+	for (int viewID = 0; viewID < nviews; viewID++)
+	{
+		VideoData VideoDataInfo;
+		if (ReadVideoDataI(Path, VideoDataInfo, viewID, startFrame, stopFrame) == 1)
+			return 1;
+
+		sprintf(Fname, "%s/sCamPose_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "w+");
+		for (int fid = startFrame; fid < stopFrame; fid++)
+		{
+			if ((fid - 1) % Factor == 0 && VideoDataInfo.VideoInfo[fid].valid)
+			{
+				fprintf(fp, "%d ", (fid - 1) / Factor + 1);
+				for (int jj = 0; jj < 16; jj++)
+					fprintf(fp, "%.16f ", VideoDataInfo.VideoInfo[fid].Rgl[jj]);
+				for (int jj = 0; jj < 3; jj++)
+					fprintf(fp, "%.16f ", VideoDataInfo.VideoInfo[fid].camCenter[jj]);
+				fprintf(fp, "\n");
+			}
+		}
+		fclose(fp);
+	}
+
+	return 0;
+}
 
 int ImportCalibDatafromHanFormat(char *Path, VideoData &AllVideoInfo, int nVGAPanels, int nVGACamsPerPanel, int nHDs)
 {
@@ -7187,7 +7351,7 @@ void ExportCalibDatatoHanFormat(char *Path, VideoData &AllVideoInfo, int nVideoV
 {
 	char Fname[200];
 	int offset = 0;
-	int nframes = max(MaxnFrame, stopTime);
+	int nframes = max(MaxnFrames, stopTime);
 
 	for (unsigned int viewID = 0; viewID < nVideoViews; viewID++)
 	{
@@ -7195,13 +7359,16 @@ void ExportCalibDatatoHanFormat(char *Path, VideoData &AllVideoInfo, int nVideoV
 			viewID = chosencamera;
 		for (int frameID = startTime; frameID <= stopTime - offset; frameID++)
 		{
+			int videoID = nframes*viewID;
+			if (!AllVideoInfo.VideoInfo[frameID + offset + videoID].valid)
+				continue;
+
 			sprintf(Fname, "%s/Calib/Pinfo_%d%_%d.txt", Path, viewID, frameID); FILE *fp = fopen(Fname, "w+");
 			if (fp == NULL)
 			{
 				sprintf(Fname, "%s/Calib", Path), mkdir(Fname);
 				sprintf(Fname, "%s/Calib/Pinfo_%d%_%d.txt", Path, viewID, frameID);
 			}
-			int videoID = nframes*viewID;
 
 			//Projection Matrix 	
 			for (int j = 0; j < 12; j++)
@@ -7299,7 +7466,7 @@ void ExportCalibDatatoHanFormat(char *Path, VideoData &AllVideoInfo, int nVideoV
 		fprintf(fp, "ver 1.0\n %d\n", nVideoViews - 1);
 		for (unsigned int viewID = 1; viewID < nVideoViews; viewID++)
 		{
-			int videoID = (stopTime - startTime + 1)*viewID;
+			int videoID = MaxnFrames*viewID;
 			double iR[9], center[3];
 			mat_invert(AllVideoInfo.VideoInfo[videoID].R, iR);
 
@@ -7583,38 +7750,39 @@ void synthesize_concentric_circles_mask(double *ring_mask_smooth, int *pattern_b
 }
 void synthesize_square_mask(double *square_mask_smooth, int *pattern_bi_graylevel, int Pattern_size, double sigma, int flag, bool OpenMP)
 {
-	int ii, jj, pattern_size = Pattern_size;
-	int es_con_x = pattern_size / 2;
-	int es_con_y = pattern_size / 2;
+	int ii, jj;
+	int es_con_x = Pattern_size / 2;
+	int es_con_y = Pattern_size / 2;
 	char dark = (char)pattern_bi_graylevel[0];
 	char bright = (char)pattern_bi_graylevel[1];
 	char mid = (char)((pattern_bi_graylevel[0] + pattern_bi_graylevel[1]) / 2);
 
-	char *square_mask = new char[pattern_size*pattern_size];
+	char *square_mask = new char[Pattern_size*Pattern_size];
 
-	for (jj = 0; jj < pattern_size; jj++)
+	for (jj = 0; jj < Pattern_size; jj++)
 	{
-		for (ii = 0; ii < pattern_size; ii++)
+		for (ii = 0; ii < Pattern_size; ii++)
 		{
 			if ((ii<es_con_x && jj<es_con_y) || (ii>es_con_x && jj>es_con_y))
-				square_mask[ii + jj*pattern_size] = (flag == 0 ? bright : dark);
+				square_mask[ii + jj*Pattern_size] = (flag == 0 ? bright : dark);
 			else if (ii == es_con_x || jj == es_con_y)
-				square_mask[ii + jj*pattern_size] = mid;
+				square_mask[ii + jj*Pattern_size] = mid;
 			else
-				square_mask[ii + jj*pattern_size] = (flag == 0 ? dark : bright);
+				square_mask[ii + jj*Pattern_size] = (flag == 0 ? dark : bright);
 		}
 	}
+	//SaveDataToImage("C:/temp/t.png", square_mask, Pattern_size, Pattern_size, 1);
 
 	// Gaussian smooth
-	Gaussian_smooth(square_mask, square_mask_smooth, pattern_size, pattern_size, pattern_bi_graylevel[1], sigma);
+	Gaussian_smooth(square_mask, square_mask_smooth, Pattern_size, Pattern_size, pattern_bi_graylevel[1], sigma);
 
-	for (jj = 0; jj < pattern_size; jj++)
-		for (ii = 0; ii < pattern_size; ii++)
-			square_mask[ii + jj*pattern_size] = (char)MyFtoI((square_mask_smooth[ii + jj*pattern_size]));
+	for (jj = 0; jj < Pattern_size; jj++)
+		for (ii = 0; ii < Pattern_size; ii++)
+			square_mask[ii + jj*Pattern_size] = (char)MyFtoI((square_mask_smooth[ii + jj*Pattern_size]));
+
+	//SaveDataToImage("C:/temp/st.png", square_mask, Pattern_size, Pattern_size, 1);
 	delete[]square_mask;
 
-	double x = square_mask_smooth[0];
-	x = x + 1.0;
 	return;
 }
 void synthesize_pattern(int pattern, double *Pattern, int *Pattern_size, int *pattern_bi_graylevel, int *Subset, double *ctrl_pts_info, double scale, int board_width, int board_height, double sigma, int num_ring_edge, int num_target = 0, bool OpenMP = false)
@@ -7649,96 +7817,462 @@ void synthesize_pattern(int pattern, double *Pattern, int *Pattern_size, int *pa
 	return;
 }
 
-
-double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, Point2i &POI, int search_area, double thresh)
+//ECC image alignment
+static void image_jacobian_homo_ECC(const Mat& src1, const Mat& src2, const Mat& src3, const Mat& src4, const Mat& src5, Mat& dst)
 {
-	//No interpolation at all, just slide the template around to compute the ZNCC
-	int m, i, j, ii, jj, iii, jjj, II, JJ, length = width*height;
-	double t_f, t_g, t_1, t_2, t_3, t_4, t_5, m_F, m_G;
 
-	Point2d w_pt, ima_pt;
-	int Pattern_cen_x = pattern_size / 2;
-	int Pattern_cen_y = pattern_size / 2;
 
-	FILE *fp1, *fp2;
-	bool printout = false;
+	CV_Assert(src1.size() == src2.size());
+	CV_Assert(src1.size() == src3.size());
+	CV_Assert(src1.size() == src4.size());
 
-	Point2i orgPOI = POI;
-	double *T = new double[2 * (2 * hsubset + 1)*(2 * hsubset + 1)];
-	double zncc = 0.0;
-	for (j = -search_area; j <= search_area; j++)
-	{
-		for (i = -search_area; i <= search_area; i++)
-		{
-			m = -1;
-			t_f = 0.0;
-			t_g = 0.0;
+	CV_Assert(src1.rows == dst.rows);
+	CV_Assert(dst.cols == (src1.cols * 8));
+	CV_Assert(dst.type() == CV_32FC1);
 
-			if (printout)
-			{
-				fp1 = fopen("C:/temp/src.txt", "w+");
-				fp2 = fopen("C:/temp/tar.txt", "w+");
-			}
+	CV_Assert(src5.isContinuous());
 
-			for (jjj = -hsubset; jjj <= hsubset; jjj++)
-			{
-				for (iii = -hsubset; iii <= hsubset; iii++)
-				{
-					jj = Pattern_cen_y + jjj, ii = Pattern_cen_x + iii;
 
-					JJ = orgPOI.y + jjj + j, II = orgPOI.x + iii + i;
+	const float* hptr = src5.ptr<float>(0);
 
-					m_F = Pattern[ii + jj*pattern_size], m_G = Image[II + JJ*width];
+	const float h0_ = hptr[0];
+	const float h1_ = hptr[3];
+	const float h2_ = hptr[6];
+	const float h3_ = hptr[1];
+	const float h4_ = hptr[4];
+	const float h5_ = hptr[7];
+	const float h6_ = hptr[2];
+	const float h7_ = hptr[5];
 
-					if (printout)
-						fprintf(fp1, "%.2f ", m_F), fprintf(fp2, "%.2f ", m_G);
+	const int w = src1.cols;
 
-					m++;
-					T[2 * m] = m_F, T[2 * m + 1] = m_G;
-					t_f += m_F, t_g += m_G;
-				}
-				if (printout)
-					fprintf(fp1, "\n"), fprintf(fp2, "\n");
-			}
-			if (printout)
-				fclose(fp1), fclose(fp2);
 
-			t_f = t_f / (m + 1);
-			t_g = t_g / (m + 1);
-			t_1 = 0.0, t_2 = 0.0, t_3 = 0.0;
-			for (iii = 0; iii <= m; iii++)
-			{
-				t_4 = *(T + 2 * iii + 0) - t_f;
-				t_5 = *(T + 2 * iii + 1) - t_g;
-				t_1 += (t_4*t_5), t_2 += (t_4*t_4), t_3 += (t_5*t_5);
-			}
+	//create denominator for all points as a block
+	Mat den_ = src3*h2_ + src4*h5_ + 1.0;//check the time of this! otherwise use addWeighted
 
-			t_2 = sqrt(t_2*t_3);
-			if (t_2 < 1e-10)
-				t_2 = 1e-10;
+	//create projected points
+	Mat hatX_ = -src3*h0_ - src4*h3_ - h6_;
+	divide(hatX_, den_, hatX_);
+	Mat hatY_ = -src3*h1_ - src4*h4_ - h7_;
+	divide(hatY_, den_, hatY_);
 
-			t_3 = t_1 / t_2;
-			if (t_3 > 1.0 || t_3 < -1.0)
-				t_3 = 0.0;
 
-			if (t_3>thresh && t_3 > zncc)
-			{
-				zncc = t_3;
-				POI.x = orgPOI.x + i, POI.y = orgPOI.y + j;
-			}
-			else if (t_3 < -thresh && t_3 < zncc)
-			{
-				zncc = t_3;
-				POI.x = orgPOI.x + i, POI.y = orgPOI.y + j;
+	//instead of dividing each block with den,
+	//just pre-devide the block of gradients (it's more efficient)
+
+	Mat src1Divided_;
+	Mat src2Divided_;
+
+	divide(src1, den_, src1Divided_);
+	divide(src2, den_, src2Divided_);
+
+
+	//compute Jacobian blocks (8 blocks)
+
+	dst.colRange(0, w) = src1Divided_.mul(src3);//1
+
+	dst.colRange(w, 2 * w) = src2Divided_.mul(src3);//2
+
+	Mat temp_ = (hatX_.mul(src1Divided_) + hatY_.mul(src2Divided_));
+	dst.colRange(2 * w, 3 * w) = temp_.mul(src3);//3
+
+	hatX_.release();
+	hatY_.release();
+
+	dst.colRange(3 * w, 4 * w) = src1Divided_.mul(src4);//4
+
+	dst.colRange(4 * w, 5 * w) = src2Divided_.mul(src4);//5
+
+	dst.colRange(5 * w, 6 * w) = temp_.mul(src4);//6
+
+	src1Divided_.copyTo(dst.colRange(6 * w, 7 * w));//7
+
+	src2Divided_.copyTo(dst.colRange(7 * w, 8 * w));//8
+}
+static void image_jacobian_euclidean_ECC(const Mat& src1, const Mat& src2, const Mat& src3, const Mat& src4, const Mat& src5, Mat& dst)
+{
+
+	CV_Assert(src1.size() == src2.size());
+	CV_Assert(src1.size() == src3.size());
+	CV_Assert(src1.size() == src4.size());
+
+	CV_Assert(src1.rows == dst.rows);
+	CV_Assert(dst.cols == (src1.cols * 3));
+	CV_Assert(dst.type() == CV_32FC1);
+
+	CV_Assert(src5.isContinuous());
+
+	const float* hptr = src5.ptr<float>(0);
+
+	const float h0 = hptr[0];//cos(theta)
+	const float h1 = hptr[3];//sin(theta)
+
+	const int w = src1.cols;
+
+	//create -sin(theta)*X -cos(theta)*Y for all points as a block -> hatX
+	Mat hatX = -(src3*h1) - (src4*h0);
+
+	//create cos(theta)*X -sin(theta)*Y for all points as a block -> hatY
+	Mat hatY = (src3*h0) - (src4*h1);
+
+
+	//compute Jacobian blocks (3 blocks)
+	dst.colRange(0, w) = (src1.mul(hatX)) + (src2.mul(hatY));//1
+
+	src1.copyTo(dst.colRange(w, 2 * w));//2
+	src2.copyTo(dst.colRange(2 * w, 3 * w));//3
+}
+static void image_jacobian_affine_ECC(const Mat& src1, const Mat& src2, const Mat& src3, const Mat& src4, Mat& dst)
+{
+
+	CV_Assert(src1.size() == src2.size());
+	CV_Assert(src1.size() == src3.size());
+	CV_Assert(src1.size() == src4.size());
+
+	CV_Assert(src1.rows == dst.rows);
+	CV_Assert(dst.cols == (6 * src1.cols));
+
+	CV_Assert(dst.type() == CV_32FC1);
+
+
+	const int w = src1.cols;
+
+	//compute Jacobian blocks (6 blocks)
+
+	dst.colRange(0, w) = src1.mul(src3);//1
+	dst.colRange(w, 2 * w) = src2.mul(src3);//2
+	dst.colRange(2 * w, 3 * w) = src1.mul(src4);//3
+	dst.colRange(3 * w, 4 * w) = src2.mul(src4);//4
+	src1.copyTo(dst.colRange(4 * w, 5 * w));//5
+	src2.copyTo(dst.colRange(5 * w, 6 * w));//6
+}
+static void image_jacobian_translation_ECC(const Mat& src1, const Mat& src2, Mat& dst)
+{
+
+	CV_Assert(src1.size() == src2.size());
+
+	CV_Assert(src1.rows == dst.rows);
+	CV_Assert(dst.cols == (src1.cols * 2));
+	CV_Assert(dst.type() == CV_32FC1);
+
+	const int w = src1.cols;
+
+	//compute Jacobian blocks (2 blocks)
+	src1.copyTo(dst.colRange(0, w));
+	src2.copyTo(dst.colRange(w, 2 * w));
+}
+static void project_onto_jacobian_ECC(const Mat& src1, const Mat& src2, Mat& dst)
+{
+	/* this functions is used for two types of projections. If src1.cols ==src.cols
+	it does a blockwise multiplication (like in the outer product of vectors)
+	of the blocks in matrices src1 and src2 and dst
+	has size (number_of_blcks x number_of_blocks), otherwise dst is a vector of size
+	(number_of_blocks x 1) since src2 is "multiplied"(dot) with each block of src1.
+	The number_of_blocks is equal to the number of parameters we are lloking for
+	(i.e. rtanslation:2, euclidean: 3, affine: 6, homography: 8)
+	*/
+	CV_Assert(src1.rows == src2.rows);
+	CV_Assert((src1.cols % src2.cols) == 0);
+	int w;
+
+	float* dstPtr = dst.ptr<float>(0);
+
+	if (src1.cols != src2.cols){//dst.cols==1
+		w = src2.cols;
+		for (int i = 0; i < dst.rows; i++){
+			dstPtr[i] = (float)src2.dot(src1.colRange(i*w, (i + 1)*w));
+		}
+	}
+
+	else {
+		CV_Assert(dst.cols == dst.rows); //dst is square (and symmetric)
+		w = src2.cols / dst.cols;
+		Mat mat;
+		for (int i = 0; i < dst.rows; i++){
+
+			mat = Mat(src1.colRange(i*w, (i + 1)*w));
+			dstPtr[i*(dst.rows + 1)] = (float)pow(norm(mat), 2); //diagonal elements
+
+			for (int j = i + 1; j < dst.cols; j++){ //j starts from i+1
+				dstPtr[i*dst.cols + j] = (float)mat.dot(src2.colRange(j*w, (j + 1)*w));
+				dstPtr[j*dst.cols + i] = dstPtr[i*dst.cols + j]; //due to symmetry
 			}
 		}
 	}
-	zncc = abs(zncc);
-
-	delete[]T;
-	return zncc;
 }
-double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, int nchannels, Point2i &POI, int search_area, double thresh)
+static void update_warping_matrix_ECC(Mat& map_matrix, const Mat& update, const int motionType)
+{
+	CV_Assert(map_matrix.type() == CV_32FC1);
+	CV_Assert(update.type() == CV_32FC1);
+
+	CV_Assert(motionType == MOTION_TRANSLATION || motionType == MOTION_EUCLIDEAN ||
+		motionType == MOTION_AFFINE || motionType == MOTION_HOMOGRAPHY);
+
+	if (motionType == MOTION_HOMOGRAPHY)
+		CV_Assert(map_matrix.rows == 3 && update.rows == 8);
+	else if (motionType == MOTION_AFFINE)
+		CV_Assert(map_matrix.rows == 2 && update.rows == 6);
+	else if (motionType == MOTION_EUCLIDEAN)
+		CV_Assert(map_matrix.rows == 2 && update.rows == 3);
+	else
+		CV_Assert(map_matrix.rows == 2 && update.rows == 2);
+
+	CV_Assert(update.cols == 1);
+
+	CV_Assert(map_matrix.isContinuous());
+	CV_Assert(update.isContinuous());
+
+
+	float* mapPtr = map_matrix.ptr<float>(0);
+	const float* updatePtr = update.ptr<float>(0);
+
+
+	if (motionType == MOTION_TRANSLATION){
+		mapPtr[2] += updatePtr[0];
+		mapPtr[5] += updatePtr[1];
+	}
+	if (motionType == MOTION_AFFINE) {
+		mapPtr[0] += updatePtr[0];
+		mapPtr[3] += updatePtr[1];
+		mapPtr[1] += updatePtr[2];
+		mapPtr[4] += updatePtr[3];
+		mapPtr[2] += updatePtr[4];
+		mapPtr[5] += updatePtr[5];
+	}
+	if (motionType == MOTION_HOMOGRAPHY) {
+		mapPtr[0] += updatePtr[0];
+		mapPtr[3] += updatePtr[1];
+		mapPtr[6] += updatePtr[2];
+		mapPtr[1] += updatePtr[3];
+		mapPtr[4] += updatePtr[4];
+		mapPtr[7] += updatePtr[5];
+		mapPtr[2] += updatePtr[6];
+		mapPtr[5] += updatePtr[7];
+	}
+	if (motionType == MOTION_EUCLIDEAN) {
+		double new_theta = updatePtr[0];
+		if (mapPtr[3] > 0)
+			new_theta += acos(mapPtr[0]);
+
+		if (mapPtr[3] < 0)
+			new_theta -= acos(mapPtr[0]);
+
+		mapPtr[2] += updatePtr[1];
+		mapPtr[5] += updatePtr[2];
+		mapPtr[0] = mapPtr[4] = (float)cos(new_theta);
+		mapPtr[3] = (float)sin(new_theta);
+		mapPtr[1] = -mapPtr[3];
+	}
+}
+double findTransformECC(InputArray templateImage, InputArray inputImage, InputOutputArray warpMatrix, int motionType, TermCriteria criteria)
+{
+	Mat src = templateImage.getMat();//template iamge
+	Mat dst = inputImage.getMat(); //input image (to be warped)
+	Mat map = warpMatrix.getMat(); //warp (transformation)
+
+	CV_Assert(!src.empty());
+	CV_Assert(!dst.empty());
+
+
+	if (!(src.type() == dst.type()))
+		printf("Both input images must have the same data type");
+
+	//accept only 1-channel images
+	if (src.type() != CV_8UC1 && src.type() != CV_32FC1)
+		printf("Images must have 8uC1 or 32fC1 type");
+
+	if (map.type() != CV_32FC1)
+		printf("warpMatrix must be single-channel floating-point matrix");
+
+	CV_Assert(map.cols == 3);
+	CV_Assert(map.rows == 2 || map.rows == 3);
+
+	CV_Assert(motionType == MOTION_AFFINE || motionType == MOTION_HOMOGRAPHY ||
+		motionType == MOTION_EUCLIDEAN || motionType == MOTION_TRANSLATION);
+
+	if (motionType == MOTION_HOMOGRAPHY){
+		CV_Assert(map.rows == 3);
+	}
+
+	CV_Assert(criteria.type & TermCriteria::COUNT || criteria.type & TermCriteria::EPS);
+	const int    numberOfIterations = (criteria.type & TermCriteria::COUNT) ? criteria.maxCount : 200;
+	const double termination_eps = (criteria.type & TermCriteria::EPS) ? criteria.epsilon : -1;
+
+	int paramTemp = 6;//default: affine
+	switch (motionType){
+	case MOTION_TRANSLATION:
+		paramTemp = 2;
+		break;
+	case MOTION_EUCLIDEAN:
+		paramTemp = 3;
+		break;
+	case MOTION_HOMOGRAPHY:
+		paramTemp = 8;
+		break;
+	}
+
+
+	const int numberOfParameters = paramTemp;
+
+	const int ws = src.cols;
+	const int hs = src.rows;
+	const int wd = dst.cols;
+	const int hd = dst.rows;
+
+	Mat Xcoord = Mat(1, ws, CV_32F);
+	Mat Ycoord = Mat(hs, 1, CV_32F);
+	Mat Xgrid = Mat(hs, ws, CV_32F);
+	Mat Ygrid = Mat(hs, ws, CV_32F);
+
+	float* XcoPtr = Xcoord.ptr<float>(0);
+	float* YcoPtr = Ycoord.ptr<float>(0);
+	int j;
+	for (j = 0; j < ws; j++)
+		XcoPtr[j] = (float)j;
+	for (j = 0; j < hs; j++)
+		YcoPtr[j] = (float)j;
+
+	repeat(Xcoord, hs, 1, Xgrid);
+	repeat(Ycoord, 1, ws, Ygrid);
+
+	Xcoord.release();
+	Ycoord.release();
+
+	Mat templateZM = Mat(hs, ws, CV_32F);// to store the (smoothed)zero-mean version of template
+	Mat templateFloat = Mat(hs, ws, CV_32F);// to store the (smoothed) template
+	Mat imageFloat = Mat(hd, wd, CV_32F);// to store the (smoothed) input image
+	Mat imageWarped = Mat(hs, ws, CV_32F);// to store the warped zero-mean input image
+	Mat allOnes = Mat::ones(hd, wd, CV_8U); //to use it for mask warping
+	Mat imageMask = Mat(hs, ws, CV_8U); //to store the final mask
+
+	//gaussian filtering is optional
+	src.convertTo(templateFloat, templateFloat.type());
+	GaussianBlur(templateFloat, templateFloat, Size(5, 5), 0, 0);//is in-place filtering slower?
+
+	dst.convertTo(imageFloat, imageFloat.type());
+	GaussianBlur(imageFloat, imageFloat, Size(5, 5), 0, 0);
+
+	// needed matrices for gradients and warped gradients
+	Mat gradientX = Mat::zeros(hd, wd, CV_32FC1);
+	Mat gradientY = Mat::zeros(hd, wd, CV_32FC1);
+	Mat gradientXWarped = Mat(hs, ws, CV_32FC1);
+	Mat gradientYWarped = Mat(hs, ws, CV_32FC1);
+
+
+	// calculate first order image derivatives
+	Matx13f dx(-0.5f, 0.0f, 0.5f);
+
+	filter2D(imageFloat, gradientX, -1, dx);
+	filter2D(imageFloat, gradientY, -1, dx.t());
+
+
+	// matrices needed for solving linear equation system for maximizing ECC
+	Mat jacobian = Mat(hs, ws*numberOfParameters, CV_32F);
+	Mat hessian = Mat(numberOfParameters, numberOfParameters, CV_32F);
+	Mat hessianInv = Mat(numberOfParameters, numberOfParameters, CV_32F);
+	Mat imageProjection = Mat(numberOfParameters, 1, CV_32F);
+	Mat templateProjection = Mat(numberOfParameters, 1, CV_32F);
+	Mat imageProjectionHessian = Mat(numberOfParameters, 1, CV_32F);
+	Mat errorProjection = Mat(numberOfParameters, 1, CV_32F);
+
+	Mat deltaP = Mat(numberOfParameters, 1, CV_32F);//transformation parameter correction
+	Mat error = Mat(hs, ws, CV_32F);//error as 2D matrix
+
+	const int imageFlags = INTER_LINEAR + WARP_INVERSE_MAP;
+	const int maskFlags = INTER_NEAREST + WARP_INVERSE_MAP;
+
+
+	// iteratively update map_matrix
+	double rho = -1;
+	double last_rho = -termination_eps;
+	for (int i = 1; (i <= numberOfIterations) && (fabs(rho - last_rho) >= termination_eps); i++)
+	{
+
+		// warp-back portion of the inputImage and gradients to the coordinate space of the templateImage
+		if (motionType != MOTION_HOMOGRAPHY)
+		{
+			warpAffine(imageFloat, imageWarped, map, imageWarped.size(), imageFlags);
+			warpAffine(gradientX, gradientXWarped, map, gradientXWarped.size(), imageFlags);
+			warpAffine(gradientY, gradientYWarped, map, gradientYWarped.size(), imageFlags);
+			warpAffine(allOnes, imageMask, map, imageMask.size(), maskFlags);
+		}
+		else
+		{
+			warpPerspective(imageFloat, imageWarped, map, imageWarped.size(), imageFlags);
+			warpPerspective(gradientX, gradientXWarped, map, gradientXWarped.size(), imageFlags);
+			warpPerspective(gradientY, gradientYWarped, map, gradientYWarped.size(), imageFlags);
+			warpPerspective(allOnes, imageMask, map, imageMask.size(), maskFlags);
+		}
+
+
+		Scalar imgMean, imgStd, tmpMean, tmpStd;
+		meanStdDev(imageWarped, imgMean, imgStd, imageMask);
+		meanStdDev(templateFloat, tmpMean, tmpStd, imageMask);
+
+		subtract(imageWarped, imgMean, imageWarped, imageMask);//zero-mean input
+		templateZM = Mat::zeros(templateZM.rows, templateZM.cols, templateZM.type());
+		subtract(templateFloat, tmpMean, templateZM, imageMask);//zero-mean template
+
+		const double tmpNorm = std::sqrt(countNonZero(imageMask)*(tmpStd.val[0])*(tmpStd.val[0]));
+		const double imgNorm = std::sqrt(countNonZero(imageMask)*(imgStd.val[0])*(imgStd.val[0]));
+
+		// calculate jacobian of image wrt parameters
+		switch (motionType){
+		case MOTION_AFFINE:
+			image_jacobian_affine_ECC(gradientXWarped, gradientYWarped, Xgrid, Ygrid, jacobian);
+			break;
+		case MOTION_HOMOGRAPHY:
+			image_jacobian_homo_ECC(gradientXWarped, gradientYWarped, Xgrid, Ygrid, map, jacobian);
+			break;
+		case MOTION_TRANSLATION:
+			image_jacobian_translation_ECC(gradientXWarped, gradientYWarped, jacobian);
+			break;
+		case MOTION_EUCLIDEAN:
+			image_jacobian_euclidean_ECC(gradientXWarped, gradientYWarped, Xgrid, Ygrid, map, jacobian);
+			break;
+		}
+
+		// calculate Hessian and its inverse
+		project_onto_jacobian_ECC(jacobian, jacobian, hessian);
+
+		hessianInv = hessian.inv();
+
+		const double correlation = templateZM.dot(imageWarped);
+
+		// calculate enhanced correlation coefficiont (ECC)->rho
+		last_rho = rho;
+		rho = correlation / (imgNorm*tmpNorm);
+
+		// project images into jacobian
+		project_onto_jacobian_ECC(jacobian, imageWarped, imageProjection);
+		project_onto_jacobian_ECC(jacobian, templateZM, templateProjection);
+
+
+		// calculate the parameter lambda to account for illumination variation
+		imageProjectionHessian = hessianInv*imageProjection;
+		const double lambda_n = (imgNorm*imgNorm) - imageProjection.dot(imageProjectionHessian);
+		const double lambda_d = correlation - templateProjection.dot(imageProjectionHessian);
+		if (lambda_d <= 0.0)
+		{
+			rho = -1;
+			printf("The algorithm stopped before its convergence. The correlation is going to be minimized. Images may be uncorrelated or non-overlapped");
+		}
+		const double lambda = (lambda_n / lambda_d);
+
+		// estimate the update step delta_p
+		error = lambda*templateZM - imageWarped;
+		project_onto_jacobian_ECC(jacobian, error, errorProjection);
+		deltaP = hessianInv * errorProjection;
+
+		// update warping matrix
+		update_warping_matrix_ECC(map, deltaP, motionType);
+	}
+
+	// return final correlation coefficient
+	return rho;
+}
+
+double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, int nchannels, Point2i &POI, int search_area, double thresh, double *T)
 {
 	//No interpolation at all, just slide the template around to compute the ZNCC
 	int m, i, j, ii, jj, iii, jjj, II, JJ, length = width*height, patternLength = pattern_size*pattern_size;
@@ -7752,15 +8286,17 @@ double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, doub
 	bool printout = false;
 
 	Point2i orgPOI = POI;
-	double *T = new double[2 * (2 * hsubset + 1)*(2 * hsubset + 1)*nchannels];
+	bool createdMem = false;
+	if (T == NULL)
+		T = new double[2 * (2 * hsubset + 1)*(2 * hsubset + 1)*nchannels], createdMem = true;
+
 	double zncc = 0.0;
 	for (j = -search_area; j <= search_area; j++)
 	{
 		for (i = -search_area; i <= search_area; i++)
 		{
 			m = -1;
-			t_f = 0.0;
-			t_g = 0.0;
+			t_f = 0.0, t_g = 0.0;
 
 			if (printout)
 			{
@@ -7775,7 +8311,6 @@ double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, doub
 					for (int kk = 0; kk < nchannels; kk++)
 					{
 						jj = Pattern_cen_y + jjj, ii = Pattern_cen_x + iii;
-
 						JJ = orgPOI.y + jjj + j, II = orgPOI.x + iii + i;
 
 						m_F = Pattern[ii + jj*pattern_size + kk*patternLength], m_G = Image[II + JJ*width + kk*length];
@@ -7801,7 +8336,7 @@ double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, doub
 			{
 				t_4 = *(T + 2 * iii + 0) - t_f;
 				t_5 = *(T + 2 * iii + 1) - t_g;
-				t_1 += (t_4*t_5), t_2 += (t_4*t_4), t_3 += (t_5*t_5);
+				t_1 += t_4*t_5, t_2 += t_4*t_4, t_3 += t_5*t_5;
 			}
 
 			t_2 = sqrt(t_2*t_3);
@@ -7826,93 +8361,68 @@ double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, doub
 	}
 	zncc = abs(zncc);
 
-	delete[]T;
+	if (createdMem)
+		delete[]T;
 	return zncc;
 }
-double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd)
+int TMatchingCoarse(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, int nchannels, Point2d &POI, int search_area, double thresh, double &zncc, int InterpAlgo, double *InitPara = NULL, double *maxZNCC = NULL)
 {
-	int i, j, k, m, ii, jj, iii, jjj, iii2, jjj2;
-	double II, JJ, iii_n, jjj_n, gx, gy, DIC_Coeff, DIC_Coeff_min, t_1, t_2, t_3, t_4, t_5, t_6, m_F, m_G, t_f, t_ff, t_g, S[6];
-	double conv_crit_1 = pow(10.0, -Convergence_Criteria - 2);
-	double conv_crit_2 = conv_crit_1*0.1;
-	int NN[] = { 4, 6, 12 }, P_Jump_Incr[] = { 1, 1 };
-	int nn = NN[advanced_tech], _iter = 0, Iter_Max = 20;
-	int p_jump, p_jump_0 = 1, p_jump_incr = P_Jump_Incr[advanced_tech];
+	//Compute the zncc in a local region (5x5). No iteration is used to solve for shape parameters
+	//InitPara: 3x3 homography matrix
+	int i, j, ii, jj, iii, jjj, kkk, length = width*height, pattern_length = pattern_size*pattern_size, pjump = search_area > 5 ? 2 : 1;
+	double II, JJ, t_1, t_2, t_3, t_4, m_F, m_G, S[6];
 
-	double AA[144], BB[12], CC[12];
-
-	bool createMem = false;
-	if (Znssd_reqd == NULL)
-	{
-		createMem = true;
-		Znssd_reqd = new double[6 * (2 * hsubset + 1)*(2 * hsubset + 1)];
-	}
-
+	Point2d w_pt, ima_pt;
 	int Pattern_cen_x = pattern_size / 2;
 	int Pattern_cen_y = pattern_size / 2;
 
-	double p[12], p_best[12];
-	for (i = 0; i < 12; i++)
-		p[i] = 0.0;
-
-	nn = NN[advanced_tech];
-	int pixel_increment_in_subset[] = { 1, 2, 2, 3 };
-
 	bool printout = false;
 	FILE *fp1 = 0, *fp2 = 0;
+	int m;
+	double t_f, t_g, t_5, xxx = 0.0, yyy = 0.0;
+	double *T = new double[2 * (2 * hsubset + 1)*(2 * hsubset + 1)];
 
-	/// Iteration: Begin
-	bool Break_Flag = false;
-	DIC_Coeff_min = 4.0;
-	for (p_jump = p_jump_0; p_jump > 0; p_jump -= p_jump_incr)
+	zncc = 0.0;
+	for (j = -search_area; j <= search_area; j += pjump)
 	{
-		for (k = 0; k < Iter_Max; k++)
+		for (i = -search_area; i <= search_area; i += pjump)
 		{
 			m = -1;
-			t_1 = 0.0, t_2 = 0.0;
-			for (iii = 0; iii < 144; iii++)
-				AA[iii] = 0.0;
-			for (iii = 0; iii < 12; iii++)
-				BB[iii] = 0.0;
+			t_f = 0.0, t_g = 0.0;
 
 			if (printout)
 				fp1 = fopen("C:/temp/src.txt", "w+"), fp2 = fopen("C:/temp/tar.txt", "w+");
 
-			for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+			for (jjj = -hsubset; jjj <= hsubset; jjj++)
 			{
-				for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+				for (iii = -hsubset; iii <= hsubset; iii++)
 				{
-					ii = Pattern_cen_x + iii, jj = Pattern_cen_y + jjj;
-
-					if (ii<0 || ii>(width - 1) || jj<0 || jj>(height - 1))
-						continue;
-
-					iii2 = iii*iii, jjj2 = jjj*jjj;
-					if (advanced_tech == 0)
-						II = POI.x + iii + p[0] + p[2] * iii, JJ = POI.y + jjj + p[1] + p[3] * jjj;
-					else if (advanced_tech == 1)
-						II = POI.x + iii + p[0] + p[2] * iii + p[3] * jjj, JJ = POI.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
-					else if (advanced_tech == 2)
+					for (kkk = 0; kkk < nchannels; kkk++)
 					{
-						II = POI.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * iii2*0.5 + p[7] * jjj2*0.5 + p[8] * iii*jjj;
-						JJ = POI.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[9] * iii2*0.5 + p[10] * jjj2*0.5 + p[11] * iii*jjj;
+						jj = Pattern_cen_y + jjj;
+						ii = Pattern_cen_x + iii;
+
+						if (InitPara == NULL)
+						{
+							II = (int)(POI.x + 0.5) + iii + i;
+							JJ = (int)(POI.y + 0.5) + jjj + j;
+						}
+						else
+						{
+							II = (InitPara[0] * iii + InitPara[1] * jjj + InitPara[2]) / (InitPara[6] * iii + InitPara[7] * jjj + InitPara[8]);
+							JJ = (InitPara[3] * iii + InitPara[4] * jjj + InitPara[5]) / (InitPara[6] * iii + InitPara[7] * jjj + InitPara[8]);
+						}
+
+						Get_Value_Spline(Para + kkk*length, width, height, II, JJ, S, -1, InterpAlgo);
+
+						m_F = Pattern[ii + jj*pattern_size + kkk*pattern_length], m_G = S[0];
+						m++;
+						T[2 * m] = m_F, T[2 * m + 1] = m_G;
+						t_f += m_F, t_g += m_G;
+
+						if (printout)
+							fprintf(fp1, "%.2f ", m_G), fprintf(fp2, "%.2f ", m_F);
 					}
-
-					if (II<0.0 || II>(double)(width - 1) - (1e-10) || JJ<0.0 || JJ>(double)(height - 1) - (1e-10))
-						continue;
-
-					Get_Value_Spline(Para, width, height, II, JJ, S, 0, InterpAlgo);
-					m_F = Pattern[ii + jj*pattern_size];
-					m_G = S[0], gx = S[1], gy = S[2];
-					m++;
-
-					Znssd_reqd[6 * m + 0] = m_F, Znssd_reqd[6 * m + 1] = m_G;
-					Znssd_reqd[6 * m + 2] = gx, Znssd_reqd[6 * m + 3] = gy;
-					Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
-					t_1 += m_F, t_2 += m_G;
-
-					if (printout)
-						fprintf(fp1, "%e ", m_F), fprintf(fp2, "%e ", m_G);
 				}
 				if (printout)
 					fprintf(fp1, "\n"), fprintf(fp2, "\n");
@@ -7920,114 +8430,62 @@ double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double
 			if (printout)
 				fclose(fp1), fclose(fp2);
 
-			if (k == 0)
-			{
-				t_f = t_1 / (m + 1);
-				t_1 = 0.0;
-				for (iii = 0; iii <= m; iii++)
-				{
-					t_4 = Znssd_reqd[6 * iii + 0] - t_f;
-					t_1 += t_4*t_4;
-				}
-				t_ff = sqrt(t_1);
-			}
-
-			t_g = t_2 / (m + 1);
-			t_2 = 0.0;
+			t_f = t_f / (m + 1), t_g = t_g / (m + 1);
+			t_1 = 0.0, t_2 = 0.0, t_3 = 0.0;
 			for (iii = 0; iii <= m; iii++)
 			{
-				t_5 = Znssd_reqd[6 * iii + 1] - t_g;
-				t_2 += t_5*t_5;
+				t_4 = *(T + 2 * iii + 0) - t_f, t_5 = *(T + 2 * iii + 1) - t_g;
+				t_1 += (t_4*t_5), t_2 += (t_4*t_4), t_3 += (t_5*t_5);
 			}
-			t_2 = sqrt(t_2);
 
-			DIC_Coeff = 0.0;
-			for (iii = 0; iii <= m; iii++)
+			t_2 = sqrt(t_2*t_3);
+			if (t_2 < 1e-10)
+				t_2 = 1e-10;
+
+			t_3 = t_1 / t_2;
+			if (t_3 > 1.0 || t_3 < -1.0)
+				t_3 = 0.0;
+
+			if (t_3>thresh && t_3 > zncc)
 			{
-				t_4 = Znssd_reqd[6 * iii + 0] - t_f;
-				t_5 = Znssd_reqd[6 * iii + 1] - t_g;
-				t_6 = t_5 / t_2 - t_4 / t_ff;
-				t_3 = t_6 / t_2;
-				gx = Znssd_reqd[6 * iii + 2], gy = Znssd_reqd[6 * iii + 3];
-				iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
-
-				CC[0] = gx, CC[1] = gy;
-				if (advanced_tech == 0)
-					CC[2] = gx*iii_n, CC[3] = gy*jjj_n;
-				if (advanced_tech == 1)
-				{
-					CC[2] = gx*iii_n, CC[3] = gx*jjj_n;
-					CC[4] = gy*iii_n, CC[5] = gy*jjj_n;
-				}
-				if (advanced_tech == 2)
-				{
-					CC[6] = gx*iii_n*iii_n*0.5, CC[7] = gx*jjj_n*jjj_n*0.5, CC[8] = gx*iii_n*jjj_n;
-					CC[9] = gy*iii_n*iii_n*0.5, CC[10] = gy*jjj_n*jjj_n*0.5, CC[11] = gy*iii_n*jjj_n;
-				}
-				for (j = 0; j < nn; j++)
-				{
-					BB[j] += t_3*CC[j];
-					for (i = 0; i < nn; i++)
-						AA[j*nn + i] += CC[i] * CC[j] / (t_2*t_2);
-				}
-
-				DIC_Coeff += t_6*t_6;
+				zncc = t_3;
+				xxx = i, yyy = j;
 			}
-
-			QR_Solution_Double(AA, BB, nn, nn);
-			for (iii = 0; iii < nn; iii++)
-				p[iii] -= BB[iii];
-
-			if (!IsNumber(p[0]) || abs(p[0]) > hsubset || abs(p[1]) > hsubset)
+			else if (t_3 < -thresh && abs(t_3) > zncc)
 			{
-				if (createMem)
-					delete[]Znssd_reqd;
-				return false;
+				zncc = t_3;
+				xxx = i, yyy = j;
 			}
-
-			if (DIC_Coeff < DIC_Coeff_min)	// If the iteration does not converge, this can be helpful
-			{
-				DIC_Coeff_min = DIC_Coeff;
-				for (iii = 0; iii < nn; iii++)
-					p_best[iii] = p[iii];
-			}
-
-			if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
-			{
-				for (iii = 2; iii < nn; iii++)
-				{
-					if (fabs(BB[iii]) > conv_crit_2)
-						break;
-				}
-				if (iii == nn)
-					Break_Flag = true;
-			}
-
-			if (Break_Flag)
-				break;
 		}
-		// In case the iteration converges to "wrong" points, always use the data that lead to the least-square value.
-		for (iii = 0; iii < nn; iii++)
-			p[iii] = p_best[iii];
 	}
-	/// Iteration: End
+	if (InitPara != NULL)
+		maxZNCC[0] = abs(zncc);
 
-	if (createMem)
-		delete[]Znssd_reqd;
-	if (abs(p[0]) > hsubset || abs(p[1]) > hsubset || p[0] != p[0] || p[1] != p[1] || DIC_Coeff_min > 1.0 - 0.5*ZNCCthresh)
-		return false;
-
-	POI.x += p[0], POI.y += p[1];
-
-	return 1.0 - 0.5*DIC_Coeff_min;
+	delete[]T;
+	if (zncc > thresh)
+	{
+		POI.x = (int)(POI.x + 0.5) + xxx;
+		POI.y = (int)(POI.y + 0.5) + yyy;
+		zncc = abs(zncc);
+		return 0;
+	}
+	else if (zncc < -thresh)
+	{
+		POI.x = (int)(POI.x + 0.5) + xxx;
+		POI.y = (int)(POI.y + 0.5) + yyy;
+		zncc = abs(zncc);
+		return 1;
+	}
+	else
+		return -1;
 }
 double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, int nchannels, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd)
 {
 	int i, j, k, m, ii, jj, kk, iii, jjj, iii2, jjj2;
-	double II, JJ, iii_n, jjj_n, gx, gy, DIC_Coeff, DIC_Coeff_min, t_1, t_2, t_3, t_4, t_5, t_6, m_F, m_G, t_f, t_ff, t_g, S[6];
+	double II, JJ, iii_n, jjj_n, gx, gy, DIC_Coeff, DIC_Coeff_min, t_1, t_2, t_3, t_4, t_5, t_6, numx, numy, denum, denum2, t_7, m_F, m_G, t_f, t_ff, t_g, S[6];
 	double conv_crit_1 = pow(10.0, -Convergence_Criteria - 2);
 	double conv_crit_2 = conv_crit_1*0.1;
-	int NN[] = { 3, 6, 12 }, P_Jump_Incr[] = { 1, 1 };
+	int NN[] = { 3, 6, 12, 8 }, P_Jump_Incr[] = { 1, 1, 1, 1 };
 	int nn = NN[advanced_tech], _iter = 0, Iter_Max = 20;
 	int p_jump, p_jump_0 = 1, p_jump_incr = P_Jump_Incr[advanced_tech];
 	int length = width*height, pattern_length = pattern_size*pattern_size;
@@ -8038,7 +8496,7 @@ double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double
 	if (Znssd_reqd == NULL)
 	{
 		createMem = true;
-		Znssd_reqd = new double[6 * (2 * hsubset + 1)*(2 * hsubset + 1)*nchannels];
+		Znssd_reqd = new double[9 * (2 * hsubset + 1)*(2 * hsubset + 1)*nchannels];
 	}
 
 	int Pattern_cen_x = pattern_size / 2;
@@ -8095,6 +8553,14 @@ double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double
 						II = POI.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * iii2*0.5 + p[7] * jjj2*0.5 + p[8] * iii*jjj;
 						JJ = POI.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[9] * iii2*0.5 + p[10] * jjj2*0.5 + p[11] * iii*jjj;
 					}
+					else
+					{
+						denum = 1.0 + p[6] * iii + p[7] * jjj;
+						numx = POI.x + iii + p[0] + p[2] * iii + p[3] * jjj;
+						numy = POI.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+						II = numx / denum;
+						JJ = numy / denum;
+					}
 
 					if (II<0.0 || II>(double)(width - 1) - (1e-10) || JJ<0.0 || JJ>(double)(height - 1) - (1e-10))
 						continue;
@@ -8106,9 +8572,12 @@ double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double
 						m_G = S[0], gx = S[1], gy = S[2];
 						m++;
 
-						Znssd_reqd[6 * m + 0] = m_F, Znssd_reqd[6 * m + 1] = m_G;
-						Znssd_reqd[6 * m + 2] = gx, Znssd_reqd[6 * m + 3] = gy;
-						Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
+						Znssd_reqd[9 * m + 0] = m_F, Znssd_reqd[9 * m + 1] = m_G;
+						Znssd_reqd[9 * m + 2] = gx, Znssd_reqd[9 * m + 3] = gy;
+						Znssd_reqd[9 * m + 4] = (double)iii, Znssd_reqd[9 * m + 5] = (double)jjj;
+						if (advanced_tech == 3)
+							Znssd_reqd[9 * m + 6] = numx, Znssd_reqd[9 * m + 7] = numy, Znssd_reqd[9 * m + 8] = denum;
+
 						t_1 += m_F, t_2 += m_G;
 
 						if (printout)
@@ -8127,7 +8596,7 @@ double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double
 				t_1 = 0.0;
 				for (iii = 0; iii <= m; iii++)
 				{
-					t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+					t_4 = Znssd_reqd[9 * iii + 0] - t_f;
 					t_1 += t_4*t_4;
 				}
 				t_ff = sqrt(t_1);
@@ -8137,7 +8606,7 @@ double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double
 			t_2 = 0.0;
 			for (iii = 0; iii <= m; iii++)
 			{
-				t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+				t_5 = Znssd_reqd[9 * iii + 1] - t_g;
 				t_2 += t_5*t_5;
 			}
 			t_2 = sqrt(t_2);
@@ -8145,25 +8614,40 @@ double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double
 			DIC_Coeff = 0.0;
 			for (iii = 0; iii <= m; iii++)
 			{
-				t_4 = Znssd_reqd[6 * iii + 0] - t_f;
-				t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+				t_4 = Znssd_reqd[9 * iii + 0] - t_f;
+				t_5 = Znssd_reqd[9 * iii + 1] - t_g;
 				t_6 = t_5 / t_2 - t_4 / t_ff;
 				t_3 = t_6 / t_2;
-				gx = Znssd_reqd[6 * iii + 2], gy = Znssd_reqd[6 * iii + 3];
-				iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
-				CC[0] = gx, CC[1] = gy;
-				if (advanced_tech == 0)
-					CC[2] = gx*iii_n + gy*jjj_n;
-				if (advanced_tech > 0)
+				gx = Znssd_reqd[9 * iii + 2], gy = Znssd_reqd[9 * iii + 3];
+				iii_n = Znssd_reqd[9 * iii + 4], jjj_n = Znssd_reqd[9 * iii + 5];
+				if (advanced_tech == 3)
 				{
-					CC[2] = gx*iii_n, CC[3] = gx*jjj_n;
-					CC[4] = gy*iii_n, CC[5] = gy*jjj_n;
+					denum = Znssd_reqd[9 * ii + 8];
+					denum2 = denum*denum;
+					t_7 = (gx*Znssd_reqd[9 * iii + 6] + gy*Znssd_reqd[9 * ii + 7]) / denum2;
+					CC[0] = gx / denum, CC[1] = gy / denum;
+					CC[2] = gx*iii_n / denum, CC[3] = gx*jjj_n / denum;
+					CC[4] = gy*iii_n / denum, CC[5] = gy*jjj_n / denum;
+					CC[6] = -t_7*iii_n;
+					CC[7] = -t_7*jjj_n;
 				}
-				if (advanced_tech == 2)
+				else
 				{
-					CC[6] = gx*iii_n*iii_n*0.5, CC[7] = gx*jjj_n*jjj_n*0.5, CC[8] = gx*iii_n*jjj_n;
-					CC[9] = gy*iii_n*iii_n*0.5, CC[10] = gy*jjj_n*jjj_n*0.5, CC[11] = gy*iii_n*jjj_n;
+					CC[0] = gx, CC[1] = gy;
+					if (advanced_tech == 0)
+						CC[2] = gx*iii_n + gy*jjj_n;
+					if (advanced_tech == 1 || advanced_tech == 2)
+					{
+						CC[2] = gx*iii_n, CC[3] = gx*jjj_n;
+						CC[4] = gy*iii_n, CC[5] = gy*jjj_n;
+					}
+					if (advanced_tech == 2)
+					{
+						CC[6] = gx*iii_n*iii_n*0.5, CC[7] = gx*jjj_n*jjj_n*0.5, CC[8] = gx*iii_n*jjj_n;
+						CC[9] = gy*iii_n*iii_n*0.5, CC[10] = gy*jjj_n*jjj_n*0.5, CC[11] = gy*iii_n*jjj_n;
+					}
 				}
+
 				for (j = 0; j < nn; j++)
 				{
 					BB[j] += t_3*CC[j];
@@ -8276,7 +8760,7 @@ double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef,
 	{
 		Timg = new double[Tlength*nchannels];
 		T = new double[2 * Tlength*nchannels];
-		Znssd_reqd = new double[6 * Tlength];
+		Znssd_reqd = new double[9 * Tlength];
 		createMem = true;
 	}
 
@@ -8446,9 +8930,9 @@ double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef,
 						}
 						else
 						{
-							Znssd_reqd[6 * m + 0] = m_F, Znssd_reqd[6 * m + 1] = m_G;
-							Znssd_reqd[6 * m + 2] = gx, Znssd_reqd[6 * m + 3] = gy;
-							Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
+							Znssd_reqd[9 * m + 0] = m_F, Znssd_reqd[9 * m + 1] = m_G;
+							Znssd_reqd[9 * m + 2] = gx, Znssd_reqd[9 * m + 3] = gy;
+							Znssd_reqd[9 * m + 4] = (double)iii, Znssd_reqd[9 * m + 5] = (double)jjj;
 							t_1 += m_F, t_2 += m_G;
 						}
 					}
@@ -8473,7 +8957,7 @@ double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef,
 					t_1 = 0.0;
 					for (iii = 0; iii <= m; iii++)
 					{
-						t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+						t_4 = Znssd_reqd[9 * iii + 0] - t_f;
 						t_1 += t_4*t_4;
 					}
 					t_ff = sqrt(t_1);
@@ -8482,7 +8966,7 @@ double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef,
 				t_2 = 0.0;
 				for (iii = 0; iii <= m; iii++)
 				{
-					t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+					t_5 = Znssd_reqd[9 * iii + 1] - t_g;
 					t_2 += t_5*t_5;
 				}
 				t_2 = sqrt(t_2);
@@ -8490,12 +8974,12 @@ double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef,
 				DIC_Coeff = 0.0;
 				for (iii = 0; iii <= m; iii++)
 				{
-					t_4 = Znssd_reqd[6 * iii + 0] - t_f;
-					t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+					t_4 = Znssd_reqd[9 * iii + 0] - t_f;
+					t_5 = Znssd_reqd[9 * iii + 1] - t_g;
 					t_6 = t_5 / t_2 - t_4 / t_ff;
 					t_3 = t_6 / t_2;
-					gx = Znssd_reqd[6 * iii + 2], gy = Znssd_reqd[6 * iii + 3];
-					iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
+					gx = Znssd_reqd[9 * iii + 2], gy = Znssd_reqd[9 * iii + 3];
+					iii_n = Znssd_reqd[9 * iii + 4], jjj_n = Znssd_reqd[9 * iii + 5];
 					CC[0] = gx, CC[1] = gy;
 					CC[2] = gx*iii_n, CC[3] = gx*jjj_n;
 					CC[4] = gy*iii_n, CC[5] = gy*jjj_n;
@@ -8732,7 +9216,7 @@ double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, i
 	{
 		Timg = new double[Tlength*nchannels];
 		T = new double[2 * Tlength*nchannels];
-		Znssd_reqd = new double[6 * Tlength];
+		Znssd_reqd = new double[9 * Tlength];
 		createMem = true;
 	}
 
@@ -8902,9 +9386,9 @@ double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, i
 						}
 						else
 						{
-							Znssd_reqd[6 * m + 0] = m_F, Znssd_reqd[6 * m + 1] = m_G;
-							Znssd_reqd[6 * m + 2] = gx, Znssd_reqd[6 * m + 3] = gy;
-							Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
+							Znssd_reqd[9 * m + 0] = m_F, Znssd_reqd[9 * m + 1] = m_G;
+							Znssd_reqd[9 * m + 2] = gx, Znssd_reqd[9 * m + 3] = gy;
+							Znssd_reqd[9 * m + 4] = (double)iii, Znssd_reqd[9 * m + 5] = (double)jjj;
 							t_1 += m_F, t_2 += m_G;
 						}
 					}
@@ -8929,7 +9413,7 @@ double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, i
 					t_1 = 0.0;
 					for (iii = 0; iii <= m; iii++)
 					{
-						t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+						t_4 = Znssd_reqd[9 * iii + 0] - t_f;
 						t_1 += t_4*t_4;
 					}
 					t_ff = sqrt(t_1);
@@ -8938,7 +9422,7 @@ double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, i
 				t_2 = 0.0;
 				for (iii = 0; iii <= m; iii++)
 				{
-					t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+					t_5 = Znssd_reqd[9 * iii + 1] - t_g;
 					t_2 += t_5*t_5;
 				}
 				t_2 = sqrt(t_2);
@@ -8946,12 +9430,12 @@ double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, i
 				DIC_Coeff = 0.0;
 				for (iii = 0; iii <= m; iii++)
 				{
-					t_4 = Znssd_reqd[6 * iii + 0] - t_f;
-					t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+					t_4 = Znssd_reqd[9 * iii + 0] - t_f;
+					t_5 = Znssd_reqd[9 * iii + 1] - t_g;
 					t_6 = t_5 / t_2 - t_4 / t_ff;
 					t_3 = t_6 / t_2;
-					gx = Znssd_reqd[6 * iii + 2], gy = Znssd_reqd[6 * iii + 3];
-					iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
+					gx = Znssd_reqd[9 * iii + 2], gy = Znssd_reqd[9 * iii + 3];
+					iii_n = Znssd_reqd[9 * iii + 4], jjj_n = Znssd_reqd[9 * iii + 5];
 					CC[0] = gx, CC[1] = gy;
 					CC[2] = gx*iii_n, CC[3] = gx*jjj_n;
 					CC[4] = gy*iii_n, CC[5] = gy*jjj_n;
@@ -9217,6 +9701,586 @@ int TrackOpenCVLK(char *Path, int startFrame, int stopFrame)
 
 	return 0;
 }
+
+void TransformImage(double *oImg, int Owidth, int Oheight, double *iImg, int Iwidth, int Iheight, double *Trans, int nchannels, int interpAlgo, double *iPara)
+{
+	//Trans if of a 3x3 matrix with Trans[8] = 1
+	int ii, jj, kk, Ilength = Iwidth*Iheight, Olength = Owidth*Oheight;
+
+	bool createMem = false;
+	if (iPara == NULL)
+	{
+		createMem = true;
+		iPara = new double[Ilength*nchannels];
+	}
+
+	for (ii = 0; ii < nchannels; ii++)
+		Generate_Para_Spline(iImg + ii*Ilength, iPara + ii*Ilength, Iwidth, Iheight, interpAlgo);
+
+	double u, v, denum, val[3];
+	for (jj = 0; jj < Oheight; jj++)
+	{
+		for (ii = 0; ii < Owidth; ii++)
+		{
+			denum = Trans[6] * ii + Trans[7] * jj + 1.0;
+			u = (Trans[0] * ii + Trans[1] * jj + Trans[2]) / denum;
+			v = (Trans[3] * ii + Trans[4] * jj + Trans[5]) / denum;
+			if (u<0 || u>Iwidth - 1 || v<0 || v>Iheight - 1)
+			{
+				for (kk = 0; kk < nchannels; kk++)
+					oImg[ii + jj*Owidth + kk*Olength] = 0.0;
+				continue;
+			}
+
+			for (kk = 0; kk < nchannels; kk++)
+			{
+				Get_Value_Spline(iPara + kk*Ilength, Iwidth, Iheight, u, v, val, -1, interpAlgo);
+				val[0] = min(max(val[0], 0.0), 255.0);
+				oImg[ii + jj*Owidth + kk*Olength] = val[0];
+			}
+		}
+	}
+
+	if (createMem)
+		delete[]iPara;
+
+	return;
+}
+void DetectCornersCorrelation(double *img, int width, int height, int nchannels, Point2d *Checker, int &npts, vector<double> PatternAngles, int hsubset, int search_area, double thresh)
+{
+	int i, j, ii, jj, kk, jump = 2, nMaxCorners = npts, numPatterns = PatternAngles.size();
+
+	int bi_graylevel[2] = { 0, 255 }, PatternSize = 48, PatternLength = PatternSize*PatternSize; //Note that the pattern size is deliberately make bigger than the subset because small size give very blurry checkercorner
+	double *maskSmooth = new double[PatternLength*numPatterns];
+
+	synthesize_square_mask(maskSmooth, bi_graylevel, PatternSize, 1.0, 0, false);
+	double trans[9], temp[9], iH1[9], H1[9] = { 1, 0, -PatternSize / 2, 0, 1, -PatternSize / 2, 0, 0, 1 };
+	for (ii = 1; ii < PatternAngles.size(); ii++)
+	{
+		double c = cos(PatternAngles.at(ii)*3.14159265359 / 180), s = sin(PatternAngles.at(ii)*3.14159265359 / 180);
+		double H2[9] = { c, -s, 0, s, c, 0, 0, 0, 1 };
+		mat_invert(H1, iH1, 3);
+		mat_mul(H2, H1, temp, 3, 3, 3);
+		mat_mul(iH1, temp, trans, 3, 3, 3);
+		TransformImage(maskSmooth + ii*PatternLength, PatternSize, PatternSize, maskSmooth, PatternSize, PatternSize, trans, 1, 1, NULL);
+		//char Fname[200];  sprintf(Fname, "C:/temp/rS_%d.png", ii);
+		//SaveDataToImage(Fname, maskSmooth + ii*PatternLength, PatternSize, PatternSize, 1);
+	}
+
+	double *Cornerness = new double[width*height];
+	for (ii = 0; ii < width*height; ii++)
+		Cornerness[ii] = 0.0;
+
+	double zncc;
+	Point2i POI;
+	double *T = new double[2 * (2 * hsubset + 1)*(2 * hsubset + 1)*nchannels];
+	for (jj = hsubset + search_area + 1; jj < height - hsubset - search_area - 1; jj += jump)
+	{
+		for (ii = hsubset + search_area + 1; ii < width - hsubset - search_area - 1; ii += jump)
+		{
+			for (kk = 0; kk < numPatterns; kk++)
+			{
+				POI.x = ii, POI.y = jj;
+				zncc = abs(TMatchingSuperCoarse(maskSmooth + kk*PatternLength, PatternSize, hsubset, img, width, height, nchannels, POI, search_area, thresh, T));
+				Cornerness[ii + jj*width] = max(zncc, Cornerness[ii + jj*width]);
+			}
+		}
+	}
+
+	double *Cornerness2 = new double[width*height];
+	for (ii = 0; ii < width*height; ii++)
+		Cornerness2[ii] = Cornerness[ii];
+	//WriteGridBinary("C:/temp/cornerness.dat", Cornerness, width, height);
+
+	//Non-max suppression
+	bool breakflag;
+	for (jj = hsubset + search_area + 1; jj < height - hsubset - search_area - 1; jj += jump)
+	{
+		for (ii = hsubset + search_area + 1; ii < width - hsubset - search_area - 1; ii += jump)
+		{
+			breakflag = false;
+			if (Cornerness[ii + jj*width] < thresh)
+			{
+				Cornerness[ii + jj*width] = 0.0;
+				Cornerness2[ii + jj*width] = 0.0;
+			}
+			else
+			{
+				for (j = -jump; j <= jump; j += jump)
+				{
+					for (i = -jump; i <= jump; i += jump)
+					{
+						if (Cornerness[ii + jj*width] < Cornerness[ii + i + (jj + j)*width] - 0.001) //avoid comparing with itself
+						{
+							Cornerness2[ii + jj*width] = 0.0;
+							breakflag = true;
+							break;
+						}
+					}
+				}
+			}
+			if (breakflag == true)
+				break;
+		}
+	}
+
+	npts = 0;
+	for (jj = hsubset + search_area + 1; jj < height - hsubset - search_area - 1; jj += jump)
+	{
+		for (ii = hsubset + search_area + 1; ii < width - hsubset - search_area - 1; ii += jump)
+		{
+			if (Cornerness2[ii + jj*width] > thresh)
+			{
+				Checker[npts].x = ii;
+				Checker[npts].y = jj;
+				npts++;
+			}
+			if (npts > nMaxCorners)
+				break;
+		}
+	}
+
+	delete[]maskSmooth;
+	delete[]Cornerness;
+	delete[]Cornerness2;
+
+	return;
+}
+void RefineCorners(double *Para, int width, int height, int nchannels, Point2d *Checker, Point2d *Fcorners, int *FStype, int &npts, vector<double>PatternAngles, int hsubset1, int hsubset2, int searchArea, double ZNCCCoarseThresh, double ZNCCthresh, int InterpAlgo)
+{
+	int ii, jj, kk, boundary = hsubset2 + 2;
+	int numPatterns = PatternAngles.size();
+	int bi_graylevel[2] = { 0, 255 }, PatternSize = 48, PatternLength = PatternSize*PatternSize; //Note that the pattern size is deliberately make bigger than the hsubset because small size give very blurry checkercorner
+	double *maskSmooth = new double[PatternLength*numPatterns * 2];
+
+	synthesize_square_mask(maskSmooth, bi_graylevel, PatternSize, 1.0, 0, false);
+	synthesize_square_mask(maskSmooth + PatternLength, bi_graylevel, PatternSize, 1.0, 1, false);
+
+	double trans[9], temp[9], iH1[9], H1[9] = { 1, 0, -PatternSize / 2, 0, 1, -PatternSize / 2, 0, 0, 1 };
+	for (ii = 1; ii < PatternAngles.size(); ii++)
+	{
+		double c = cos(PatternAngles.at(ii)*3.14159265359 / 180), s = sin(PatternAngles.at(ii)*3.14159265359 / 180);
+		double H2[9] = { c, -s, 0, s, c, 0, 0, 0, 1 };
+		mat_invert(H1, iH1, 3), mat_mul(H2, H1, temp, 3, 3, 3), mat_mul(iH1, temp, trans, 3, 3, 3);
+		TransformImage(maskSmooth + 2 * ii*PatternLength, PatternSize, PatternSize, maskSmooth, PatternSize, PatternSize, trans, 1, 1, NULL);
+		TransformImage(maskSmooth + (2 * ii + 1)*PatternLength, PatternSize, PatternSize, maskSmooth + PatternLength, PatternSize, PatternSize, trans, 1, 1, NULL);
+	}
+	/*	FILE *fp = fopen("C:/temp/coarse.txt", "w+");
+	for(ii=0; ii<npts; ii++)
+	fprintf(fp, "%.2f %.2f \n", Checker[ii].x, Checker[ii].y);
+	fclose(fp);*/
+
+	//Detect coarse corners:
+	int *goodCandiates = new int[npts];
+	Point2d *goodCorners = new Point2d[npts];
+	int count = 0, ngoodCandiates = 0, squaretype;
+
+	int percent = 10, increP = 10;
+	double start = omp_get_wtime(), elapsed;
+	//#pragma omp critical
+	//cout << "Coarse refinement ..." << endl;
+
+	double zncc, bestzncc;
+	for (ii = 0; ii < npts; ii++)
+	{
+		if ((Checker[ii].x < boundary) || (Checker[ii].y < boundary) || (Checker[ii].x > 1.0*width - boundary) || (Checker[ii].y > 1.0*height - boundary))
+			continue;
+
+		zncc = 0.0, bestzncc = 0.0;
+		for (jj = 0; jj<numPatterns; jj++)
+		{
+			squaretype = TMatchingCoarse(maskSmooth + 2 * jj*PatternLength, PatternSize, hsubset1, Para, width, height, nchannels, Checker[ii], searchArea, ZNCCCoarseThresh, zncc, InterpAlgo);
+			if (squaretype >-1 && zncc > bestzncc)
+			{
+				goodCorners[count].x = Checker[ii].x;
+				goodCorners[count].y = Checker[ii].y;
+				goodCandiates[count] = squaretype + 2 * jj;
+				bestzncc = zncc;
+			}
+		}
+		if (bestzncc > ZNCCCoarseThresh)
+			count++;
+	}
+	ngoodCandiates = count;
+	elapsed = omp_get_wtime() - start;
+
+	/*FILE *fp = fopen("C:/temp/coarseR.txt", "w+");
+	for (ii = 0; ii < ngoodCandiates; ii++)
+	fprintf(fp, "%.2f %.2f %d\n", goodCorners[ii].x, goodCorners[ii].y, goodCandiates[ii]);
+	fclose(fp);*/
+
+	//Merege coarsely detected candidates:
+	npts = ngoodCandiates;
+	int STACK[30]; //Maximum KNN
+	int *squareType = new int[npts];
+	Point2d *mergeCorners = new Point2d[npts];
+	int *marker = new int[2 * npts];
+	for (jj = 0; jj < 2 * npts; jj++)
+		marker[jj] = -1;
+
+	int flag, KNN;
+	double t1, t2, megre_thresh = 5.0;
+	count = 0, ngoodCandiates = 0;
+	for (jj = 0; jj < npts; jj++)
+	{
+		KNN = 0;
+		flag = 0;
+		for (ii = 0; ii < count; ii++)
+		{
+			if (marker[ii] == jj)
+			{
+				flag = 1;
+				break;
+			}
+		}
+		if (flag == 1)
+			continue;
+
+		for (ii = jj + 1; ii < npts; ii++)
+		{
+			t1 = goodCorners[ii].x - goodCorners[jj].x;
+			t2 = goodCorners[ii].y - goodCorners[jj].y;
+
+			if (t1*t1 + t2*t2 < megre_thresh*megre_thresh &&goodCandiates[ii] == goodCandiates[jj])
+			{
+				STACK[KNN] = ii;
+				KNN++;
+			}
+		}
+		STACK[KNN] = jj;// include itself
+
+		for (kk = 0; kk < KNN + 1; kk++)
+		{
+			marker[count] = STACK[kk];
+			count++;
+		}
+
+		mergeCorners[ngoodCandiates].x = 0.0, mergeCorners[ngoodCandiates].y = 0.0;
+		for (kk = 0; kk <= KNN; kk++)
+		{
+			mergeCorners[ngoodCandiates].x += goodCorners[STACK[kk]].x;
+			mergeCorners[ngoodCandiates].y += goodCorners[STACK[kk]].y;
+		}
+		mergeCorners[ngoodCandiates].x /= (KNN + 1);
+		mergeCorners[ngoodCandiates].y /= (KNN + 1);
+		squareType[ngoodCandiates] = goodCandiates[jj];
+		ngoodCandiates++;
+	}
+
+	/*fp = fopen("c:/temp/coarseRM.txt", "w+");
+	for (ii = 0; ii < ngoodCandiates; ii++)
+	fprintf(fp, "%lf %lf %d\n", mergeCorners[ii].x, mergeCorners[ii].y, squareType[ii]);
+	fclose(fp);*/
+
+	//Refine corners:
+	int advanced_tech = 3; // affine only
+	count = 0;
+	double *Znssd_reqd = new double[9 * PatternLength];
+
+	percent = 10;
+	start = omp_get_wtime();
+	for (ii = 0; ii < ngoodCandiates; ii++)
+	{
+		if ((mergeCorners[ii].x < boundary) || (mergeCorners[ii].y < boundary) || (mergeCorners[ii].x > 1.0*width - boundary) || (mergeCorners[ii].y > 1.0*height - boundary))
+			continue;
+
+		zncc = TMatchingFine_ZNCC(maskSmooth + squareType[ii] * PatternLength, PatternSize, hsubset2, Para, width, height, 1, mergeCorners[ii], advanced_tech, 1, ZNCCthresh, InterpAlgo, Znssd_reqd);
+		if (zncc > ZNCCthresh)
+		{
+			squareType[ii] = squareType[ii];
+			count++;
+		}
+		else
+			squareType[ii] = -1;
+	}
+	delete[]Znssd_reqd;
+	elapsed = omp_get_wtime() - start;
+
+	//Final merging:
+	count = 0;
+	for (ii = 0; ii < ngoodCandiates; ii++)
+	{
+		if (squareType[ii] != -1)
+		{
+			goodCorners[count].x = mergeCorners[ii].x;
+			goodCorners[count].y = mergeCorners[ii].y;
+			goodCandiates[count] = squareType[ii];
+			count++;
+		}
+	}
+
+	npts = count;
+	for (jj = 0; jj < npts; jj++)
+		marker[jj] = -1;
+
+	megre_thresh = 4.0, count = 0, ngoodCandiates = 0;
+	for (jj = 0; jj < npts; jj++)
+	{
+		KNN = 0, flag = 0;
+		for (ii = 0; ii < count; ii++)
+		{
+			if (marker[ii] == jj)
+			{
+				flag = 1;
+				break;
+			}
+		}
+		if (flag == 1)
+			continue;
+
+		for (ii = jj + 1; ii < npts; ii++)
+		{
+			t1 = goodCorners[ii].x - goodCorners[jj].x;
+			t2 = goodCorners[ii].y - goodCorners[jj].y;
+			if (t1*t1 + t2*t2 < megre_thresh*megre_thresh)
+			{
+				STACK[KNN] = ii;
+			}
+		}
+		STACK[KNN] = jj;// include itself
+
+		for (kk = 0; kk < KNN + 1; kk++)
+		{
+			marker[count] = STACK[kk];
+			count++;
+		}
+
+		Fcorners[ngoodCandiates].x = goodCorners[jj].x, Fcorners[ngoodCandiates].y = goodCorners[jj].y;
+		for (kk = 0; kk < KNN; kk++)
+		{
+			Fcorners[ngoodCandiates].x += goodCorners[STACK[kk]].x;
+			Fcorners[ngoodCandiates].y += goodCorners[STACK[kk]].y;
+		}
+		Fcorners[ngoodCandiates].x /= (KNN + 1);
+		Fcorners[ngoodCandiates].y /= (KNN + 1);
+		FStype[ngoodCandiates] = goodCandiates[jj];
+		ngoodCandiates++;
+	}
+	npts = ngoodCandiates;
+
+	delete[]maskSmooth;
+	delete[]goodCorners;
+	delete[]goodCandiates;
+	delete[]marker;
+	delete[]squareType;
+	delete[]mergeCorners;
+
+	return;
+}
+void RefineCornersFromInit(double *Para, int width, int height, int nchannels, Point2d *Checker, int &npts, vector<double>PatternAngles, int hsubset1, int hsubset2, int searchArea, double ZNCCCoarseThresh, double ZNCCthresh, int InterpAlgo)
+{
+	int numPatterns = PatternAngles.size();
+	int bi_graylevel[2] = { 0, 255 }, PatternSize = 48, PatternLength = PatternSize*PatternSize; //Note that the pattern size is deliberately make bigger than the hsubset because small size give very blurry checkercorner
+
+	double *maskSmooth = new double[PatternLength*numPatterns];
+	synthesize_square_mask(maskSmooth, bi_graylevel, PatternSize, 1.0, 0, false);
+
+	double trans[9], temp[9], iH1[9], H1[9] = { 1, 0, -PatternSize / 2, 0, 1, -PatternSize / 2, 0, 0, 1 };
+	for (int ii = 1; ii < numPatterns; ii++)
+	{
+		double c = cos(PatternAngles.at(ii)*3.14159265359 / 180), s = sin(PatternAngles.at(ii)*3.14159265359 / 180);
+		double H2[9] = { c, -s, 0, s, c, 0, 0, 0, 1 };
+		mat_invert(H1, iH1, 3), mat_mul(H2, H1, temp, 3, 3, 3), mat_mul(iH1, temp, trans, 3, 3, 3);
+		TransformImage(maskSmooth + ii*PatternLength, PatternSize, PatternSize, maskSmooth, PatternSize, PatternSize, trans, 1, 1, NULL);
+	}
+
+	//Detect coarse corners:
+	double zncc, bestzncc;
+	Point2d bestPts, bkPt;
+	int advanced_tech = 3; // affine only
+	double *Znssd_reqd = new double[9 * PatternLength];
+
+	for (int ii = 0; ii < npts; ii++)
+	{
+		bestzncc = 0.0;
+		for (int jj = 0; jj < numPatterns; jj++)
+		{
+			bkPt = Checker[ii];
+			zncc = TMatchingFine_ZNCC(maskSmooth + jj* PatternLength, PatternSize, hsubset2, Para, width, height, nchannels, bkPt, advanced_tech, 1, ZNCCthresh, InterpAlgo, Znssd_reqd);
+			if (zncc > bestzncc)
+			{
+				bestzncc = zncc;
+				bestPts = bkPt;
+			}
+		}
+
+		if (bestzncc < ZNCCthresh)
+			Checker[ii] = Point2d(-1, -1);
+		else
+			Checker[ii] = bestPts;
+	}
+	delete[]Znssd_reqd;
+	delete[]maskSmooth;
+
+	return;
+}
+void RunCornersDetector(Point2d *CornerPts, int *CornersType, int &nCpts, double *Img, double *IPara, int width, int height, int nchannels, vector<double>PatternAngles, int hsubset1, int hsubset2, int searchArea, double ZNCCCoarseThresh, double ZNCCThresh, int InterpAlgo)
+{
+	int npts = 500000;
+	Point2d *Checker = new Point2d[npts];
+
+	//#pragma omp critical
+	//cout << "Sliding window for detection..." << endl;
+
+	DetectCornersCorrelation(Img, width, height, nchannels, Checker, npts, PatternAngles, hsubset1, searchArea, ZNCCCoarseThresh);
+	/*FILE *fp = fopen("C:/temp/cornerCorr.txt", "w+");
+	for (int ii = 0; ii < npts; ii++)
+	fprintf(fp, "%.1f %1f\n", Checker[ii].x, Checker[ii].y);
+	fclose(fp);
+	FILE *fp = fopen("C:/temp/cornerCorr.txt", "r");
+	npts = 0;
+	while (fscanf(fp, "%lf %lf ", &Checker[npts].x, &Checker[npts].y) != EOF)
+	npts++;
+	fclose(fp);*/
+
+	//#pragma omp critical
+	//cout << "finished width " << npts << " points. Refine detected corners..." << endl;
+
+	RefineCorners(IPara, width, height, nchannels, Checker, CornerPts, CornersType, npts, PatternAngles, hsubset1, hsubset2, searchArea, ZNCCCoarseThresh, ZNCCThresh, InterpAlgo);
+	nCpts = npts;
+
+	delete[]Checker;
+	return;
+}
+int CornerDetectorDriver(char *Path, int checkerSize, double ZNCCThreshold, int startF, int stopF, int width, int height)
+{
+	char Fname[200];
+
+	const int maxPts = 5000, SearchArea = 1, InterpAlgo = 1;
+	double Gsigma = 1.0;
+	vector<double> PatternAngles;
+	for (int ii = 0; ii < 7; ii++)
+		PatternAngles.push_back(10 * ii);
+	int CheckerhSubset = (int)(0.5*checkerSize + 0.5);
+
+	int nPts, nCCorres = maxPts;
+	int CType[maxPts];
+	Point2d Pts[maxPts];
+
+	double *Img = new double[width*height];
+	double *SImg = new double[width*height];
+	double *IPara = new double[width*height];
+
+	sprintf(Fname, "%s/Corner", Path); mkdir(Fname);
+	for (int fid = startF; fid <= stopF; fid++)
+	{
+		sprintf(Fname, "%s/%d.png", Path, fid);
+		if (!GrabImage(Fname, Img, width, height, 1))
+			continue;
+
+		Gaussian_smooth(Img, SImg, height, width, 255.0, 0.707);
+		Generate_Para_Spline(SImg, IPara, width, height, InterpAlgo);
+		//ShowDataAsImage("C:/temp/x.png", Img, width, height, 1);
+
+		RunCornersDetector(Pts, CType, nPts, SImg, IPara, width, height, 1, PatternAngles, CheckerhSubset, CheckerhSubset, SearchArea, ZNCCThreshold - 0.35, ZNCCThreshold, InterpAlgo);
+
+#pragma omp critical
+		printf("%s: %d points\n", Fname, nPts);
+
+		sprintf(Fname, "%s/Corner/%d.txt", Path, fid); FILE *fp = fopen(Fname, "w+");
+		for (int ii = 0; ii < nPts; ii++)
+		{
+			if (Pts[ii].x<1.5*CheckerhSubset || Pts[ii].x > width - 1.5*CheckerhSubset || Pts[ii].y < 1.5*CheckerhSubset || Pts[ii].y > height - 1.5*CheckerhSubset)
+				continue;
+			fprintf(fp, "%d %.3f %.3f\n", CType[ii], Pts[ii].x, Pts[ii].y);
+		}
+		fclose(fp);
+	}
+
+	delete[]Img, delete[]SImg, delete[]IPara;
+
+	return 0;
+}
+int DetectMarkersandCorrespondence(char *PATH, Point2d *Pcorners, int *PcorType, double *PPara, LKParameters LKArg, double *CamProScale, vector<double>PatternAngles, int checkerSize, int nPpts, int PSncols, Point2i *ProjectorCorressBoundary, double EpipThresh, int frameID, int CamID, int nPros, int width, int height, int pwidth, int pheight)
+{
+	int length = width*height;
+	const int maxPts = 5000, SearchArea = 2;
+	int CheckerhSubset1 = (int)(0.5*checkerSize + 0.5), CheckerhSubset2 = (int)(0.5*checkerSize + 0.5); //A reasonable checkerhsubset gives better result than using the huge subset
+
+	int  ii, jj, nCPts, nCCorres = maxPts, CType1[maxPts];
+	Point2d CPts1[maxPts], Ppts[maxPts], CPts[maxPts * 2];
+	Point2i CCorresID[maxPts];
+	int T[maxPts], TT[maxPts];
+
+	IplImage *view = 0;
+	char *Img = new char[2 * width*height];
+	double *SImg = new double[width*height];
+	double *IPara = new double[2 * width*height];
+
+	char Fname[100];
+	sprintf(Fname, "%s/Image/C%d_%05d.png", PATH, CamID + 1, frameID);
+	view = cvLoadImage(Fname, 0);
+	if (view == NULL)
+	{
+		cout << "cannot load " << Fname << endl;
+		delete[]Img;
+		delete[]SImg;
+		delete[]IPara;
+		return 1;
+	}
+	cout << "Loaded " << Fname << endl;
+	for (jj = 0; jj < height; jj++)
+		for (ii = 0; ii < width; ii++)
+			Img[ii + (height - 1 - jj)*width] = view->imageData[ii + jj*width];
+	cvReleaseImage(&view);
+
+	Gaussian_smooth(Img, SImg, height, width, 255.0, LKArg.Gsigma);
+	Generate_Para_Spline(SImg, IPara, width, height, LKArg.InterpAlgo);
+
+	RunCornersDetector(CPts1, CType1, nCPts, SImg, IPara, width, height, 1, PatternAngles, CheckerhSubset1, CheckerhSubset2, SearchArea, LKArg.ZNCCThreshold - 0.35, LKArg.ZNCCThreshold, LKArg.InterpAlgo);
+	/*FILE *fp = fopen("C:/temp/pts.txt", "w+");
+	for (int ii = 0; ii < nCPts; ii++)
+	fprintf(fp, "%f %f %d \n", CPts1[ii].x, CPts1[ii].y, CType1[ii]);
+	fclose(fp);
+
+	{
+	nCPts = 0;
+	FILE *fp = fopen("C:/temp/pts.txt", "r");
+	while (fscanf(fp, "lf %lf %d %", &CPts1[nCPts].x, &CPts1[nCPts].y, &CType1[nCPts]) != EOF)
+	nCPts++;
+	fclose(fp);
+	}*/
+	for (int ProID = 0; ProID < nPros; ProID++)
+	{
+		for (ii = 0; ii < nCCorres; ii++)
+		{
+			T[ii] = CCorresID[ii].y;
+			TT[ii] = ii;
+		}
+		Quick_Sort_Int(T, TT, 0, nCCorres - 1);
+
+		for (ii = 0; ii < nCCorres; ii++)
+		{
+			Ppts[ii].x = Pcorners[CCorresID[TT[ii]].y].x;
+			Ppts[ii].y = Pcorners[CCorresID[TT[ii]].y].y;
+			CPts[ii].x = CPts1[CCorresID[TT[ii]].x].x;
+			CPts[ii].y = CPts1[CCorresID[TT[ii]].x].y;
+		}
+
+		sprintf(Fname, "%s/Sparse/P%dC%d_%05d.txt", PATH, ProID + 1, CamID + 1, frameID);
+		FILE *fp = fopen(Fname, "w+");
+		for (ii = 0; ii < nCCorres; ii++)
+			fprintf(fp, "%d %.8f %.8f \n", CCorresID[TT[ii]].y, Ppts[ii].x, Ppts[ii].y);
+		fclose(fp);
+
+		sprintf(Fname, "%s/Sparse/C%dP%d_%05d.txt", PATH, CamID + 1, ProID + 1, frameID);
+		fp = fopen(Fname, "w+");
+		for (ii = 0; ii < nCCorres; ii++)
+			fprintf(fp, "%.8f %.8f \n", CPts[ii].x, CPts[ii].y);
+		fclose(fp);
+
+		if (nCCorres < 10)
+			cout << "Something wrong with #sparse points." << endl;
+		cout << nCCorres << " pts dected for frame " << frameID << endl;
+	}
+
+	delete[]Img;
+	delete[]SImg;
+	delete[]IPara;
+
+	return 0;
+}
+
 int ReadCorresAndRunTracking(char *Path, int nviews, int startFrame, int beginFrame, int endFrame, int *FrameOffset, int HighFrameRateFactor)
 {
 	char Fname[200];
@@ -9535,9 +10599,9 @@ int CleanUp2DTrackingByGradientConsistency(char *Path, int nviews, int ntrajects
 	char Fname[512];
 	vector<Point2d> UVList;
 
-	int ID[MaxnFrame], frameIDList[MaxnFrame];
-	double uList[MaxnFrame], vList[MaxnFrame];
-	double duList[MaxnFrame], dvList[MaxnFrame], direc[MaxnFrame], mag[MaxnFrame];
+	int ID[MaxnFrames], frameIDList[MaxnFrames];
+	double uList[MaxnFrames], vList[MaxnFrames];
+	double duList[MaxnFrames], dvList[MaxnFrames], direc[MaxnFrames], mag[MaxnFrames];
 
 	for (int viewID = 0; viewID < nviews; viewID++)
 	{
@@ -9611,43 +10675,101 @@ int CleanUp2DTrackingByGradientConsistency(char *Path, int nviews, int ntrajects
 
 	return 0;
 }
-int ConvertTrackingLowFrameRate(char *Path, int nviews, int ntrajects, int HighFrameRateFactor)
+int DownSampleTracking(char *Path, int nviews, int ntrajects, int Factor)
 {
 	char Fname[200];
 	int d, nframes;
-	int frameIDList[MaxnFrame];
-	Point2d uvList[MaxnFrame];
+	int frameIDList[MaxnFrames];
+	Point2d uvList[MaxnFrames];
 
 	for (int viewID = 0; viewID < nviews; viewID++)
 	{
-		sprintf(Fname, "%s/Track2D/R_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "r");
+		sprintf(Fname, "%s/Track2D/C_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 		{
 			printf("Cannot load %s\n", Fname);
 			return 1;
 		}
 		printf("Working on %s ...\n", Fname);
-		sprintf(Fname, "%s/Track2D/RL_%d.txt", Path, viewID); FILE *fp2 = fopen(Fname, "w+");
+		sprintf(Fname, "%s/Track2D/CL_%d.txt", Path, viewID); FILE *fp2 = fopen(Fname, "w+");
 
 		for (int trajID = 0; trajID < ntrajects; trajID++)
 		{
 			fscanf(fp, "%d %d ", &d, &nframes);
 			for (int fid = 0; fid < nframes; fid++)
 				fscanf(fp, "%d %lf %lf ", &frameIDList[fid], &uvList[fid].x, &uvList[fid].y);
-			
+
 			int framecount = 0;
 			for (int fid = 0; fid < nframes; fid++)
-				if ((frameIDList[fid] - 1 )% 4 == 0)
+				if ((frameIDList[fid] - 1) % Factor == 0)
 					framecount++;
 
 			fprintf(fp2, "%d %d ", trajID, framecount);
 			for (int fid = 0; fid < nframes; fid++)
-				if ((frameIDList[fid] - 1) % 4 == 0)
-					fprintf(fp2, "%d %.3f %.3f ", (frameIDList[fid] - 1) / 4 + 1, uvList[fid].x, uvList[fid].y);
+				if ((frameIDList[fid] - 1) % Factor == 0)
+					fprintf(fp2, "%d %.3f %.3f ", (frameIDList[fid] - 1) / Factor + 1, uvList[fid].x, uvList[fid].y);
 			fprintf(fp2, "\n");
 		}
 		fclose(fp), fclose(fp2);
 	}
+	return 0;
+}
+int DeletePointsOf2DTracks(char *Path, int nCams, int npts)
+{
+	char Fname[200];
+
+	int pid;
+	vector<int>ChosenPid;
+	sprintf(Fname, "%s/chosen.txt", Path);  FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		return 1;
+	}
+	while (fscanf(fp, "%d ", &pid) != EOF)
+		ChosenPid.push_back(pid);
+	fclose(fp);
+
+	double u, v;
+	int fid, nf;
+	ImgPtEle ptele;
+	for (int camID = 0; camID < nCams; camID++)
+	{
+		vector<ImgPtEle> *Track2D = new vector<ImgPtEle>[npts];
+		sprintf(Fname, "%s/Track2D/C_%d.txt", Path, camID); fp = fopen(Fname, "r");
+		if (fp == NULL)
+		{
+			printf("Cannot load %s\n", Fname);
+			continue;
+		}
+		for (int jj = 0; jj < npts; jj++)
+		{
+			fscanf(fp, "%d %d ", &pid, &nf);
+			if (pid != jj)
+				printf("Problem at Point %d of Cam %d", jj, camID);
+			for (int ii = 0; ii < nf; ii++)
+			{
+				fscanf(fp, "%d %lf %lf ", &fid, &u, &v);
+				ptele.frameID = fid, ptele.pt2D = Point2d(u, v);
+				Track2D[jj].push_back(ptele);
+			}
+		}
+		fclose(fp);
+
+		sprintf(Fname, "%s/Track2D/C_%d.txt", Path, camID); fp = fopen(Fname, "w+");
+		for (int pid = 0; pid < ChosenPid.size(); pid++)
+		{
+			int trackID = ChosenPid[pid];
+			fprintf(fp, "%d %d ", pid, Track2D[trackID].size());
+			for (int fid = 0; fid < Track2D[trackID].size(); fid++)
+				fprintf(fp, "%d %.3f %.3f ", Track2D[trackID][fid].frameID, Track2D[trackID][fid].pt2D.x, Track2D[trackID][fid].pt2D.y);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+
+		delete[]Track2D;
+	}
+
 	return 0;
 }
 
@@ -9964,7 +11086,7 @@ int DetectRGBBallCorrelation(char *ImgName, vector<KeyPoint> &kpts, vector<int> 
 	double *ImgPara = new double[width*height];
 	Generate_Para_Spline(DImg, ImgPara, width, height, InterpAlgo);
 
-	double *Znssd_reqd = new double[6 * PatternLength*nscales*nscales];
+	double *Znssd_reqd = new double[9 * PatternLength*nscales*nscales];
 	pointsToBeRemoved.clear();
 	for (int kk = 0; kk < potentialPts3.size(); kk++)
 	{
@@ -9973,7 +11095,7 @@ int DetectRGBBallCorrelation(char *ImgName, vector<KeyPoint> &kpts, vector<int> 
 		//SaveDataToImage("C:/temp/mask.png", maskSmooth, PatternSize, PatternSize);
 
 		Point2i POI(potentialPts3[kk].pt.x, potentialPts3[kk].pt.y);
-		double zncc = TMatchingSuperCoarse(maskSmooth, PatternSize, hsubset - 1, DImg, width, height, POI, 5, 0.5);
+		double zncc = TMatchingSuperCoarse(maskSmooth, PatternSize, hsubset - 1, DImg, width, height, 1, POI, 5, 0.5);
 		if (zncc < thresh)
 		{
 			printf("Cannot refine the %d balls in %s\n", kk + 1, ImgName);
@@ -9982,7 +11104,7 @@ int DetectRGBBallCorrelation(char *ImgName, vector<KeyPoint> &kpts, vector<int> 
 		}
 
 		Point2d pt = POI;
-		zncc = TMatchingFine_ZNCC(maskSmooth, PatternSize, hsubset - 1, ImgPara, width, height, pt, 0, 1, thresh, InterpAlgo, Znssd_reqd);
+		zncc = TMatchingFine_ZNCC(maskSmooth, PatternSize, hsubset - 1, ImgPara, width, height, 1, pt, 0, 1, thresh, InterpAlgo, Znssd_reqd);
 		if (zncc < thresh)
 		{
 			printf("Cannot refine the %d balls in %s\n", kk + 1, ImgName);
@@ -10024,6 +11146,45 @@ int DetectRGBBallCorrelation(char *ImgName, vector<KeyPoint> &kpts, vector<int> 
 	return 0;
 }
 
+int CleanUpCheckerboardCorner(char *Path, int startF, int stopF)
+{
+	char Fname[200];
+	vector<int> GoodId;
+	vector<double> X, Y;
+
+	//Scattered points signify outliers
+	int t;
+	double u, v, mx, my, vx, vy, v2, distance;
+	for (int fid = startF; fid < stopF; fid++)
+	{
+		sprintf(Fname, "%s/Corner/%d.txt", Path, fid); FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+		{
+			printf("Cannot load %s\n", Fname);
+			continue;
+		}
+		while (fscanf(fp, "%d %lf %lf ", &t, &u, &v) != EOF)
+			X.push_back(u), Y.push_back(v);
+		fclose(fp);
+
+		mx = MeanArray(X), my = MeanArray(Y);
+		vx = VarianceArray(X, mx), vy = VarianceArray(Y, my);
+		v2 = sqrt(vx*vx + vy*vy);
+
+		sprintf(Fname, "%s/Corner/_%d.txt", Path, fid); fp = fopen(Fname, "w+");
+		for (int ii = 0; ii < X.size(); ii++)
+		{
+			distance = sqrt(pow(X[ii] - mx, 2) + pow(Y[ii] - my, 2));
+			if (distance < 3 * v2)
+				fprintf(fp, "%.3f %.3f\n", X[ii], Y[ii]);
+		}
+		fclose(fp);
+
+		GoodId.clear(), X.clear(), Y.clear();
+	}
+
+	return 0;
+}
 int ComputeAverageImage(char *Path, unsigned char *MeanImg, int width, int height, int camID, int panelID, int startF, int stopF)
 {
 	char Fname[200];
@@ -10068,8 +11229,7 @@ int ComputeAverageImage(char *Path, unsigned char *MeanImg, int width, int heigh
 	delete[]Mean;
 	return 0;
 }
-int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, unsigned char *MeanImg, vector<Point2d> &kpts, double sigma, int PatternSize, int nscales, int NMS_BW, double thresh, bool visualize,
-	unsigned char *ColorImg, float *colorResponse, double *DImg, double *ImgPara, double *maskSmooth, double *Znssd_reqd)
+int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, unsigned char *MeanImg, vector<Point2d> &kpts, double sigma, int PatternSize, int nscales, int NMS_BW, double thresh, bool visualize, 	unsigned char *ColorImg, float *colorResponse, double *DImg, double *ImgPara, double *maskSmooth, double *Znssd_reqd)
 {
 	int length = width*height;
 
@@ -10081,7 +11241,7 @@ int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, un
 		colorResponse = new float[width*height];
 		DImg = new double[width*height];
 		ImgPara = new double[width*height];
-		Znssd_reqd = new double[6 * PatternSize*PatternSize];
+		Znssd_reqd = new double[9 * PatternSize*PatternSize];
 		maskSmooth = new double[PatternSize*PatternSize*nscales];
 	}
 
@@ -10210,7 +11370,7 @@ int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, un
 		for (int jj = 0; jj < nscales; jj++)
 		{
 			POI.x = redPoints[kk].x, POI.y = redPoints[kk].y;
-			zncc = TMatchingSuperCoarse(maskSmooth + jj*PatternLength, PatternSize, hsubset[jj], DImg, width, height, POI, 3, 0.5);
+			zncc = TMatchingSuperCoarse(maskSmooth + jj*PatternLength, PatternSize, hsubset[jj], DImg, width, height, 1, POI, 3, 0.5);
 			if (zncc > bestzncc)
 				bestzncc = abs(zncc), bestscale = hsubset[jj], bestPattern = jj;
 		}
@@ -10218,7 +11378,7 @@ int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, un
 			continue;
 
 		Point2d pt = POI;
-		bestzncc = TMatchingFine_ZNCC(maskSmooth + bestPattern*PatternLength, PatternSize, 2 * (bestscale + 2) > PatternSize ? bestscale : bestscale + 2, ImgPara, width, height, pt, 0, 1, thresh, InterpAlgo, Znssd_reqd);
+		bestzncc = TMatchingFine_ZNCC(maskSmooth + bestPattern*PatternLength, PatternSize, 2 * (bestscale + 2) > PatternSize ? bestscale : bestscale + 2, ImgPara, width, height, 1, pt, 0, 1, thresh, InterpAlgo, Znssd_reqd);
 		if (bestzncc > thresh)
 			kpts.push_back(pt);
 	}
@@ -10246,505 +11406,621 @@ int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, un
 	return 0;
 }
 
-void TransformImage(double *oImg, double *iImg, double *Trans, int width, int height, int nchannels, int interpAlgo, double *iPara = NULL)
+int CheckerBoardDetection(char *Path, int viewID, int startF, int stopF)
 {
-	//Trans if of a 3x3 matrix with Trans[8] = 1
-	int ii, jj, kk, length = width*height;
+	char Fname[1024];
 
-	bool createMem = false;
-	if (iPara == NULL)
+	// Initializations
+	int elem_size, found, count;
+	CvSize board_size = { 12, 7 }, img_size = { 0, 0 };
+	CvMemStorage* storage;
+	CvSeq* image_points_seq = 0;
+	CvPoint2D32f* cornerPts = 0;
+
+	// Allocate memory
+	elem_size = board_size.width*board_size.height*sizeof(cornerPts[0]);
+	storage = cvCreateMemStorage(MAX(elem_size * 4, 1 << 16));
+	cornerPts = (CvPoint2D32f*)cvAlloc(elem_size);
+	image_points_seq = cvCreateSeq(0, sizeof(CvSeq), elem_size, storage);
+
+	bool firsttime = true;
+	IplImage *view = 0, *viewGray = 0;
+	for (int fid = startF; fid < stopF; fid++)
 	{
-		createMem = true;
-		iPara = new double[length*nchannels];
-		for (ii = 0; ii < nchannels; ii++)
-			Generate_Para_Spline(iImg + ii*length, iPara + ii*length, width, height, interpAlgo);
-	}
-
-	double u, v, denum, val[3];
-	for (jj = 0; jj < height; jj++)
-	{
-		for (ii = 0; ii < width; ii++)
-		{
-			denum = Trans[6] * ii + Trans[7] * jj + 1.0;
-			u = (Trans[0] * ii + Trans[1] * jj + Trans[2]) / denum;
-			v = (Trans[3] * ii + Trans[4] * jj + Trans[5]) / denum;
-			if (u<0 || u>width - 1 || v<0 || v>height - 1)
-			{
-				for (kk = 0; kk < nchannels; kk++)
-					oImg[ii + jj*width + kk*length] = 0.0;
-				continue;
-			}
-
-			for (kk = 0; kk < nchannels; kk++)
-			{
-				Get_Value_Spline(iPara + kk*length, width, height, u, v, val, -1, interpAlgo);
-				val[0] = min(max(val[0], 0.0), 255.0);
-				oImg[ii + jj*width + kk*length] = val[0];
-			}
-		}
-	}
-
-	if (createMem)
-		delete[]iPara;
-
-	return;
-}
-void DetectCornersCorrelation(double *img, int width, int height, Point2d *Checker, int &npts, vector<double> PatternAngles, int hsubset, int search_area, double thresh)
-{
-	int i, j, ii, jj, kk, jump = 2, nMaxCorners = npts, numPatterns = PatternAngles.size();
-
-	int bi_graylevel[2] = { 0, 255 }, PatternSize = 48, PatternLength = PatternSize*PatternSize; //Note that the pattern size is deliberately make bigger than the subset because small size give very blurry checkercorner
-	double *maskSmooth = new double[PatternLength*numPatterns];
-
-	//synthesize_square_mask(maskSmooth, bi_graylevel, PatternSize, 1.0, 0, false);
-	double trans[9], temp[9], iH1[9], H1[9] = { 1, 0, -PatternSize / 2, 0, 1, -PatternSize / 2, 0, 0, 1 };
-	for (ii = 1; ii < PatternAngles.size(); ii++)
-	{
-		double c = cos(PatternAngles.at(ii)*3.14159265359 / 180), s = sin(PatternAngles.at(ii)*3.14159265359 / 180);
-		double H2[9] = { c, -s, 0, s, c, 0, 0, 0, 1 };
-		mat_invert(H1, iH1, 3);
-		mat_mul(H2, H1, temp, 3, 3, 3);
-		mat_mul(iH1, temp, trans, 3, 3, 3);
-		TransformImage(maskSmooth + ii*PatternLength, maskSmooth, trans, PatternSize, PatternSize, 1, 1, NULL);
-		//SaveDataToImage("C:/temp/rS.png", maskSmooth+ii*PatternLength, PatternSize, PatternSize, 1);
-	}
-
-	double *Cornerness = new double[width*height];
-	for (ii = 0; ii < width*height; ii++)
-		Cornerness[ii] = 0.0;
-
-	double zncc;
-	Point2i POI;
-	for (kk = 0; kk < numPatterns; kk++)
-	{
-		for (jj = 3 * hsubset; jj < height - 3 * hsubset; jj += jump)
-		{
-			for (ii = 3 * hsubset; ii < width - 3 * hsubset; ii += jump)
-			{
-				POI.x = ii, POI.y = jj;
-				//TMatchingSuperCoarse(maskSmooth + kk*PatternLength, PatternSize, hsubset, img, width, height, POI, search_area, thresh, zncc);
-				Cornerness[ii + jj*width] = max(zncc, Cornerness[ii + jj*width]);
-			}
-		}
-	}
-
-	double *Cornerness2 = new double[width*height];
-	for (ii = 0; ii < width*height; ii++)
-		Cornerness2[ii] = Cornerness[ii];
-	//WriteGridBinary("C:/temp/cornerness.dat", Cornerness, width, height);
-
-	//Non-max suppression
-	bool breakflag;
-	for (jj = 3 * hsubset; jj < height - 3 * hsubset; jj += jump)
-	{
-		for (ii = 3 * hsubset; ii < width - 3 * hsubset; ii += jump)
-		{
-			breakflag = false;
-			if (Cornerness[ii + jj*width] < thresh)
-			{
-				Cornerness[ii + jj*width] = 0.0;
-				Cornerness2[ii + jj*width] = 0.0;
-			}
-			else
-			{
-				for (j = -jump; j <= jump; j += jump)
-				{
-					for (i = -jump; i <= jump; i += jump)
-					{
-						if (Cornerness[ii + jj*width] < Cornerness[ii + i + (jj + j)*width] - 0.001) //avoid comparing with itself
-						{
-							Cornerness2[ii + jj*width] = 0.0;
-							breakflag = true;
-							break;
-						}
-					}
-				}
-			}
-			if (breakflag == true)
-				break;
-		}
-	}
-
-	npts = 0;
-	for (jj = 3 * hsubset; jj < height - 3 * hsubset; jj += jump)
-	{
-		for (ii = 3 * hsubset; ii < width - 3 * hsubset; ii += jump)
-		{
-			if (Cornerness2[ii + jj*width] > thresh)
-			{
-				Checker[npts].x = ii;
-				Checker[npts].y = jj;
-				npts++;
-			}
-			if (npts > nMaxCorners)
-				break;
-		}
-	}
-
-	delete[]maskSmooth;
-	delete[]Cornerness;
-	delete[]Cornerness2;
-
-	return;
-}
-void RefineCorners(double *Para, int width, int height, Point2d *Checker, Point2d *Fcorners, int *FStype, int &npts, vector<double>PatternAngles, int hsubset1, int hsubset2, int searchArea, double ZNCCCoarseThresh, double ZNCCthresh, int InterpAlgo)
-{
-	int ii, jj, kk, boundary = 50;
-	int numPatterns = PatternAngles.size();
-	int bi_graylevel[2] = { 0, 255 }, PatternSize = 48, PatternLength = PatternSize*PatternSize; //Note that the pattern size is deliberately make bigger than the hsubset because small size give very blurry checkercorner
-	double *maskSmooth = new double[PatternLength*numPatterns * 2];
-
-	//synthesize_square_mask(maskSmooth, bi_graylevel, PatternSize, 1.0, 0, false);
-	//synthesize_square_mask(maskSmooth + PatternLength, bi_graylevel, PatternSize, 1.0, 1, false);
-
-	double trans[9], temp[9], iH1[9], H1[9] = { 1, 0, -PatternSize / 2, 0, 1, -PatternSize / 2, 0, 0, 1 };
-	for (ii = 1; ii < PatternAngles.size(); ii++)
-	{
-		double c = cos(PatternAngles.at(ii)*3.14159265359 / 180), s = sin(PatternAngles.at(ii)*3.14159265359 / 180);
-		double H2[9] = { c, -s, 0, s, c, 0, 0, 0, 1 };
-		mat_invert(H1, iH1, 3), mat_mul(H2, H1, temp, 3, 3, 3), mat_mul(iH1, temp, trans, 3, 3, 3);
-		TransformImage(maskSmooth + 2 * ii*PatternLength, maskSmooth, trans, PatternSize, PatternSize, 1, 1, NULL);
-		TransformImage(maskSmooth + (2 * ii + 1)*PatternLength, maskSmooth + PatternLength, trans, PatternSize, PatternSize, 1, 1, NULL);
-	}
-	/*	FILE *fp = fopen("C:/temp/coarse.txt", "w+");
-	for(ii=0; ii<npts; ii++)
-	fprintf(fp, "%.2f %.2f \n", Checker[ii].x, Checker[ii].y);
-	fclose(fp);*/
-
-	//Detect coarse corners:
-	int *goodCandiates = new int[npts];
-	Point2d *goodCorners = new Point2d[npts];
-	int count = 0, ngoodCandiates = 0, squaretype;
-
-	int percent = 10, increP = 10;
-	double start = omp_get_wtime(), elapsed;
-	cout << "Coarse refinement ..." << endl;
-	double zncc, bestzncc;
-	for (ii = 0; ii < npts; ii++)
-	{
-		if ((ii * 100 / npts - percent) >= 0)
-		{
-			elapsed = omp_get_wtime() - start;
-			printf("\r %.2f%% TE: %f TR: %f", 100.0*ii / npts, elapsed, elapsed / percent*(100.0 - percent));
-			percent += increP;
-		}
-
-		if ((Checker[ii].x < boundary) || (Checker[ii].y < boundary) || (Checker[ii].x > 1.0*width - boundary) || (Checker[ii].y > 1.0*height - boundary))
+		sprintf(Fname, "%s/%d/%d.png", Path, viewID, fid);
+		view = cvLoadImage(Fname, 1);
+		if (view == NULL)
 			continue;
-
-		zncc = 0.0, bestzncc = 0.0;
-		for (jj = 0; jj<numPatterns; jj++)
+		if (firsttime)
 		{
-			//squaretype = TMatchingCoarse(maskSmooth + 2 * jj*PatternLength, PatternSize, hsubset1, Para, width, height, Checker[ii], searchArea, ZNCCCoarseThresh, zncc, InterpAlgo);
-			if (squaretype >-1 && zncc > bestzncc)
-			{
-				goodCorners[count].x = Checker[ii].x;
-				goodCorners[count].y = Checker[ii].y;
-				goodCandiates[count] = squaretype + 2 * jj;
-				bestzncc = zncc;
-			}
+			viewGray = cvCreateImage(cvGetSize(view), 8, 1), firsttime = false;
+			sprintf(Fname, "%s/%d/Corner", Path, viewID); mkdir(Fname);
 		}
-		if (bestzncc > ZNCCCoarseThresh)
-			count++;
+
+		img_size = cvGetSize(view);
+		found = cvFindChessboardCorners(view, board_size, cornerPts, &count, CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_FAST_CHECK | CV_CALIB_CB_NORMALIZE_IMAGE);
+
+		if (found == 1)
+		{
+			//not so good result for low res images
+			//cvCvtColor(view, viewGray, CV_BGR2GRAY);
+			//cvFindCornerSubPix(viewGray, cornerPts, count, cvSize(11, 11), cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 100, 0.001));
+
+			cvDrawChessboardCorners(view, board_size, cornerPts, count, found);
+			//cvShowImage("Detected corners", view);
+			//cvWaitKey(1);
+
+			sprintf(Fname, "%s/%d/Corner/CV_%d.png", Path, viewID, fid); cvSaveImage(Fname, view);
+
+			sprintf(Fname, "%s/%d/Corner/_CV_%d.txt", Path, viewID, fid); FILE *fp = fopen(Fname, "w+");
+			for (int ii = 0; ii < count; ii++)
+				fprintf(fp, "%.3f %.3f\n", cornerPts[ii].x, cornerPts[ii].y);
+			fclose(fp);
+		}
+
+		cvReleaseImage(&view);
 	}
-	ngoodCandiates = count;
-	elapsed = omp_get_wtime() - start;
-	printf("\r %.2f%% TE: %f TR: %f\n", 100.0, elapsed, elapsed / percent*(100.0 - percent));
-	cout << "finished with " << ngoodCandiates << " points" << endl;
-
-	/*FILE *fp = fopen("C:/temp/coarseR.txt", "w+");
-	for(ii=0; ii<ngoodCandiates; ii++)
-	fprintf(fp, "%.2f %.2f %d\n", goodCorners[ii].x, goodCorners[ii].y, goodCandiates[ii]);
-	fclose(fp);*/
-
-	//Merege coarsely detected candidates:
-	npts = ngoodCandiates;
-	int STACK[30]; //Maximum KNN
-	int *squareType = new int[npts];
-	Point2d *mergeCorners = new Point2d[npts];
-	int *marker = new int[2 * npts];
-	for (jj = 0; jj < 2 * npts; jj++)
-		marker[jj] = -1;
-
-	int flag, KNN;
-	double t1, t2, megre_thresh = 5.0;
-	count = 0, ngoodCandiates = 0;
-	for (jj = 0; jj < npts; jj++)
-	{
-		KNN = 0;
-		flag = 0;
-		for (ii = 0; ii < count; ii++)
-		{
-			if (marker[ii] == jj)
-			{
-				flag = 1;
-				break;
-			}
-		}
-		if (flag == 1)
-			continue;
-
-		for (ii = jj + 1; ii < npts; ii++)
-		{
-			t1 = goodCorners[ii].x - goodCorners[jj].x;
-			t2 = goodCorners[ii].y - goodCorners[jj].y;
-
-			if (t1*t1 + t2*t2 < megre_thresh*megre_thresh &&goodCandiates[ii] == goodCandiates[jj])
-			{
-				STACK[KNN] = ii;
-				KNN++;
-			}
-		}
-		STACK[KNN] = jj;// include itself
-
-		for (kk = 0; kk < KNN + 1; kk++)
-		{
-			marker[count] = STACK[kk];
-			count++;
-		}
-
-		mergeCorners[ngoodCandiates].x = 0.0, mergeCorners[ngoodCandiates].y = 0.0;
-		for (kk = 0; kk <= KNN; kk++)
-		{
-			mergeCorners[ngoodCandiates].x += goodCorners[STACK[kk]].x;
-			mergeCorners[ngoodCandiates].y += goodCorners[STACK[kk]].y;
-		}
-		mergeCorners[ngoodCandiates].x /= (KNN + 1);
-		mergeCorners[ngoodCandiates].y /= (KNN + 1);
-		squareType[ngoodCandiates] = goodCandiates[jj];
-		ngoodCandiates++;
-	}
-
-	/*FILE *fp = fopen("c:/temp/coarseRM.txt", "w+");
-	for(ii=0; ii<ngoodCandiates; ii++)
-	fprintf(fp, "%lf %lf %d\n", mergeCorners[ii].x, mergeCorners[ii].y, squareType[ii]);
-	fclose(fp);*/
-
-	//Refine corners:
-	int advanced_tech = 1; // affine only
-	count = 0;
-	double *Znssd_reqd = new double[6 * PatternLength];
-
-	percent = 10;
-	start = omp_get_wtime();
-	cout << "Fine refinement ..." << endl;
-	for (ii = 0; ii < ngoodCandiates; ii++)
-	{
-		if ((ii * 100 / ngoodCandiates - percent) >= 0)
-		{
-			elapsed = omp_get_wtime() - start;
-			printf("\r %.2f%% TE: %f TR: %f", 100.0*ii / ngoodCandiates, elapsed, elapsed / percent*(100.0 - percent));
-			percent += increP;
-		}
-
-		if ((mergeCorners[ii].x < boundary) || (mergeCorners[ii].y < boundary) || (mergeCorners[ii].x > 1.0*width - boundary) || (mergeCorners[ii].y > 1.0*height - boundary))
-			continue;
-
-		zncc = TMatchingFine_ZNCC(maskSmooth + squareType[ii] * PatternLength, PatternSize, hsubset2, Para, width, height, mergeCorners[ii], 0, 1, ZNCCthresh, InterpAlgo, Znssd_reqd);
-		if (zncc > ZNCCthresh)
-		{
-			squareType[ii] = squareType[ii];
-			count++;
-		}
-		else
-			squareType[ii] = -1;
-	}
-	delete[]Znssd_reqd;
-	elapsed = omp_get_wtime() - start;
-	printf("\r %.2f%% TE: %f TR: %f\n", 100.0, elapsed, elapsed / percent*(100.0 - percent));
-	cout << "finished with " << count << " points" << endl;
-
-	//Final merging:
-	count = 0;
-	for (ii = 0; ii < ngoodCandiates; ii++)
-	{
-		if (squareType[ii] != -1)
-		{
-			goodCorners[count].x = mergeCorners[ii].x;
-			goodCorners[count].y = mergeCorners[ii].y;
-			goodCandiates[count] = squareType[ii];
-			count++;
-		}
-	}
-
-	npts = count;
-	for (jj = 0; jj < npts; jj++)
-		marker[jj] = -1;
-
-	megre_thresh = 4.0, count = 0, ngoodCandiates = 0;
-	for (jj = 0; jj < npts; jj++)
-	{
-		KNN = 0, flag = 0;
-		for (ii = 0; ii < count; ii++)
-		{
-			if (marker[ii] == jj)
-			{
-				flag = 1;
-				break;
-			}
-		}
-		if (flag == 1)
-			continue;
-
-		for (ii = jj + 1; ii < npts; ii++)
-		{
-			t1 = goodCorners[ii].x - goodCorners[jj].x;
-			t2 = goodCorners[ii].y - goodCorners[jj].y;
-			if (t1*t1 + t2*t2 < megre_thresh*megre_thresh)
-			{
-				STACK[KNN] = ii;
-				KNN++;
-			}
-		}
-		STACK[KNN] = jj;// include itself
-
-		for (kk = 0; kk < KNN + 1; kk++)
-		{
-			marker[count] = STACK[kk];
-			count++;
-		}
-
-		Fcorners[ngoodCandiates].x = goodCorners[jj].x, Fcorners[ngoodCandiates].y = goodCorners[jj].y;
-		for (kk = 0; kk < KNN; kk++)
-		{
-			Fcorners[ngoodCandiates].x += goodCorners[STACK[kk]].x;
-			Fcorners[ngoodCandiates].y += goodCorners[STACK[kk]].y;
-		}
-		Fcorners[ngoodCandiates].x /= (KNN + 1);
-		Fcorners[ngoodCandiates].y /= (KNN + 1);
-		FStype[ngoodCandiates] = goodCandiates[jj];
-		ngoodCandiates++;
-	}
-
-	npts = ngoodCandiates;
-	cout << "After merging points: " << npts << endl;
-
-	delete[]maskSmooth;
-	delete[]goodCorners;
-	delete[]goodCandiates;
-	delete[]marker;
-	delete[]squareType;
-	delete[]mergeCorners;
-
-	return;
-}
-void RunCornersDetector(Point2d *CornerPts, int *CornersType, int &nCpts, double *Img, double *IPara, int width, int height, vector<double>PatternAngles, int hsubset1, int hsubset2, int searchArea, double ZNCCCoarseThresh, double ZNCCThresh, int InterpAlgo)
-{
-	int npts = 500000;
-	Point2d *Checker = new Point2d[npts];
-
-	//int SuppressType = 1;
-	//double Gsigma = 2.5, GDsigma = 3.0, ResponseThresh = 0.9;
-	//DetectCorners(img, width, height, HarrisC, npts, Gsigma, GDsigma, ResponseThresh, 0.04, SuppressType, 0.9);
-#pragma omp critical
-	cout << "Sliding window for detection..." << endl;
-
-	DetectCornersCorrelation(Img, width, height, Checker, npts, PatternAngles, hsubset1, searchArea, ZNCCCoarseThresh);
-	/*FILE *fp = fopen("C:/temp/cornerCorr.txt", "w+");
-	for (int ii = 0; ii < npts; ii++)
-	fprintf(fp, "%.1f %1f\n", Checker[ii].x, Checker[ii].y);
-	fclose(fp);
-	FILE *fp = fopen("C:/temp/cornerCorr.txt", "r");
-	npts = 0;
-	while (fscanf(fp, "%lf %lf ", &Checker[npts].x, &Checker[npts].y) != EOF)
-	npts++;
-	fclose(fp);*/
-
-#pragma omp critical
-	cout << "finished width " << npts << " points. Refine detected corners..." << endl;
-
-	RefineCorners(IPara, width, height, Checker, CornerPts, CornersType, npts, PatternAngles, hsubset1, hsubset2, searchArea, ZNCCCoarseThresh, ZNCCThresh, InterpAlgo);
-	nCpts = npts;
-
-	delete[]Checker;
-	return;
-}
-int DetectMarkersandCorrespondence(char *PATH, Point2d *Pcorners, int *PcorType, double *PPara, LKParameters LKArg, double *CamProScale, vector<double>PatternAngles, int checkerSize, int nPpts, int PSncols, Point2i *ProjectorCorressBoundary, double EpipThresh, int frameID, int CamID, int nPros, int width, int height, int pwidth, int pheight)
-{
-	int length = width*height;
-	const int maxPts = 5000, SearchArea = 1;
-	int CheckerhSubset1 = (int)(0.5*checkerSize + 0.5), CheckerhSubset2 = (int)(0.5*checkerSize + 0.5); //A reasonable checkerhsubset gives better result than using the huge subset
-
-	int  ii, jj, nCPts, nCCorres = maxPts, CType1[maxPts];
-	Point2d CPts1[maxPts], Ppts[maxPts], CPts[maxPts * 2];
-	Point2i CCorresID[maxPts];
-	int T[maxPts], TT[maxPts];
-
-	IplImage *view = 0;
-	char *Img = new char[2 * width*height];
-	double *SImg = new double[width*height];
-	double *IPara = new double[2 * width*height];
-
-	char Fname[100];
-	sprintf(Fname, "%s/Image/C%d_%05d.png", PATH, CamID + 1, frameID);
-	view = cvLoadImage(Fname, 0);
-	if (view == NULL)
-	{
-		cout << "cannot load " << Fname << endl;
-		delete[]Img;
-		delete[]SImg;
-		delete[]IPara;
-		return 1;
-	}
-	cout << "Loaded " << Fname << endl;
-	for (jj = 0; jj < height; jj++)
-		for (ii = 0; ii < width; ii++)
-			Img[ii + (height - 1 - jj)*width] = view->imageData[ii + jj*width];
-	cvReleaseImage(&view);
-
-	Gaussian_smooth(Img, SImg, height, width, 255.0, LKArg.Gsigma);
-	Generate_Para_Spline(SImg, IPara, width, height, LKArg.InterpAlgo);
-
-	RunCornersDetector(CPts1, CType1, nCPts, SImg, IPara, width, height, PatternAngles, CheckerhSubset1, CheckerhSubset2, SearchArea, LKArg.ZNCCThreshold - 0.35, LKArg.ZNCCThreshold, LKArg.InterpAlgo);
-	/*FILE *fp = fopen("C:/temp/pts.txt", "w+");
-	for (int ii = 0; ii < nCPts; ii++)
-	fprintf(fp, "%f %f %d \n", CPts1[ii].x, CPts1[ii].y, CType1[ii]);
-	fclose(fp);
-
-	{
-	nCPts = 0;
-	FILE *fp = fopen("C:/temp/pts.txt", "r");
-	while (fscanf(fp, "lf %lf %d %", &CPts1[nCPts].x, &CPts1[nCPts].y, &CType1[nCPts]) != EOF)
-	nCPts++;
-	fclose(fp);
-	}*/
-	for (int ProID = 0; ProID < nPros; ProID++)
-	{
-		for (ii = 0; ii < nCCorres; ii++)
-		{
-			T[ii] = CCorresID[ii].y;
-			TT[ii] = ii;
-		}
-		Quick_Sort_Int(T, TT, 0, nCCorres - 1);
-
-		for (ii = 0; ii < nCCorres; ii++)
-		{
-			Ppts[ii].x = Pcorners[CCorresID[TT[ii]].y].x;
-			Ppts[ii].y = Pcorners[CCorresID[TT[ii]].y].y;
-			CPts[ii].x = CPts1[CCorresID[TT[ii]].x].x;
-			CPts[ii].y = CPts1[CCorresID[TT[ii]].x].y;
-		}
-
-		sprintf(Fname, "%s/Sparse/P%dC%d_%05d.txt", PATH, ProID + 1, CamID + 1, frameID);
-		FILE *fp = fopen(Fname, "w+");
-		for (ii = 0; ii < nCCorres; ii++)
-			fprintf(fp, "%d %.8f %.8f \n", CCorresID[TT[ii]].y, Ppts[ii].x, Ppts[ii].y);
-		fclose(fp);
-
-		sprintf(Fname, "%s/Sparse/C%dP%d_%05d.txt", PATH, CamID + 1, ProID + 1, frameID);
-		fp = fopen(Fname, "w+");
-		for (ii = 0; ii < nCCorres; ii++)
-			fprintf(fp, "%.8f %.8f \n", CPts[ii].x, CPts[ii].y);
-		fclose(fp);
-
-		if (nCCorres < 10)
-			cout << "Something wrong with #sparse points." << endl;
-		cout << nCCorres << " pts dected for frame " << frameID << endl;
-	}
-
-	delete[]Img;
-	delete[]SImg;
-	delete[]IPara;
 
 	return 0;
 }
+int RefineCheckBoardDetection2(char *Path, int viewID, int startF, int stopF)
+{
+	char Fname[200];
+
+	//sprintf(Fname, "%s/%d", Path, viewID);
+	//int checkerSize = 18; double znccThresh = 0.93;
+	//CornerDetectorDriver(Fname, checkerSize, znccThresh, startF, stopF, 1280, 720);
+	const int npts = 84;
+	int width = 1280, height = 720, length = width*height, nchannels = 1;
+	int interpAlgo = 1, hsubset = 10, searchArea = 1;
+	double ZNCCThresh = 0.9;
+
+	vector<double> PatternAngles;
+	for (int ii = 0; ii < 9; ii++)
+		PatternAngles.push_back(10 * ii);
+
+
+	double *Img = new double[length*nchannels], *Para = new double[length*nchannels];
+
+	int count, nptsI;
+	double u, v;
+	Point2d cvPts[npts];
+	vector<ImgPtEle> *AllPts = NULL;
+	for (int fid = startF; fid < stopF; fid++)
+	{
+		sprintf(Fname, "%s/%d/Corner/CV_%d.txt", Path, viewID, fid); FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+			continue;
+		count = 0;
+		while (fscanf(fp, "%lf %lf", &u, &v) != EOF)
+			cvPts[count] = Point2d(u, v), count++;
+		fclose(fp);
+
+		if (AllPts == NULL)
+			AllPts = new vector<ImgPtEle>[npts];
+
+		//refine those corners with correlation
+		sprintf(Fname, "%s/%d/%d.png", Path, viewID, fid); GrabImage(Fname, Img, width, height, nchannels);
+		for (int kk = 0; kk < nchannels; kk++)
+			Generate_Para_Spline(Img + kk*length, Para + kk*length, width, height, interpAlgo);
+
+		nptsI = npts;
+		RefineCornersFromInit(Para, width, height, nchannels, cvPts, nptsI, PatternAngles, hsubset, hsubset, searchArea, ZNCCThresh - 0.3, ZNCCThresh, interpAlgo);
+
+		sprintf(Fname, "%s/%d/Corner/%d.txt", Path, viewID, fid); fp = fopen(Fname, "w+");
+		for (int ii = 0; ii < npts; ii++)
+			fprintf(fp, "%.3f %.3f \n", cvPts[ii].x, cvPts[ii].y);
+		fclose(fp);
+
+		for (int ii = 0; ii < nptsI; ii++)
+		{
+			ImgPtEle impt; impt.frameID = fid;
+			if (cvPts[ii].x > 1 && cvPts[ii].y > 1 && cvPts[ii].x < width - 1 && cvPts[ii].y < height - 1)
+			{
+				impt.pt2D = cvPts[ii];
+				AllPts[ii].push_back(impt);
+			}
+		}
+	}
+
+	sprintf(Fname, "%s/Track2D", Path); mkdir(Fname);
+	sprintf(Fname, "%s/Track2D/%d.txt", Path, viewID); FILE *fp = fopen(Fname, "w+");
+	for (int ii = 0; ii < npts; ii++)
+	{
+		fprintf(fp, "%d %d ", ii, AllPts[ii].size());
+		for (int jj = 0; jj < AllPts[ii].size(); jj++)
+			fprintf(fp, "%d %.3f %.3f ", AllPts[ii][jj].frameID, AllPts[ii][jj].pt2D.x, AllPts[ii][jj].pt2D.y);
+		fprintf(fp, "%\n");
+	}
+	fclose(fp);
+
+	return 0;
+}
+int CleanCheckBoardDetection(char *Path, int viewID, int startF, int stopF)
+{
+	char Fname[200];
+
+	//sprintf(Fname, "%s/%d", Path, viewID);
+	//int checkerSize = 18; double znccThresh = 0.93;
+	//CornerDetectorDriver(Fname, checkerSize, znccThresh, startF, stopF, 1280, 720);
+
+	//Merge points 
+	int npts = 0;
+	double u, v;
+	vector<int> goodId;
+	vector<Point2d> cvPts, TemplPts;
+	vector<ImgPtEle> *AllPts = NULL;
+	for (int fid = startF; fid < stopF; fid++)
+	{
+		sprintf(Fname, "%s/%d/Corner/CV2_%d.txt", Path, viewID, fid); FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+			continue;
+		while (fscanf(fp, "%lf %lf", &u, &v) != EOF)
+			cvPts.push_back(Point2d(u, v));
+		fclose(fp);
+
+		if (AllPts == NULL)
+			npts = cvPts.size(), AllPts = new vector<ImgPtEle>[cvPts.size()];
+
+		sprintf(Fname, "%s/%d/Corner/CV2_%d.txt", Path, viewID, fid); fp = fopen(Fname, "r");
+		if (fp == NULL)
+			continue;
+		while (fscanf(fp, "%lf %lf", &u, &v) != EOF)
+			TemplPts.push_back(Point2d(u, v));
+		fclose(fp);
+
+		int bestID;
+		double distance2, mindistance2;
+		for (int ii = 0; ii < cvPts.size(); ii++)
+		{
+			bestID = -1, mindistance2 = 9e9;
+			for (int jj = 0; jj < TemplPts.size(); jj++)
+			{
+				distance2 = pow(cvPts[ii].x - TemplPts[jj].x, 2) + pow(cvPts[ii].y - TemplPts[jj].y, 2);
+				if (distance2 < mindistance2)
+				{
+					mindistance2 = distance2;
+					bestID = jj;
+				}
+			}
+
+			if (mindistance2 < 9)
+			{
+				cvPts[ii] = TemplPts[bestID];
+				goodId.push_back(ii);
+			}
+			else
+			{
+				cvPts[ii] = Point2d(0, 0);
+				goodId.push_back(-1);
+			}
+		}
+
+		for (int ii = 0; ii < cvPts.size(); ii++)
+		{
+			ImgPtEle impt; impt.frameID = fid;
+			if (goodId[ii] >-1)
+			{
+				impt.pt2D = cvPts[ii];
+				AllPts[ii].push_back(impt);
+			}
+		}
+		goodId.clear(), cvPts.clear(), TemplPts.clear();
+	}
+
+	sprintf(Fname, "%s/Track2D", Path); mkdir(Fname);
+
+	sprintf(Fname, "%s/Track2D/%d.txt", Path, viewID); FILE *fp = fopen(Fname, "w+");
+	for (int ii = 0; ii < npts; ii++)
+	{
+		fprintf(fp, "%d %d ", ii, AllPts[ii].size());
+		for (int jj = 0; jj < AllPts[ii].size(); jj++)
+			fprintf(fp, "%d %.3f %.3f ", AllPts[ii][jj].frameID, AllPts[ii][jj].pt2D.x - 1, AllPts[ii][jj].pt2D.y - 1);//matlab
+		//fprintf(fp, "%d %.3f %.3f ", AllPts[ii][jj].frameID, AllPts[ii][jj].pt2D.x, AllPts[ii][jj].pt2D.y );//C++
+		fprintf(fp, "%\n");
+	}
+	fclose(fp);
+
+	return 0;
+}
+void CheckBoardMatchingDriver(char *Path, int viewID, int fid)
+{
+	char Fname[200];
+
+	int width = 1280, height = 720, PatternW = 290, PatternH = 184, length = width*height, PatternL = PatternH*PatternW, nchannels = 1;
+	int interpAlgo = 1;
+	double *Img = new double[length], *Pattern = new double[PatternL];
+
+	sprintf(Fname, "%s/checkerboard.png", Path);	GrabImage(Fname, Pattern, PatternW, PatternH, 1);
+	sprintf(Fname, "%s/%d/%d.png", Path, viewID, fid); GrabImage(Fname, Img, width, height, 1);
+
+	vector<Point2f> ImgPts; ImgPts.push_back(Point2f(1133.6, 262.2));
+	ImgPts.push_back(Point2f(1264.7, 301.8));
+	ImgPts.push_back(Point2f(1243.5, 380.3));
+	ImgPts.push_back(Point2f(1109.4, 336.6));
+
+	vector<Point2f> TempPts; TempPts.push_back(Point2f(19.5, 19.5));
+	TempPts.push_back(Point2f(239.5, 19.5));
+	TempPts.push_back(Point2f(239.5, 139.5));
+	TempPts.push_back(Point2f(19.5, 139.5));
+
+	Mat mH = findHomography(TempPts, ImgPts);
+	cout << mH << endl;
+
+	double H[9] = { mH.at<double>(0, 0), mH.at<double>(0, 1), mH.at<double>(0, 2),
+		mH.at<double>(1, 0), mH.at<double>(1, 1), mH.at<double>(1, 2),
+		mH.at<double>(2, 0), mH.at<double>(2, 1), mH.at<double>(2, 2) };
+
+	double *oImg = new double[PatternL];
+	double *iPara = new double[length*nchannels];
+
+	TransformImage(oImg, PatternW, PatternH, Img, width, height, H, 1, 1, iPara);
+	ShowDataAsImage("Img", oImg, PatternW, PatternH, 1);
+
+	return;
+}
+int DetectBalls(char *Path, int camID, const int startFrame, const int stopFrame, int search_area = 10, double threshold = 0.75)
+{
+	char Fname[100];
+	int width = 1920, height = 1080, nchannels = 3, length = width*height, patternSizeMax = 50;
+	double *Img1 = new double[length * 3];
+	double *Para = new double[length * 3];
+	double *PatternR = new double[patternSizeMax *patternSizeMax * 3];
+	double *PatternG = new double[patternSizeMax *patternSizeMax * 3];
+	double *PatternB = new double[patternSizeMax *patternSizeMax * 3];
+
+	int t1, t2, t3;
+	Point2i pti;
+	Point2d pts[241 * 3], pt1, pt2, pt3;
+	sprintf(Fname, "%s/%d/pts.txt", Path, camID);  FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		return 1;
+	}
+	while (fscanf(fp, "%d %lf %lf %d %lf %lf %d %lf %lf", &t1, &pt1.x, &pt1.y, &t2, &pt2.x, &pt2.y, &t3, &pt3.x, &pt3.y) != EOF)
+		pts[3 * t1] = pt1, pts[3 * t1 + 1] = pt2, pts[3 * t1 + 2] = pt3;
+	fclose(fp);
+
+	int patternSizeR, patternSizeG, patternSizeB;
+	sprintf(Fname, "%s/%d/Red.png", Path, camID); GrabImage(Fname, PatternR, patternSizeR, patternSizeR, nchannels, true);
+	sprintf(Fname, "%s/%d/Green.png", Path, camID); GrabImage(Fname, PatternG, patternSizeG, patternSizeG, nchannels, true);
+	sprintf(Fname, "%s/%d/Blue.png", Path, camID); GrabImage(Fname, PatternB, patternSizeB, patternSizeB, nchannels, true);
+	int hsubsetR = patternSizeR / 2 - 1, hsubsetG = patternSizeG / 2 - 1, hsubsetB = patternSizeB / 2 - 1;
+
+	double score, start = omp_get_wtime();
+	for (int frameID = startFrame; frameID <= stopFrame; frameID++)
+	{
+		printf("Working on %d. Time elapsed %.2f ....", frameID, omp_get_wtime() - start);
+		sprintf(Fname, "%s/%d/%d.png", Path, camID, frameID); GrabImage(Fname, Img1, width, height, nchannels, true);
+		for (int kk = 0; kk < nchannels; kk++)
+			Generate_Para_Spline(Img1 + kk*length, Para + kk*length, width, height, 1);
+
+		int detected = 0;
+		pt1 = pts[3 * frameID]; pti = pt1;
+		score = TMatchingSuperCoarse(PatternR, patternSizeR, hsubsetR, Img1, width, height, nchannels, pti, search_area, threshold);
+		if (score < threshold)
+			pts[3 * frameID] = Point2d(-1, -1);
+		else
+		{
+			pt1 = pti;
+			score = TMatchingFine_ZNCC(PatternR, patternSizeR, hsubsetR, Para, width, height, nchannels, pt1, 0, 1, threshold, 1);
+			if (score < threshold)
+				pts[3 * frameID] = Point2d(-1, -1);
+			else
+				pts[3 * frameID] = pt1, printf("got Red..."), detected++;
+		}
+
+		pt2 = pts[3 * frameID + 1]; pti = pt2;
+		score = TMatchingSuperCoarse(PatternG, patternSizeG, hsubsetG, Img1, width, height, nchannels, pti, search_area, threshold);
+		if (score < threshold)
+			pts[3 * frameID + 1] = Point2d(-1, -1);
+		else
+		{
+			pt2 = pti;
+			score = TMatchingFine_ZNCC(PatternG, patternSizeG, hsubsetG, Para, width, height, nchannels, pt2, 0, 1, threshold, 1);
+			if (score < threshold)
+				pts[3 * frameID + 1] = Point2d(-1, -1);
+			else
+				pts[3 * frameID + 1] = pt2, printf("got Green..."), detected++;
+
+		}
+
+		pt3 = pts[3 * frameID + 2]; pti = pt3;
+		score = TMatchingSuperCoarse(PatternB, patternSizeB, hsubsetB, Img1, width, height, nchannels, pti, search_area, threshold);
+		if (score < threshold)
+			pts[3 * frameID + 2] = Point2d(-1, -1);
+		else
+		{
+			pt3 = pti;
+			score = TMatchingFine_ZNCC(PatternB, patternSizeB, hsubsetB, Para, width, height, nchannels, pt3, 0, 1, threshold, 1);
+			if (score < threshold)
+				pts[3 * frameID + 2] = Point2d(-1, -1);
+			else
+				pts[3 * frameID + 2] = pt3, printf("got Blue..."), detected++;
+		}
+		if (detected == 0)
+			printf("CAUTION!");
+		printf("\n");
+	}
+
+	sprintf(Fname, "%s/%d/Rpts.txt", Path, camID);  fp = fopen(Fname, "w+");
+	for (int ii = 0; ii < 241; ii++)
+		fprintf(fp, "%d %f %f %f %f %f %f\n", ii, pts[3 * ii].x, pts[3 * ii].y, pts[3 * ii + 1].x, pts[3 * ii + 1].y, pts[3 * ii + 2].x, pts[3 * ii + 2].y);
+	fclose(fp);
+
+	return 0;
+}
+int TrajectoryTrackingDriver(char *Path)
+{
+	char Fname[512];
+	int FrameOffset[8] = { 0, -1, 15, 1, 8, 3, 5, -2 };
+	sprintf(Fname, "%s/Track2D", Path), mkdir(Fname);
+	for (int viewID = 0; viewID < 8; viewID++)
+	{
+		sprintf(Fname, "%s/Track2D/%d.txt", Path, viewID); FILE *fp = fopen(Fname, "w+"); fclose(fp);
+	}
+	ReadCorresAndRunTracking(Path, 8, 70, 70, 150, FrameOffset, 4);
+	ReadCorresAndRunTracking(Path, 8, 90, 70, 150, FrameOffset, 4);
+	ReadCorresAndRunTracking(Path, 8, 110, 70, 150, FrameOffset, 4);
+	ReadCorresAndRunTracking(Path, 8, 130, 70, 150, FrameOffset, 4);
+
+	CleanUp2DTrackingByGradientConsistency(Path, 8, 939);
+	DownSampleTracking(Path, 8, 939, 4);
+	return 0;
+}
+
+#define HOMO_VECTOR(H, x, y)\
+    H.at<float>(0,0) = (float)(x);\
+    H.at<float>(1,0) = (float)(y);\
+    H.at<float>(2,0) = 1.;
+
+#define GET_HOMO_VALUES(X, x, y)\
+    (x) = static_cast<float> (X.at<float>(0,0)/X.at<float>(2,0));\
+    (y) = static_cast<float> (X.at<float>(1,0)/X.at<float>(2,0));
+
+static int readWarp(string iFilename, Mat& warp, int motionType){
+
+	// it reads from file a specific number of raw values:
+	// 9 values for homography, 6 otherwise
+	CV_Assert(warp.type() == CV_32FC1);
+	int numOfElements;
+	if (motionType == MOTION_HOMOGRAPHY)
+		numOfElements = 9;
+	else
+		numOfElements = 6;
+
+	int i;
+	int ret_value;
+
+	ifstream myfile(iFilename.c_str());
+	if (myfile.is_open()){
+		float* matPtr = warp.ptr<float>(0);
+		for (i = 0; i < numOfElements; i++){
+			myfile >> matPtr[i];
+		}
+		ret_value = 1;
+	}
+	else {
+		cout << "Unable to open file " << iFilename.c_str() << endl;
+		ret_value = 0;
+	}
+	return ret_value;
+}
+static int saveWarp(string fileName, const Mat& warp, int motionType)
+{
+	// it saves the raw matrix elements in a file
+	CV_Assert(warp.type() == CV_32FC1);
+
+	const float* matPtr = warp.ptr<float>(0);
+	int ret_value;
+
+	ofstream outfile(fileName.c_str());
+	if (!outfile) {
+		cerr << "error in saving "
+			<< "Couldn't open file '" << fileName.c_str() << "'!" << endl;
+		ret_value = 0;
+	}
+	else {//save the warp's elements
+		outfile << matPtr[0] << " " << matPtr[1] << " " << matPtr[2] << endl;
+		outfile << matPtr[3] << " " << matPtr[4] << " " << matPtr[5] << endl;
+		if (motionType == MOTION_HOMOGRAPHY){
+			outfile << matPtr[6] << " " << matPtr[7] << " " << matPtr[8] << endl;
+		}
+		ret_value = 1;
+	}
+	return ret_value;
+
+}
+static void draw_warped_roi(Mat& image, const int width, const int height, Mat& W)
+{
+	Point2f top_left, top_right, bottom_left, bottom_right;
+
+	Mat  H = Mat(3, 1, CV_32F);
+	Mat  U = Mat(3, 1, CV_32F);
+
+	Mat warp_mat = Mat::eye(3, 3, CV_32F);
+
+	for (int y = 0; y < W.rows; y++)
+		for (int x = 0; x < W.cols; x++)
+			warp_mat.at<float>(y, x) = W.at<float>(y, x);
+
+	//warp the corners of rectangle
+
+	// top-left
+	HOMO_VECTOR(H, 1, 1);
+	gemm(warp_mat, H, 1, 0, 0, U);
+	GET_HOMO_VALUES(U, top_left.x, top_left.y);
+
+	// top-right
+	HOMO_VECTOR(H, width, 1);
+	gemm(warp_mat, H, 1, 0, 0, U);
+	GET_HOMO_VALUES(U, top_right.x, top_right.y);
+
+	// bottom-left
+	HOMO_VECTOR(H, 1, height);
+	gemm(warp_mat, H, 1, 0, 0, U);
+	GET_HOMO_VALUES(U, bottom_left.x, bottom_left.y);
+
+	// bottom-right
+	HOMO_VECTOR(H, width, height);
+	gemm(warp_mat, H, 1, 0, 0, U);
+	GET_HOMO_VALUES(U, bottom_right.x, bottom_right.y);
+
+	// draw the warped perimeter
+	line(image, top_left, top_right, Scalar(255, 0, 255));
+	line(image, top_right, bottom_right, Scalar(255, 0, 255));
+	line(image, bottom_right, bottom_left, Scalar(255, 0, 255));
+	line(image, bottom_left, top_left, Scalar(255, 0, 255));
+}
+int TemplateMatchingECCDriver(char *Path, double *H, int matchingType, int MaxIter = 70, double termination_eps = 1e-6)
+{
+	string imgFile = "C:/temp/21.png";
+	string tempImgFile = "C:/temp/checkerboard.png";
+	string inWarpFile = "c:/temp/Hi.txt";
+	string finalWarp = "C:/temp/H.txt";
+
+	Mat inputImage = imread(imgFile, 0);
+	if (inputImage.empty())
+	{
+		cerr << "Unable to load the inputImage" << endl;
+		return -1;
+	}
+
+	Mat target_image;
+	Mat template_image;
+
+	if (tempImgFile != "")
+	{
+		inputImage.copyTo(target_image);
+		template_image = imread(tempImgFile, 0);
+		if (template_image.empty()){
+			cerr << "Unable to load the template image" << endl;
+			return -1;
+		}
+	}
+	else
+	{
+		//apply random waro to input image
+		resize(inputImage, target_image, Size(216, 216));
+		Mat warpGround;
+		cv::RNG rng;
+		double angle;
+		switch (matchingType) {
+		case MOTION_TRANSLATION:
+			warpGround = (Mat_<float>(2, 3) << 1, 0, (rng.uniform(10.f, 20.f)),
+				0, 1, (rng.uniform(10.f, 20.f)));
+			warpAffine(target_image, template_image, warpGround,
+				Size(200, 200), INTER_LINEAR + WARP_INVERSE_MAP);
+			break;
+		case MOTION_EUCLIDEAN:
+			angle = CV_PI / 30 + CV_PI*rng.uniform((double)-2.f, (double)2.f) / 180;
+
+			warpGround = (Mat_<float>(2, 3) << cos(angle), -sin(angle), (rng.uniform(10.f, 20.f)),
+				sin(angle), cos(angle), (rng.uniform(10.f, 20.f)));
+			warpAffine(target_image, template_image, warpGround,
+				Size(200, 200), INTER_LINEAR + WARP_INVERSE_MAP);
+			break;
+		case MOTION_AFFINE:
+
+			warpGround = (Mat_<float>(2, 3) << (1 - rng.uniform(-0.05f, 0.05f)),
+				(rng.uniform(-0.03f, 0.03f)), (rng.uniform(10.f, 20.f)),
+				(rng.uniform(-0.03f, 0.03f)), (1 - rng.uniform(-0.05f, 0.05f)),
+				(rng.uniform(10.f, 20.f)));
+			warpAffine(target_image, template_image, warpGround,
+				Size(200, 200), INTER_LINEAR + WARP_INVERSE_MAP);
+			break;
+		case MOTION_HOMOGRAPHY:
+			warpGround = (Mat_<float>(3, 3) << (1 - rng.uniform(-0.05f, 0.05f)),
+				(rng.uniform(-0.03f, 0.03f)), (rng.uniform(10.f, 20.f)),
+				(rng.uniform(-0.03f, 0.03f)), (1 - rng.uniform(-0.05f, 0.05f)), (rng.uniform(10.f, 20.f)),
+				(rng.uniform(0.0001f, 0.0003f)), (rng.uniform(0.0001f, 0.0003f)), 1.f);
+			warpPerspective(target_image, template_image, warpGround,
+				Size(200, 200), INTER_LINEAR + WARP_INVERSE_MAP);
+			break;
+		}
+	}
+
+	// initialize or load the warp matrix
+	Mat warp_matrix;
+	if (matchingType == 3)
+		warp_matrix = Mat::eye(3, 3, CV_32F);
+	else
+		warp_matrix = Mat::eye(2, 3, CV_32F);
+
+	if (inWarpFile != "")
+	{
+		int readflag = readWarp(inWarpFile, warp_matrix, matchingType);
+		if ((!readflag) || warp_matrix.empty())
+		{
+			cerr << "-> Check warp initialization file" << endl << flush;
+			return -1;
+		}
+	}
+	else
+		printf("\n ->Perfomarnce Warning: Identity warp ideally assumes images of similar size. If the deformation is strong, the identity warp may not \n");
+
+	if (MaxIter > 200)
+		cout << "-> Warning: too many iterations " << endl;
+
+	if (matchingType != MOTION_HOMOGRAPHY)
+		warp_matrix.rows = 2;
+
+	double CorrelationScore = findTransformECC(template_image, target_image, warp_matrix, matchingType, TermCriteria(TermCriteria::COUNT + TermCriteria::EPS, MaxIter, termination_eps));
+
+	if (CorrelationScore == -1)
+	{
+		cerr << "The execution was interrupted. The correlation value is going to be minimized." << endl;
+		cerr << "Check the warp initialization and/or the size of images." << endl << flush;
+	}
+
+	// save the final warp matrix
+	saveWarp(finalWarp, warp_matrix, matchingType);
+
+	// save the final warped image
+	Mat warped_image = Mat(template_image.rows, template_image.cols, CV_32FC1);
+	if (matchingType != MOTION_HOMOGRAPHY)
+		warpAffine(target_image, warped_image, warp_matrix, warped_image.size(), INTER_LINEAR + WARP_INVERSE_MAP);
+	else
+		warpPerspective(target_image, warped_image, warp_matrix, warped_image.size(), INTER_LINEAR + WARP_INVERSE_MAP);
+
+
+	// display resulting images
+	if (1)
+	{
+		namedWindow("image", WINDOW_AUTOSIZE);
+		namedWindow("template", WINDOW_AUTOSIZE);
+		namedWindow("warped image", WINDOW_AUTOSIZE);
+		namedWindow("error (black: no error)", WINDOW_AUTOSIZE);
+
+		moveWindow("template", 350, 350);
+		moveWindow("warped image", 600, 300);
+		moveWindow("error (black: no error)", 900, 300);
+
+		// draw boundaries of corresponding regions
+		Mat identity_matrix = Mat::eye(3, 3, CV_32F);
+
+		draw_warped_roi(target_image, template_image.cols - 2, template_image.rows - 2, warp_matrix);
+		draw_warped_roi(template_image, template_image.cols - 2, template_image.rows - 2, identity_matrix);
+
+		Mat errorImage;
+		subtract(template_image, warped_image, errorImage);
+		double max_of_error;
+		minMaxLoc(errorImage, NULL, &max_of_error);
+
+		cout << "Press any key to exit the demo." << endl << flush;
+		imshow("image", target_image);
+		waitKey(200);
+		imshow("template", template_image);
+		waitKey(200);
+		imshow("warped image", warped_image);
+		waitKey(200);
+		imshow("error (black: no error)", abs(errorImage) * 255 / max_of_error);
+		waitKey(0);
+	}
+
+	return 0;
+}
+
+
+

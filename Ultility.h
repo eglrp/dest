@@ -48,6 +48,9 @@ bool SaveDataToImage(char *fname, unsigned char *Img, int width, int height, int
 bool SaveDataToImage(char *fname, float *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, double *Img, int width, int height, int nchannels = 1);
 
+void ShowDataAsImage(char *fname, unsigned char *Img, int width, int height, int nchannels);
+void ShowDataAsImage(char *fname, double *Img, int width, int height, int nchannels);
+
 void ResizeImage(unsigned char *Image, unsigned char *OutImage, int width, int height, int nchannels, double Rfactor, double sigma, int InterpAlgo, double *InPara = 0);
 void ResizeImage(float *Image, float *OutImage, int width, int height, int channels, double Rfactor, double sigma, int InterpAlgo, float *Para = 0);
 void ResizeImage(double *Image, double *OutImage, int width, int height, int nchannels, double Rfactor, double sigma, int InterpAlgo, double *Para = 0);
@@ -590,6 +593,9 @@ bool loadIndividualNVMforpose(char *Path, CameraData *CameraInfo, vector<int>ava
 int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel = RADIAL_TANGENTIAL_PRISM, int distortionCorrected = 1);
 int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime);
 int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime);
+void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID);
+void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime = 0);
+int DownSampleSpatialCalib(char *Path, int nviews, int startFrame, int stopFrame, int Factor);
 
 void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker, int &npts, double sigma, int search_area, int NMS_BW, double thresh);
 
@@ -603,6 +609,7 @@ bool LoadTrackData(char* filePath, int CurrentFrame, TrajectoryData &TrajectoryI
 void Write3DMemAtThatTime(char *Path, TrajectoryData &TrajectoryInfo, CameraData *AllCamInfo, int refFrame, int curFrame);
 void Genrate2DTrajectory(char *Path, int CurrentFrame, TrajectoryData InfoTraj, CameraData *AllCamInfo, vector<int> trajectoriesUsed);
 void Genrate2DTrajectory2(char *Path, int CurrentFrame, TrajectoryData InfoTraj, VideoData  &AllCamInfo, vector<int> trajectoriesUsed);
+void Genrate2DTrajectory3(char *Path, int CurrentFrame, TrajectoryData InfoTraj, VideoData &AllVideoData, vector<int> trajectoriesUsed);
 int Load2DTrajectory(char *Path, TrajectoryData &inoTraj, int ntrajectories);
 int Compute3DTrajectoryErrorColorVar(char *Path, vector<int> SyncOff, int *pair);
 int Compute3DTrajectoryErrorZNCC(char *Path, TrajectoryData inoTraj, int nTraj, int minFrame, int maxFrame, int *cameraPair, int* range);
@@ -620,19 +627,25 @@ void synthesize_concentric_circles_mask(double *ring_mask_smooth, int *pattern_b
 void DetectBlobCorrelation(char *ImgName, vector<KeyPoint> &kpts, int nOctaveLayers, int nScalePerOctave, double sigma, int templateSize, int NMS_BW, double thresh);
 int DetectRGBBallCorrelation(char *ImgName, vector<KeyPoint> &kpts, vector<int> &ballType, int nOctaveLayers, int nScalePerOctave, double sigma, int PatternSize, int NMS_BW, double thresh, bool visualize);
 
+void TransformImage(double *oImg, int Owidth, int Oheight, double *iImg, int Iwidth, int Iheight, double *Trans, int nchannels, int interpAlgo, double *iPara = NULL);
 int ComputeAverageImage(char *Path, unsigned char *MeanImg, int width, int height, int camID, int panelID, int startF, int stopF);
 int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, unsigned char *MeanImg, vector<Point2d> &kpts, double sigma, int PatternSize, int nscales, int NMS_BW, double thresh, bool visualize,
 	unsigned char *ColorImg, float *colorResponse, double *DImg, double *ImgPara, double *maskSmooth, double *Znssd_reqd);
 
-double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, Point2i &POI, int search_area, double thresh);
-double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, int nchannels, Point2i &POI, int search_area, double thresh);
-double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd = 0);
+double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, int nchannels, Point2i &POI, int search_area, double thresh, double *T = NULL);
 double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, int nchannels, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd = 0);
+double findTransformECC(InputArray templateImage, InputArray inputImage, InputOutputArray warpMatrix, int motionType, TermCriteria criteria);
+
+void RefineCornersFromInit(double *Para, int width, int height, int nchannels, Point2d *Checker, int &npts, vector<double>PatternAngles, int hsubset1, int hsubset2, int searchArea, double ZNCCCoarseThresh, double ZNCCthresh, int InterpAlgo);
+void RefineCorners(double *Para, int width, int height, int nchannels, Point2d *Checker, Point2d *Fcorners, int *FStype, int &npts, vector<double>PatternAngles, int hsubset1, int hsubset2, int searchArea, double ZNCCCoarseThresh, double ZNCCthresh, int InterpAlgo);
+int CornerDetectorDriver(char *Path, int checkerSize, double ZNCCThreshold, int startF, int stopF, int width, int height);
+
 double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
 double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
 int TrackOpenCVLK(char *Path, int startFrame, int stopFrame);
 int ReadCorresAndRunTracking(char *Path, int nviews, int startFrame, int beginFrame, int endFrame, int *FrameOffset, int HighFrameRateFactor = 4);
 int CleanUp2DTrackingByGradientConsistency(char *Path, int nviews, int ntrajects);
-int ConvertTrackingLowFrameRate(char *Path, int nviews, int ntrajects, int HighFrameRateFactor);
+int DownSampleTracking(char *Path, int nviews, int ntrajects, int HighFrameRateFactor);
+int DeletePointsOf2DTracks(char *Path, int nCams, int npts);
 
 #endif

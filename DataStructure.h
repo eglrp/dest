@@ -17,8 +17,14 @@ using namespace std;
 #define LUT  2
 #define LIMIT3D 1e-6
 #define Pi 3.1415926535897932
-#define MaxnFrame 7000
+#define MaxnFrames 7000
+#define MaxnCams 100
 #define OPTICALFLOW_BIDIRECT_DIST_THRESH 3.0
+
+#define MOTION_TRANSLATION 0
+#define MOTION_EUCLIDEAN 1
+#define MOTION_AFFINE 2
+#define MOTION_HOMOGRAPHY 3
 
 struct ImgPyr
 {
@@ -43,7 +49,7 @@ struct LKParameters
 
 struct CameraData
 {
-	double K[9], distortion[7], R[9], T[3], rt[6], P[12], intrinsic[5], invK[9], invR[9];
+	double K[9], distortion[7], R[9], Quat[4], T[3], rt[6], P[12], intrinsic[5], invK[9], invR[9];
 	double Rgl[16], camCenter[3];
 	int LensModel;
 	double threshold, ninlierThresh;
@@ -89,11 +95,11 @@ struct CamInfo
 };
 struct ImgPtEle
 {
-	int frameID;
+	int frameID, imWidth, imHeight;
 	Point2d pt2D;
 	Point3d pt3D;
 	double ray[3], camcenter[3], d;
-	double K[9], R[9], P[12], Q[6], u[2];//Jack notation
+	double K[9], R[9], Quat[4], T[3], P[12], Q[6], u[2];
 };
 
 struct XYZD
@@ -121,24 +127,26 @@ struct Quaternion
 {
 	double quad[4];
 };
+struct Track2D
+{
+	int *frameID;
+	Point2d *uv;
+	double *ParaX, *ParaY;
+
+	int nf;
+};
 struct Track3D
 {
 	double *xyz;
 	int *frameID;
-	int npts;
+	int nf;
 };
 struct Track4D
 {
 	double *xyzt;
 	int npts;
 };
-struct Track2D
-{
-	double *ParaX, *ParaY;
-	Point2d *uv;
-	double *frameID;
-	int npts;
-};
+
 struct PerCamNonRigidTrajectory
 {
 	vector<Pmat> P;
@@ -152,7 +160,7 @@ struct PerCamNonRigidTrajectory
 	Track3D *CamCenter;
 	Track4D *quaternion;
 	double F;
-	int nTracks;
+	int npts;
 };
 struct Trajectory2D
 {
@@ -166,7 +174,7 @@ struct Trajectory3D
 	int timeID;
 	vector<int>viewIDs;
 	vector<Point2d> uv;
-	Point3d WC;
+	Point3d WC, STD;
 };
 struct TrajectoryData
 {
@@ -183,6 +191,7 @@ struct TrajectoryData
 };
 struct VisualizationManager
 {
+	int catPointCurrentTime;
 	Point3d g_trajactoryCenter;
 	vector<Point3d> CorpusPointPosition, CorpusPointPosition2, PointPosition, PointPosition2, PointPosition3;
 	vector<Point3f> CorpusPointColor, CorpusPointColor2, PointColor, PointColor2, PointColor3;

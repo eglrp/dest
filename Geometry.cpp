@@ -47,7 +47,7 @@ public:
 };
 
 CvEMEstimator::CvEMEstimator()
-: CvModelEstimator2(5, cvSize(3, 3), 10)
+	: CvModelEstimator2(5, cvSize(3, 3), 10)
 {
 }
 int CvEMEstimator::runKernel(const CvMat* m1, const CvMat* m2, CvMat* model)
@@ -699,8 +699,8 @@ int TwoCamerasReconstructionFmat(CameraData *AllViewsInfo, Point2d *PCcorres, Po
 
 	double maxU = 0.0;
 	for (ii = 0; ii < 3; ii++)
-	if (maxU < abs(svd2.u.at<double>(ii, 2)))
-		maxU = abs(svd2.u.at<double>(ii, 2));
+		if (maxU < abs(svd2.u.at<double>(ii, 2)))
+			maxU = abs(svd2.u.at<double>(ii, 2));
 
 	//There are 4 possible cases
 	double RT2[] = { UWVt.at<double>(0, 0), UWVt.at<double>(0, 1), UWVt.at<double>(0, 2), svd2.u.at<double>(0, 2) / maxU,
@@ -868,8 +868,8 @@ int USAC_FindFundamentalMatrix(ConfigParamsFund cfg, vector<Point2d> pts1, vecto
 	// write out results
 	ninlers = fund->usac_results_.best_inlier_count_;
 	for (unsigned int i = 0; i < 3; ++i)
-	for (unsigned int j = 0; j < 3; ++j)
-		Fmat[3 * i + j] = fund->final_model_params_[3 * i + j];
+		for (unsigned int j = 0; j < 3; ++j)
+			Fmat[3 * i + j] = fund->final_model_params_[3 * i + j];
 
 	InlierIndicator.reserve(cfg.common.numDataPoints);
 	for (unsigned int i = 0; i < cfg.common.numDataPoints; ++i)
@@ -1026,8 +1026,8 @@ int USAC_FindHomography(ConfigParamsHomog cfg, vector<Point2d> pts1, vector<Poin
 	// write out results
 	ninlers = homog->usac_results_.best_inlier_count_;
 	for (unsigned int i = 0; i < 3; ++i)
-	for (unsigned int j = 0; j < 3; ++j)
-		Hmat[3 * i + j] = homog->final_model_params_[3 * i + j];
+		for (unsigned int j = 0; j < 3; ++j)
+			Hmat[3 * i + j] = homog->final_model_params_[3 * i + j];
 
 	InlierIndicator.reserve(cfg.common.numDataPoints);
 	for (unsigned int i = 0; i < cfg.common.numDataPoints; ++i)
@@ -1237,8 +1237,8 @@ double SearchLK(Point2d From, Point2d &Target, float *Img1Para, float *Img2Para,
 		for (jjj = -hsubset; jjj <= hsubset; jjj++)
 		{
 			for (iii = -hsubset; iii <= hsubset; iii++)
-			for (kk = 0; kk < nchannels; kk++)
-				fprintf(fp, "%.2f ", Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength]);
+				for (kk = 0; kk < nchannels; kk++)
+					fprintf(fp, "%.2f ", Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength]);
 			fprintf(fp, "\n");
 		}
 		fclose(fp);
@@ -1297,8 +1297,8 @@ double SearchLK(Point2d From, Point2d &Target, float *Img1Para, float *Img2Para,
 							BB[i] += t_3*CC[i];
 
 						for (j = 0; j < 2; j++)
-						for (i = j; i < 2; i++)
-							AA[j * 2 + i] += CC[i] * CC[j];
+							for (i = j; i < 2; i++)
+								AA[j * 2 + i] += CC[i] * CC[j];
 
 						t_1 += t_3*t_3, t_2 += m_F*m_F;
 					}
@@ -1501,8 +1501,8 @@ double SearchLK(Point2d From, Point2d &Target, float *Img1Para, float *Img2Para,
 				if (fabs(BB[0]) < conv_crit_1)
 				{
 					for (i = 1; i < nn - nExtraParas; i++)
-					if (fabs(BB[i]) > conv_crit_2)
-						break;
+						if (fabs(BB[i]) > conv_crit_2)
+							break;
 					if (i == nn - nExtraParas)
 						Break_Flag = true;
 				}
@@ -1708,8 +1708,8 @@ double SearchLK(Point2d From, Point2d &Target, float *Img1Para, float *Img2Para,
 					if (fabs(BB[0]) < conv_crit_1)
 					{
 						for (i = 1; i < nn - nExtraParas; i++)
-						if (fabs(BB[i]) > conv_crit_2)
-							break;
+							if (fabs(BB[i]) > conv_crit_2)
+								break;
 						if (i == nn - nExtraParas)
 							Break_Flag = true;
 					}
@@ -1725,8 +1725,8 @@ double SearchLK(Point2d From, Point2d &Target, float *Img1Para, float *Img2Para,
 					if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
 					{
 						for (i = 2; i < nn - nExtraParas; i++)
-						if (fabs(BB[i]) > conv_crit_2)
-							break;
+							if (fabs(BB[i]) > conv_crit_2)
+								break;
 						if (i == nn - nExtraParas)
 							Break_Flag = true;
 					}
@@ -2362,9 +2362,9 @@ int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCa
 		return 1;
 
 	if (distortionCorrected == 1)
-	for (int ii = 0; ii < nCams; ii++)
-	for (int jj = 0; jj < 7; jj++)
-		camera[ii].distortion[jj] = 0.0;
+		for (int ii = 0; ii < nCams; ii++)
+			for (int jj = 0; jj < 7; jj++)
+				camera[ii].distortion[jj] = 0.0;
 
 	for (int ii = 0; ii < nCams; ii++)
 		camera[ii].threshold = 3.0, camera[ii].ninlierThresh = 50;
@@ -2416,8 +2416,8 @@ int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCa
 		//To remove the nonsense case of every point matchces to 1 point-->IT HAPPENED
 		SRawPairWiseMatchID.push_back(RawPairWiseMatchID.at(0));
 		for (int i = 1; i < min(npts, 20000); i++)
-		if (RawPairWiseMatchID.at(i).x != RawPairWiseMatchID.at(i - 1).x)
-			SRawPairWiseMatchID.push_back(RawPairWiseMatchID.at(i));
+			if (RawPairWiseMatchID.at(i).x != RawPairWiseMatchID.at(i - 1).x)
+				SRawPairWiseMatchID.push_back(RawPairWiseMatchID.at(i));
 
 		if (SRawPairWiseMatchID.size() < ninlierThresh)
 			return 1;
@@ -2434,8 +2434,8 @@ int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCa
 		//Store sorted vector
 		RawPairWiseMatchID.push_back(SRawPairWiseMatchID.at(tId[0]));
 		for (unsigned int i = 1; i < min(nsPairwiseMatchID, 20000); i++)
-		if (SortingVec[i] != SortingVec[i - 1])
-			RawPairWiseMatchID.push_back(SRawPairWiseMatchID.at(tId[i]));
+			if (SortingVec[i] != SortingVec[i - 1])
+				RawPairWiseMatchID.push_back(SRawPairWiseMatchID.at(tId[i]));
 
 		npts = RawPairWiseMatchID.size();
 		if (npts < ninlierThresh)
@@ -2511,8 +2511,8 @@ int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCa
 
 	int ninliers = 0;
 	for (int ii = 0; ii < Inliers.cols; ii++)
-	if (Inliers.at<bool>(ii))
-		ninliers++;
+		if (Inliers.at<bool>(ii))
+			ninliers++;
 
 	if (ninliers < camera[0].ninlierThresh)
 	{
@@ -2527,8 +2527,8 @@ int EssentialMatOutliersRemove(char *Path, int timeID, int id1, int id2, int nCa
 		sprintf(Fname, "%s/M%d_%d_%d.dat", Path, timeID, id1, id2);
 	fp = fopen(Fname, "w+");	fprintf(fp, "%d\n", ninliers);
 	for (int ii = 0; ii < Inliers.cols; ii++)
-	if (Inliers.at<bool>(ii))
-		fprintf(fp, "%d %d\n", RawPairWiseMatchID[ii].x, RawPairWiseMatchID[ii].y);
+		if (Inliers.at<bool>(ii))
+			fprintf(fp, "%d %d\n", RawPairWiseMatchID[ii].x, RawPairWiseMatchID[ii].y);
 	fclose(fp);
 
 #pragma omp critical
@@ -2539,7 +2539,7 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 {
 	char Fname[200];
 	if (timeID < 0)
-		sprintf(Fname, "%s/_M_%d_%d.dat", Path, id1, id2);
+		sprintf(Fname, "%s/M_%d_%d.dat", Path, id1, id2);
 	else
 		sprintf(Fname, "%s/Dynamic/M%d_%d_%d.dat", Path, timeID, id1, id2);
 	FILE *fp = fopen(Fname, "r");
@@ -2548,14 +2548,12 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 		printf("Cannot find %s\n", Fname);
 		return 0;
 	}
+	fclose(fp);
 
 	bool notCalibrated = false;
 	CameraData *camera = new CameraData[nCams];
 	if (!ReadIntrinsicResults(Path, camera) != 0)
 		notCalibrated = true;
-	else
-	for (int ii = 0; ii < nCams; ii++)
-		camera[ii].LensModel = LensType;
 
 	if (notCalibrated &&distortionCorrected == 0 && LensType == FISHEYE)
 		return 1;
@@ -2614,8 +2612,8 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 		//To remove the nonsense case of every point matchces to 1 point-->IT HAPPENED
 		SRawPairWiseMatchID.push_back(RawPairWiseMatchID.at(0));
 		for (int i = 1; i < min(npts, 20000); i++)
-		if (RawPairWiseMatchID.at(i).x != RawPairWiseMatchID.at(i - 1).x)
-			SRawPairWiseMatchID.push_back(RawPairWiseMatchID.at(i));
+			if (RawPairWiseMatchID.at(i).x != RawPairWiseMatchID.at(i - 1).x)
+				SRawPairWiseMatchID.push_back(RawPairWiseMatchID.at(i));
 
 		if (SRawPairWiseMatchID.size() < ninlierThresh)
 			return 1;
@@ -2632,8 +2630,8 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 		//Store sorted vector
 		RawPairWiseMatchID.push_back(SRawPairWiseMatchID.at(tId[0]));
 		for (unsigned int i = 1; i < min(nsPairwiseMatchID, 20000); i++)
-		if (SortingVec[i] != SortingVec[i - 1])
-			RawPairWiseMatchID.push_back(SRawPairWiseMatchID.at(tId[i]));
+			if (SortingVec[i] != SortingVec[i - 1])
+				RawPairWiseMatchID.push_back(SRawPairWiseMatchID.at(tId[i]));
 
 		npts = RawPairWiseMatchID.size();
 		if (npts < ninlierThresh)
@@ -2716,9 +2714,10 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 		printf("(%d, %d): failed Fundamental matrix test\n\n", id1, id2);
 
 	if (timeID < 0)
-		sprintf(Fname, "%s/_M_%d_%d.dat", Path, id1, id2);
+		sprintf(Fname, "%s/M_%d_%d.dat", Path, id1, id2);
 	else
 		sprintf(Fname, "%s/Dynamic/M%d_%d_%d.dat", Path, timeID, id1, id2);
+#pragma omp critical
 	fp = fopen(Fname, "w+");
 
 	if (ninliers < ninlierThresh)
@@ -2730,13 +2729,17 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 	{
 		fprintf(fp, "%d\n", ninliers);
 		for (int ii = 0; ii < Inliers.size(); ii++)
-		if (Inliers.at(ii) == 1)
-			fprintf(fp, "%d %d\n", RawPairWiseMatchID[ii].x, RawPairWiseMatchID[ii].y);
+			if (Inliers.at(ii) == 1)
+				fprintf(fp, "%d %d\n", RawPairWiseMatchID[ii].x, RawPairWiseMatchID[ii].y);
 		fclose(fp);
 	}
 
 #pragma omp critical
-	printf("(%d, %d) to (%d, %d) ...%d matches...\n", id1, timeID + FrameOffset[id1], id2, timeID + FrameOffset[id2], ninliers);
+	if (timeID>0)
+		printf("(%d, %d) to (%d, %d) ...%d matches...\n", id1, timeID + FrameOffset[id1], id2, timeID + FrameOffset[id2], ninliers);
+	else
+		printf("%d to  %d ...%d matches...\n", id1, id2, ninliers);
+
 	return 0;
 }
 static void flannFindPairs(const CvSeq*objectKpts, const CvSeq* objectDescriptors, const CvSeq*imageKpts, const CvSeq* imageDescriptors, vector<int>& ptpairs)
@@ -3539,6 +3542,15 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 		if (HistogramEqual == 1)
 		{
 			cvImg = imread(Fname, 0);
+			if (cvImg.empty())
+			{
+				printf("Cannot load %s\n", Fname);
+				numKeys = 0;
+				cumulativePts.push_back(totalPts);
+				totalPts += numKeys;
+				PtsPerView.push_back(numKeys);
+				continue;
+			}
 			equalizeHist(cvImg, equalizedImg);
 
 			if (timeID < 0)
@@ -3611,10 +3623,14 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 	}
 	cumulativePts.push_back(totalPts);
 
+
 	if (timeID < 0)
 		sprintf(Fname, "%s/CumlativePoints.txt", Path);
 	else
+	{
+		sprintf(Fname, "%s/Dynamic", Path); mkdir(Fname);
 		sprintf(Fname, "%s/Dynamic/CumlativePoints_%d.txt", Path, timeID);
+	}
 	FILE* fp = fopen(Fname, "w+");
 	for (int ii = 0; ii < cumulativePts.size(); ii++)
 		fprintf(fp, "%d\n", cumulativePts.at(ii));
@@ -3658,10 +3674,11 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 			continue;
 
 #ifdef _WINDOWS
-		sprintf(Fname, "%s/Dynamic", Path); mkdir(Fname);
+		if (timeID>0)
+			sprintf(Fname, "%s/Dynamic", Path); mkdir(Fname);
 #endif
 
-		//#pragma omp parallel for
+#pragma omp parallel for
 		for (int ii = jj + 1; ii < nviews; ii++)
 		{
 			if (timeID < 0)
@@ -3735,15 +3752,15 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 			else
 			{
 				for (unsigned int i = 0; i < matches.size(); ++i)
-				if (matches.at(i).size() == 2 && matches.at(i).at(0).distance <= nndrRatio * matches.at(i).at(1).distance)
-					RawPairWiseMatchID[threadID].push_back(Point2i(matches.at(i).at(0).trainIdx, i));
+					if (matches.at(i).size() == 2 && matches.at(i).at(0).distance <= nndrRatio * matches.at(i).at(1).distance)
+						RawPairWiseMatchID[threadID].push_back(Point2i(matches.at(i).at(0).trainIdx, i));
 			}
 
 			//To remove the nonsense case of every point matchces to 1 point-->IT HAPPENED
 			SRawPairWiseMatchID[threadID].push_back(RawPairWiseMatchID[threadID].at(0));
 			for (unsigned int i = 1; i < min(RawPairWiseMatchID[threadID].size(), 50000); i++)
-			if (RawPairWiseMatchID[threadID].at(i).x != RawPairWiseMatchID[threadID].at(i - 1).x)
-				SRawPairWiseMatchID[threadID].push_back(RawPairWiseMatchID[threadID].at(i));
+				if (RawPairWiseMatchID[threadID].at(i).x != RawPairWiseMatchID[threadID].at(i - 1).x)
+					SRawPairWiseMatchID[threadID].push_back(RawPairWiseMatchID[threadID].at(i));
 
 			if (SRawPairWiseMatchID[threadID].size() < ninlierThesh)
 				continue;
@@ -3759,8 +3776,8 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 			//Store sorted vector
 			RawPairWiseMatchID[threadID].push_back(SRawPairWiseMatchID[threadID].at(tId[0 + 50000 * threadID]));
 			for (unsigned int i = 1; i < min(SRawPairWiseMatchID[threadID].size(), 50000); i++)
-			if (SortingVec[i + 50000 * threadID] != SortingVec[i - 1 + 50000 * threadID])
-				RawPairWiseMatchID[threadID].push_back(SRawPairWiseMatchID[threadID].at(tId[i + 50000 * threadID]));
+				if (SortingVec[i + 50000 * threadID] != SortingVec[i - 1 + 50000 * threadID])
+					RawPairWiseMatchID[threadID].push_back(SRawPairWiseMatchID[threadID].at(tId[i + 50000 * threadID]));
 
 #pragma omp critical
 			{
@@ -3818,7 +3835,7 @@ void GenerateMatchingTable(char *Path, int nviews, int timeID)
 			}
 			filesCount++;
 			if (timeID < 0)
-				sprintf(Fname, "%s/_M_%d_%d.dat", Path, jj, ii);
+				sprintf(Fname, "%s/M_%d_%d.dat", Path, jj, ii);
 			else
 				sprintf(Fname, "%s/Dynamic/M%d_%d_%d.dat", Path, timeID, jj, ii);
 
@@ -4069,8 +4086,8 @@ void BestPairFinder(char *Path, int nviews, int timeID, int *viewPair)
 		sprintf(Fname, "%s/VM_%d.txt", Path, timeID);
 	FILE *fp = fopen(Fname, "r");
 	for (jj = 0; jj < nviews; jj++)
-	for (ii = 0; ii < nviews; ii++)
-		fscanf(fp, "%d ", &viewMatrix[ii + jj*nviews]);
+		for (ii = 0; ii < nviews; ii++)
+			fscanf(fp, "%d ", &viewMatrix[ii + jj*nviews]);
 	fclose(fp);
 
 	int bestCount = 0;
@@ -4421,8 +4438,8 @@ void ProjectandDistort(vector<Point3d> WC, Point2d *pts, double *P, double *came
 			pts[ii*npts + jj].x = num1 / denum, pts[ii*npts + jj].y = num2 / denum;
 		}
 		if (camera != NULL)
-		for (jj = 0; jj < npts; jj++)
-			LensDistortionPoint(&pts[ii*npts + jj], camera + ii * 9, distortion + ii * 7);
+			for (jj = 0; jj < npts; jj++)
+				LensDistortionPoint(&pts[ii*npts + jj], camera + ii * 9, distortion + ii * 7);
 	}
 
 	return;
@@ -4581,8 +4598,8 @@ void NviewTriangulation(Point2d *pts, double *P, Point3d *WC, int nview, int npt
 			mse = t1[0] / (2 * nview - 3);
 
 			for (jj = 0; jj < 3; jj++)
-			for (kk = 0; kk < 3; kk++)
-				Cov[kk + jj * 3] = iAtA[kk + jj * 3] * mse;
+				for (kk = 0; kk < 3; kk++)
+					Cov[kk + jj * 3] = iAtA[kk + jj * 3] * mse;
 
 			QR_Solution_Double(A, B, 2 * nview, 3);
 
@@ -5093,11 +5110,11 @@ void MultiViewQualityCheck(Point2d *Pts, double *Pmat, int LensType, double *K, 
 				for (kk = 0; kk < 9; kk++)
 					tK[9 * devCount + kk] = K[9 * jj + kk];
 				if (LensType == RADIAL_TANGENTIAL_PRISM)
-				for (kk = 0; kk < 7; kk++)
-					tdistortion[7 * devCount + kk] = distortion[7 * jj + kk];
+					for (kk = 0; kk < 7; kk++)
+						tdistortion[7 * devCount + kk] = distortion[7 * jj + kk];
 				else
-				for (kk = 0; kk < 3; kk++)
-					tdistortion[7 * devCount + kk] = distortion[7 * jj + kk];
+					for (kk = 0; kk < 3; kk++)
+						tdistortion[7 * devCount + kk] = distortion[7 * jj + kk];
 				devCount++;
 			}
 		}
@@ -6040,8 +6057,8 @@ int IncrementalBA(char *Path, int nviews, int timeID, CameraData *AllViewsInfo, 
 			//Discard point 
 			int count = 0;
 			for (ii = 0; ii < nSelectedViews[jj].size(); ii++)
-			if (notGood[jj].at(ii) == true)
-				count++;
+				if (notGood[jj].at(ii) == true)
+					count++;
 
 			discard3Dpoint[jj] = false;
 			if (count < 2)
@@ -6365,8 +6382,8 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 		//Discard point 
 		int count = 0;
 		for (ii = 0; ii < viewIdAll3D[jj].size(); ii++)
-		if (Good[jj].at(ii) == true)
-			count++;
+			if (Good[jj].at(ii) == true)
+				count++;
 
 		discard3Dpoint[jj] = false;
 		if (count < 2)
@@ -6610,8 +6627,8 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, vector< i
 		GetIntrinsicFromK(corpusData.camera[ii]);
 		AssembleP(corpusData.camera[ii].K, corpusData.camera[ii].R, corpusData.camera[ii].T, corpusData.camera[ii].P);
 		if (distortionCorrected == 1)
-		for (int jj = 0; jj < 7; jj++)
-			corpusData.camera[ii].distortion[jj] = 0.0;
+			for (int jj = 0; jj < 7; jj++)
+				corpusData.camera[ii].distortion[jj] = 0.0;
 	}
 	printf("...Done\n");
 
@@ -6776,8 +6793,8 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, vector< i
 		{
 			int ninlier = 0;
 			for (int ii = 0; ii < Inliers[0].size(); ii++)
-			if (Inliers[0].at(ii))
-				ninlier++;
+				if (Inliers[0].at(ii))
+					ninlier++;
 			if (ninlier < NDplus)
 				continue; //Corpus needs NDplus+ points!
 			corpusData.xyz.push_back(xyz);
@@ -6936,34 +6953,20 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, vector< i
 	delete[]A, delete[]B, delete[]tPs, delete[]passed, delete[]Ps, delete[]match2Dpts;
 	return 0;
 }
-int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime, int timeStep, int LensType, int distortionCorrected, int NDplus, double Reprojectionthreshold, int *FrameOffset, bool Save2DCorres, bool Gen3DPatchFile, double Patch_World_Unit, bool useRANSAC)
+int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime, int timeStep, int LensType, int distortionCorrected, int NDplus, double Reprojectionthreshold, double DepthThresh, int *FrameOffset, bool Save2DCorres, bool Gen3DPatchFile, double Patch_World_Unit, bool useRANSAC)
 {
-	int nFrames = MaxnFrame + 1;
-	if (nFrames < stopTime + 1)
-		nFrames = stopTime + 1;
-
-	int maxOff = 0, minOff = 9e9;
+	int nFrames = max(MaxnFrames, stopTime);
 	if (FrameOffset == NULL)
 	{
 		FrameOffset = new int[nviews];
 		for (int ii = 0; ii < nviews; ii++)
 			FrameOffset[ii] = 0;
-		maxOff = minOff = 0;
 	}
-	else
-	{
-		for (int ii = 0; ii < nviews; ii++)
-		{
-			if (maxOff < FrameOffset[ii])
-				maxOff = FrameOffset[ii];
-			if (minOff > FrameOffset[ii])
-				minOff = FrameOffset[ii];
-		}
-	}
+
 
 	char Fname[200];
 	VideoData AllVideoInfo;
-	if (ReadVideoData(Path, AllVideoInfo, nviews, startTime - minOff, stopTime + maxOff) == 1)
+	if (ReadVideoData(Path, AllVideoInfo, nviews, startTime, stopTime) == 1)
 		return 1;
 
 	int totalPts, MAXPTS = 0;
@@ -6998,7 +7001,7 @@ int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime,
 	double *A = new double[6 * nviews * 2];
 	double *B = new double[2 * nviews * 2];
 	double *tPs = new double[12 * nviews * 2];
-	bool *passed = new bool[nviews * 2];
+	bool passed;
 	double *Ps = new double[12 * nviews * 2];
 	Point2d *match2Dpts = new Point2d[nviews * 2], *match2Dpts_BK = new Point2d[nviews * 2];
 	Point3i *matchRGB = new Point3i[nviews * 2];
@@ -7078,15 +7081,15 @@ int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime,
 			sprintf(Fname, "%s/Dynamic/3DMem_%d.txt", Path, timeID), fp3 = fopen(Fname, "w+");
 
 		double ProThresh = 0.99, PercentInlier = 0.25;
-		int goodNDplus = 0, iterMax = (int)(log(1.0 - ProThresh) / log(1.0 - pow(PercentInlier, 2)) + 0.5); //log(1-eps) / log(1 - (inlier%)^min_pts_requires)
+		int ninlier, inlierID, goodNDplus = 0, iterMax = (int)(log(1.0 - ProThresh) / log(1.0 - pow(PercentInlier, 2)) + 0.5); //log(1-eps) / log(1 - (inlier%)^min_pts_requires)
 		double start = omp_get_wtime();
 
 		sprintf(Fname, "%s/Dynamic/Corres_%d.txt", Path, timeID), fp4 = fopen(Fname, "w+");
 
 		for (int jj = 0; jj < nviews; jj++)
 		{
-			sprintf(Fname, "%s/%d/bg_%d.png", Path, jj, timeID+FrameOffset[jj]);
-			GrabImage(Fname, Img+jj*width*height, width, height, 1);
+			sprintf(Fname, "%s/%d/bg_%d.png", Path, jj, timeID + FrameOffset[jj]);
+			//GrabImage(Fname, Img+jj*width*height, width, height, 1);
 		}
 
 		//FILE *fp5 = fopen("C:/temp/id.txt", "w+");
@@ -7098,157 +7101,153 @@ int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime,
 				//check for duplication
 				bool duplicated = false;
 				for (int ii = 1; ii < nviewsi; ii++)
-				if (ViewMatch[jj].at(ii - 1) == ViewMatch[jj].at(ii))
-					duplicated = true;
+					if (ViewMatch[jj].at(ii - 1) == ViewMatch[jj].at(ii))
+						duplicated = true;
 				if (duplicated)
 					continue;
 
 				//check for background
-				bool background = false;
+				/*bool background = false;
 				for (int ii = 1; ii < nviewsi; ii++)
 				{
-					viewi = ViewMatch[jj].at(ii);
-					pi = PointIDMatch[jj].at(ii);
-					match2Dpts[ii] = Point2d(AllKeys[viewi].at(pi).pt.x, AllKeys[viewi].at(pi).pt.y);
-					int x = match2Dpts[ii].x, y = match2Dpts[ii].y;
-					if (Img[x + y*width+viewi*width*height] >250)
-						background = true;
+				viewi = ViewMatch[jj].at(ii);
+				pi = PointIDMatch[jj].at(ii);
+				match2Dpts[ii] = Point2d(AllKeys[viewi].at(pi).pt.x, AllKeys[viewi].at(pi).pt.y);
+				int x = match2Dpts[ii].x, y = match2Dpts[ii].y;
+				if (Img[x + y*width+viewi*width*height] >250)
+				background = true;
 				}
 				if (background)
-					continue;
+				continue;
 
 				fprintf(fp4, "%d ", nviewsi);
 				for (int ii = 0; ii < nviewsi; ii++)
 				{
-					viewi = ViewMatch[jj].at(ii);
-					pi = PointIDMatch[jj].at(ii);
-					match2Dpts[ii] = Point2d(AllKeys[viewi].at(pi).pt.x, AllKeys[viewi].at(pi).pt.y);
+				viewi = ViewMatch[jj].at(ii);
+				pi = PointIDMatch[jj].at(ii);
+				match2Dpts[ii] = Point2d(AllKeys[viewi].at(pi).pt.x, AllKeys[viewi].at(pi).pt.y);
 
-					fprintf(fp4, "%d %.2f %.2f ", viewi, match2Dpts[ii].x, match2Dpts[ii].y);
+				fprintf(fp4, "%d %.2f %.2f ", viewi, match2Dpts[ii].x, match2Dpts[ii].y);
 				}
-				fprintf(fp4, "\n ");
+				fprintf(fp4, "\n ");*/
 
-				/*Inliers[0].clear();
+				Inliers[0].clear();
 				for (int ii = 0; ii < nviewsi; ii++)
 				{
-				viewi = ViewMatch[jj].at(ii);
-				for (int kk = 0; kk < 12; kk++)
-				Ps[12 * ii + kk] = AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].P[kk];
+					viewi = ViewMatch[jj].at(ii);
+					int fid = timeID + FrameOffset[viewi];
+					for (int kk = 0; kk < 12; kk++)
+						Ps[12 * ii + kk] = AllVideoInfo.VideoInfo[viewi*nFrames + fid].P[kk];
 
-				pi = PointIDMatch[jj].at(ii);
+					pi = PointIDMatch[jj].at(ii);
 
-				match2Dpts[ii] = Point2d(AllKeys[viewi].at(pi).pt.x, AllKeys[viewi].at(pi).pt.y);
-				matchRGB[ii] = Point3i(RGB[viewi].at(pi).x, RGB[viewi].at(pi).y, RGB[viewi].at(pi).z);
+					match2Dpts[ii] = Point2d(AllKeys[viewi].at(pi).pt.x, AllKeys[viewi].at(pi).pt.y);
+					matchRGB[ii] = Point3i(RGB[viewi].at(pi).x, RGB[viewi].at(pi).y, RGB[viewi].at(pi).z);
 
-				if (distortionCorrected == 0 && AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].LensModel == RADIAL_TANGENTIAL_PRISM)
-				LensCorrectionPoint(&match2Dpts[ii], AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].K, AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].distortion);
-				else if (distortionCorrected == 0 && AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].LensModel == FISHEYE)
-				FishEyeCorrectionPoint(&match2Dpts[ii], AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].distortion[0],
-				AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].distortion[1], AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].distortion[2]);
-				}*/
+					if (distortionCorrected == 0 && AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].LensModel == RADIAL_TANGENTIAL_PRISM)
+						LensCorrectionPoint(&match2Dpts[ii], AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].K, AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].distortion);
+					else if (distortionCorrected == 0 && AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].LensModel == FISHEYE)
+						FishEyeCorrectionPoint(&match2Dpts[ii], AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].distortion[0],
+						AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].distortion[1], AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]].distortion[2]);
+				}
 
-				/*nviewsi = 4;
-				double Pts[] = { 366, 131, 463, 289,629,262,535,290 };
-				for (int ii = 0; ii < 4; ii++)
+				if (useRANSAC)
+					NviewTriangulationRANSAC(match2Dpts, Ps, &xyz, &passed, Inliers, nviewsi, 1, nviewsi == 2 ? 1 : iterMax, PercentInlier, Reprojectionthreshold, A, B, tPs);
+				else
 				{
-				viewi = ii + 1;
-				for (int kk = 0; kk < 12; kk++)
-				Ps[12 * ii + kk] = AllVideoInfo.VideoInfo[viewi*nFrames + timeID].P[kk];
-
-				match2Dpts[ii] = Point2d(Pts[2 * ii], Pts[2 * ii + 1]);
-				}*/
-
-				/*if (useRANSAC)
-					NviewTriangulationRANSAC(match2Dpts, Ps, &xyz, passed, Inliers, nviewsi, 1, nviewsi == 2 ? 1 : iterMax, PercentInlier, Reprojectionthreshold, A, B, tPs);
-					else
-					{
 					NviewTriangulation(match2Dpts, Ps, &xyz, nviewsi, 1, NULL, A, B);
 					ProjectandDistort(xyz, match2Dpts_BK, Ps, NULL, NULL, nviewsi);
 
 					double finalerror = 0.0;
 					for (int ii = 0; ii < nviewsi; ii++)
-					finalerror += pow(match2Dpts_BK[ii].x - match2Dpts[ii].x, 2) + pow(match2Dpts_BK[ii].y - match2Dpts[ii].y, 2);
+						finalerror += pow(match2Dpts_BK[ii].x - match2Dpts[ii].x, 2) + pow(match2Dpts_BK[ii].y - match2Dpts[ii].y, 2);
 					finalerror = sqrt(finalerror / nviewsi);
 					if (finalerror < Reprojectionthreshold)
-					passed[0] = true;
+						passed = true;
 					else
-					passed[0] = false;
-					}
+						passed = false;
+				}
 
-					if (passed[0])
-					{
+				if (passed)
+				{
 					inlierPts.clear();
 					inlierViewsInfo.clear();
 
-					int ninlier = 0, inlierID;
-					for (int ii = 0; ii < Inliers[0].size(); ii++)
+					if (useRANSAC)
 					{
-					if (Inliers[0].at(ii))
-					{
-					inlierID = ii, ninlier++;
-					if (Gen3DPatchFile)
-					{
-					viewi = ViewMatch[jj].at(ii);
-					pi = PointIDMatch[jj].at(ii);
-					inlierPts.push_back(AllKeys[viewi].at(pi));
-					inlierViewsInfo.push_back(AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]]);
+						ninlier = 0;
+						for (int ii = 0; ii < Inliers[0].size(); ii++)
+						{
+							if (Inliers[0].at(ii))
+							{
+								inlierID = ii, ninlier++;
+								if (Gen3DPatchFile)
+								{
+									viewi = ViewMatch[jj].at(ii);
+									pi = PointIDMatch[jj].at(ii);
+									inlierPts.push_back(AllKeys[viewi].at(pi));
+									inlierViewsInfo.push_back(AllVideoInfo.VideoInfo[viewi*nFrames + timeID + FrameOffset[viewi]]);
+								}
+							}
+						}
+						if (ninlier < NDplus)
+							continue; //Corpus needs NDplus+ points!
 					}
-					}
-					}
-					if (ninlier < NDplus)
-					continue; //Corpus needs NDplus+ points!
+					else
+						inlierID = 0;
 
 					AllXYZ.push_back(xyz);
 					AllRGB.push_back(matchRGB[inlierID]);
 					if (abs(xyz.x) + abs(xyz.y) + abs(xyz.z) > 0.001)
 					{
-					fprintf(fp1, "%.4f %.4f %.4f %d %d %d\n", xyz.x, xyz.y, xyz.z, matchRGB[inlierID].x, matchRGB[inlierID].y, matchRGB[inlierID].z);
+						//threshold by depth
+						double *Center, Dist, minPointCamDistance = 9e9;
+						for (int ii = 0; ii < nviews; ii++)
+						{
+							Center = AllVideoInfo.VideoInfo[ii*nFrames + timeID + FrameOffset[ii]].camCenter;
+							Dist = Distance3D(Point3d(Center[0], Center[1], Center[2]), xyz);
+							if (Dist < minPointCamDistance)
+								minPointCamDistance = Dist;
+						}
+						if (minPointCamDistance > DepthThresh)
+							continue;
 
-					if (Save2DCorres)
-					{
-					double *Center, Dist, minDist = 9e9, DepthThresh = 2000;
-					//threshold by depth
-					for (int ii = 0; ii < nviews; ii++)
-					{
-					Center = AllVideoInfo.VideoInfo[ii*nFrames + timeID + FrameOffset[ii]].camCenter;
-					Dist = Distance3D(Point3d(Center[0], Center[1], Center[2]), xyz);
-					if (Dist < minDist)
-					minDist = Dist;
-					}
-					if (minDist>DepthThresh)
-					continue;
+						fprintf(fp1, "%.4f %.4f %.4f %d %d %d\n", xyz.x, xyz.y, xyz.z, matchRGB[inlierID].x, matchRGB[inlierID].y, matchRGB[inlierID].z);
 
-					fprintf(fp2, "%d ", ninlier);
-					for (int ii = 0; ii < Inliers[0].size(); ii++)
-					{
-					if (Inliers[0].at(ii))
-					{
-					int viewid = ViewMatch[jj].at(ii);
-					LensDistortionPoint(&match2Dpts[ii], AllVideoInfo.VideoInfo[viewid*nFrames + timeID + FrameOffset[viewid]].K, AllVideoInfo.VideoInfo[viewid*nFrames + timeID + FrameOffset[viewid]].distortion);
-					fprintf(fp2, "%d %f %f ", viewid, match2Dpts[ii].x, match2Dpts[ii].y);
-					}
-					}
-					fprintf(fp2, "\n");
-					}
+						if (Save2DCorres)
+						{
+							fprintf(fp2, "%d ", ninlier);
+							for (int ii = 0; ii < Inliers[0].size(); ii++)
+							{
+								if (Inliers[0].at(ii))
+								{
+									int viewid = ViewMatch[jj].at(ii);
+									LensDistortionPoint(&match2Dpts[ii], AllVideoInfo.VideoInfo[viewid*nFrames + timeID + FrameOffset[viewid]].K, AllVideoInfo.VideoInfo[viewid*nFrames + timeID + FrameOffset[viewid]].distortion);
+									fprintf(fp2, "%d %f %f ", viewid, match2Dpts[ii].x, match2Dpts[ii].y);
+								}
+							}
+							fprintf(fp2, "\n");
+						}
 
-					if (Gen3DPatchFile)
-					{
-					SelectRefCam_InitPatchFixedScale(PatchExpansionArrow, scale3D, xyz, inlierPts, inlierViewsInfo, Patch_World_Unit);
-					fprintf(fp3, "Pt3D %d %.4f %.4f %.4f %.4f %.4f %.4f %f %f %f %f %f %f %f\n", goodNDplus, xyz.x, xyz.y, xyz.z, 1.0*matchRGB[inlierID].x / 255.0, 1.0*matchRGB[inlierID].y / 255.0, 1.0*matchRGB[inlierID].z / 255.0,
-					scale3D, PatchExpansionArrow[0].x, PatchExpansionArrow[0].y, PatchExpansionArrow[0].z,
-					PatchExpansionArrow[1].x, PatchExpansionArrow[1].y, PatchExpansionArrow[1].z);
-					fprintf(fp3, "%d ", ninlier);
-					for (int ii = 0; ii < Inliers[0].size(); ii++)
-					{
-					if (Inliers[0].at(ii))
-					fprintf(fp3, "%d %f %f ", ViewMatch[jj].at(ii), match2Dpts[ii].x, match2Dpts[ii].y);
-					}
-					fprintf(fp3, "\n");
-					}
+						if (Gen3DPatchFile)
+						{
+							double scale3D;
+							SelectRefCam_InitPatchFixedScale(PatchExpansionArrow, scale3D, xyz, inlierPts, inlierViewsInfo, Patch_World_Unit);
+							fprintf(fp3, "Pt3D %d %.4f %.4f %.4f %.4f %.4f %.4f %f %f %f %f %f %f %f\n", goodNDplus, xyz.x, xyz.y, xyz.z, 1.0*matchRGB[inlierID].x / 255.0, 1.0*matchRGB[inlierID].y / 255.0, 1.0*matchRGB[inlierID].z / 255.0,
+								scale3D, PatchExpansionArrow[0].x, PatchExpansionArrow[0].y, PatchExpansionArrow[0].z,
+								PatchExpansionArrow[1].x, PatchExpansionArrow[1].y, PatchExpansionArrow[1].z);
+							fprintf(fp3, "%d ", ninlier);
+							for (int ii = 0; ii < Inliers[0].size(); ii++)
+							{
+								if (Inliers[0].at(ii))
+									fprintf(fp3, "%d %f %f ", ViewMatch[jj].at(ii), match2Dpts[ii].x, match2Dpts[ii].y);
+							}
+							fprintf(fp3, "\n");
+						}
 					}
 
 					goodNDplus++;
-					}*/
+				}
 			}
 		}
 		fclose(fp4);
@@ -7261,7 +7260,7 @@ int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime,
 	}
 
 	delete[]ViewMatch, delete[]PointIDMatch, delete[]AllKeys;
-	delete[]A, delete[]B, delete[]tPs, delete[]passed, delete[]Ps, delete[]match2Dpts, delete[]match2Dpts_BK;
+	delete[]A, delete[]B, delete[]tPs, delete[]Ps, delete[]match2Dpts, delete[]match2Dpts_BK;
 	return 0;
 }
 int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d> uvAll3D, vector<bool> &Good, bool fixIntrinsicHD, bool fixDistortion, int distortionCorrected, bool debug)
@@ -7376,8 +7375,8 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 	}
 
 	for (int ii = 0; ii < npts; ii++)
-	if (Good.at(ii))
-		problem.SetParameterBlockConstant(xyz + 3 * ii);
+		if (Good.at(ii))
+			problem.SetParameterBlockConstant(xyz + 3 * ii);
 
 
 	//printf("...run \n");
@@ -7571,8 +7570,8 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 		Mat descriptors2(endID - startID, SIFTBINS, CV_32F);
 
 		for (int jj = startID; jj < endID; jj++)
-		for (int kk = 0; kk < SIFTBINS; kk++)
-			descriptors2.at<float>(jj - startID, kk) = corpusData.SiftDesc.at<float>(jj, kk);
+			for (int kk = 0; kk < SIFTBINS; kk++)
+				descriptors2.at<float>(jj - startID, kk) = corpusData.SiftDesc.at<float>(jj, kk);
 
 		double start = omp_get_wtime();
 		Mat indices, dists;
@@ -7715,8 +7714,8 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 
 			CorrespondencesID.clear();
 			for (int ii = 0; ii < key1.size(); ii++)
-			if (Inliers[ii] == 1)
-				CorrespondencesID.push_back(ii), CorrespondencesID.push_back(ii);
+				if (Inliers[ii] == 1)
+					CorrespondencesID.push_back(ii), CorrespondencesID.push_back(ii);
 
 			IplImage* correspond = cvCreateImage(cvSize(Img1->width + Img2->width, Img1->height), 8, nchannels);
 			cvSetImageROI(correspond, cvRect(0, 0, Img1->width, Img1->height));
@@ -7808,8 +7807,8 @@ int EstimateCameraPoseFromCorpus(char *Path, Corpus corpusData, CameraData  &cam
 		sprintf(Fname, "%s/%d/Inliers_3D2D_%d.txt", Path, cameraID, timeID);
 		fp = fopen(Fname, "w+");
 		for (int ii = 0; ii < npts; ii++)
-		if (Good[ii])
-			fprintf(fp, "%f %f %f %.6f %.6f\n", Vxyz[ii].x, Vxyz[ii].y, Vxyz[ii].z, uv[ii].x, uv[ii].y);
+			if (Good[ii])
+				fprintf(fp, "%f %f %f %.6f %.6f\n", Vxyz[ii].x, Vxyz[ii].y, Vxyz[ii].z, uv[ii].x, uv[ii].y);
 		fclose(fp);
 	}
 
@@ -7819,33 +7818,32 @@ int EstimateCameraPoseFromCorpus(char *Path, Corpus corpusData, CameraData  &cam
 	{
 		printf("Distortion: ");
 		if (cameraParas.LensModel == RADIAL_TANGENTIAL_PRISM)
-		for (int ii = 0; ii < 7; ii++)
-			printf("%.1e ", cameraParas.distortion[ii]);
+			for (int ii = 0; ii < 7; ii++)
+				printf("%.1e ", cameraParas.distortion[ii]);
 		else
-		for (int ii = 0; ii < 3; ii++)
-			printf("%.1e ", cameraParas.distortion[ii]);
+			for (int ii = 0; ii < 3; ii++)
+				printf("%.1e ", cameraParas.distortion[ii]);
 		printf("\n");
 	}
 
-	sprintf(Fname, "%s/intrinsic_%d.txt", Path, cameraID);
+	sprintf(Fname, "%s/Intrinsic_%d.txt", Path, cameraID);
 	fp = fopen(Fname, "a+");
-	fprintf(fp, "%d %d ", timeID, cameraParas.LensModel);
+	fprintf(fp, "%d %d %d %d ", timeID, cameraParas.LensModel, cameraParas.width, cameraParas.height);
 	for (int ii = 0; ii < 5; ii++)
 		fprintf(fp, "%.4f ", cameraParas.intrinsic[ii]);
 	if (cameraParas.LensModel == RADIAL_TANGENTIAL_PRISM)
-	for (int ii = 0; ii < 7; ii++)
-		fprintf(fp, "%.4f ", cameraParas.distortion[ii]);
+		for (int ii = 0; ii < 7; ii++)
+			fprintf(fp, "%.4f ", cameraParas.distortion[ii]);
 	else
-	for (int ii = 0; ii < 3; ii++)
-		fprintf(fp, "%.4f ", cameraParas.distortion[ii]);
-	fprintf(fp, "%d %d ", cameraParas.width, cameraParas.height);
+		for (int ii = 0; ii < 3; ii++)
+			fprintf(fp, "%.4f ", cameraParas.distortion[ii]);
 	fprintf(fp, "\n");
 	fclose(fp);
 
 	ninliers = 0;
 	for (int ii = 0; ii < npts; ii++)
-	if (Good[ii])
-		ninliers++;
+		if (Good[ii])
+			ninliers++;
 
 	double iR[9], center[3];
 	mat_invert(cameraParas.R, iR);
@@ -7877,7 +7875,7 @@ int OptimizeCameraPoseVideoDatabk(char *Path, int startTime, int stopTime, int n
 		return 1;
 
 	char Fname[200];
-	int nVideoFrames = max(MaxnFrame, stopTime);
+	int nVideoFrames = max(MaxnFrames, stopTime);
 	int nframes, frameID, videoID = nVideoFrames*selectedCams;
 	Point2d uv;
 	vector<int> *All3DviewIDper3D = new vector<int>[corpusData.n3dPoints];
@@ -8058,24 +8056,23 @@ int OptimizeCameraPoseVideoDatabk(char *Path, int startTime, int stopTime, int n
 
 
 	//Write the data
-	sprintf(Fname, "%s/Rintrinsic_%d.txt", Path, selectedCams); fp = fopen(Fname, "w+");
+	sprintf(Fname, "%s/RIntrinsic_%d.txt", Path, selectedCams); fp = fopen(Fname, "w+");
 	for (int timeID = startTime; timeID < stopTime; timeID++)
 	{
-		fprintf(fp, "%d %d ", timeID, AllVideoInfo.VideoInfo[frameID + videoID].LensModel);
+		fprintf(fp, "%d %d %d %d ", timeID, AllVideoInfo.VideoInfo[frameID + videoID].LensModel, AllVideoInfo.VideoInfo[frameID + videoID].width, AllVideoInfo.VideoInfo[frameID + videoID].height);
 		for (int ii = 0; ii < 5; ii++)
 			fprintf(fp, "%.4f ", AllVideoInfo.VideoInfo[frameID + videoID].intrinsic[ii]);
 		if (AllVideoInfo.VideoInfo[frameID + videoID].LensModel == RADIAL_TANGENTIAL_PRISM)
-		for (int ii = 0; ii < 7; ii++)
-			fprintf(fp, "%.4f ", AllVideoInfo.VideoInfo[frameID + videoID].distortion[ii]);
+			for (int ii = 0; ii < 7; ii++)
+				fprintf(fp, "%.4f ", AllVideoInfo.VideoInfo[frameID + videoID].distortion[ii]);
 		else
-		for (int ii = 0; ii < 3; ii++)
-			fprintf(fp, "%.4f ", AllVideoInfo.VideoInfo[frameID + videoID].distortion[ii]);
-		fprintf(fp, "%d %d ", AllVideoInfo.VideoInfo[frameID + videoID].width, AllVideoInfo.VideoInfo[frameID + videoID].height);
+			for (int ii = 0; ii < 3; ii++)
+				fprintf(fp, "%.4f ", AllVideoInfo.VideoInfo[frameID + videoID].distortion[ii]);
 		fprintf(fp, "\n");
 	}
 	fclose(fp);
 
-	sprintf(Fname, "%s/RPinfoGL_%d.txt", Path, selectedCams); fp = fopen(Fname, "w+");
+	sprintf(Fname, "%s/RCamPose_%d.txt", Path, selectedCams); fp = fopen(Fname, "w+");
 	for (int frameID = startTime; frameID < stopTime; frameID++)
 	{
 		//Center = -iR*T 
@@ -8100,7 +8097,7 @@ int OptimizeVideoCameraData(char *Path, int startTime, int stopTime, int nviews,
 		return 1;
 
 	char Fname[200];
-	int nVideoFrames = max(MaxnFrame, stopTime);
+	int nVideoFrames = max(MaxnFrames, stopTime);
 	int RefFrameID, videoID = nVideoFrames*selectedCams;
 	Point2d uv; Point3d P3d; double P3D[3];
 
@@ -8278,24 +8275,23 @@ int OptimizeVideoCameraData(char *Path, int startTime, int stopTime, int nviews,
 
 
 	//Write the data
-	sprintf(Fname, "%s/intrinsic_%d.txt", Path, selectedCams); FILE *fp = fopen(Fname, "w+");
+	sprintf(Fname, "%s/Intrinsic_%d.txt", Path, selectedCams); FILE *fp = fopen(Fname, "w+");
 	for (int frameID = startTime; frameID <= stopTime; frameID++)
 	{
-		fprintf(fp, "%d %d ", frameID, AllVideoInfo.VideoInfo[frameID + videoID].LensModel);
+		fprintf(fp, "%d %d %d %d ", frameID, AllVideoInfo.VideoInfo[frameID + videoID].LensModel, AllVideoInfo.VideoInfo[frameID + videoID].width, AllVideoInfo.VideoInfo[frameID + videoID].height);
 		for (int ii = 0; ii < 5; ii++)
 			fprintf(fp, "%.4f ", AllVideoInfo.VideoInfo[frameID + videoID].intrinsic[ii]);
 		if (AllVideoInfo.VideoInfo[frameID + videoID].LensModel == RADIAL_TANGENTIAL_PRISM)
-		for (int ii = 0; ii < 7; ii++)
-			fprintf(fp, "%.4f ", AllVideoInfo.VideoInfo[frameID + videoID].distortion[ii]);
+			for (int ii = 0; ii < 7; ii++)
+				fprintf(fp, "%.4f ", AllVideoInfo.VideoInfo[frameID + videoID].distortion[ii]);
 		else
-		for (int ii = 0; ii < 3; ii++)
-			fprintf(fp, "%.4f ", AllVideoInfo.VideoInfo[frameID + videoID].distortion[ii]);
-		fprintf(fp, "%d %d ", AllVideoInfo.VideoInfo[frameID + videoID].width, AllVideoInfo.VideoInfo[frameID + videoID].height);
+			for (int ii = 0; ii < 3; ii++)
+				fprintf(fp, "%.4f ", AllVideoInfo.VideoInfo[frameID + videoID].distortion[ii]);
 		fprintf(fp, "\n");
 	}
 	fclose(fp);
 
-	sprintf(Fname, "%s/PinfoGL_%d.txt", Path, selectedCams); fp = fopen(Fname, "w+");
+	sprintf(Fname, "%s/CamPose_%d.txt", Path, selectedCams); fp = fopen(Fname, "w+");
 	for (int frameID = startTime; frameID <= stopTime; frameID++)
 	{
 		//Center = -iR*T 
@@ -8348,8 +8344,8 @@ int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, int 
 		}
 	}
 	else
-	for (int ii = 0; ii < nCams; ii++)
-		AllCamsInfo[ii].notCalibrated = false, AllCamsInfo[ii].threshold = 4.0, AllCamsInfo[ii].ninlierThresh = 40;
+		for (int ii = 0; ii < nCams; ii++)
+			AllCamsInfo[ii].notCalibrated = false, AllCamsInfo[ii].threshold = 4.0, AllCamsInfo[ii].ninlierThresh = 40;
 
 	if (AllCamsInfo[selectedCams].notCalibrated == true && module == 1)
 	{
@@ -8381,8 +8377,8 @@ int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, int 
 
 		if (StartTime == 1 && module == 1)
 		{
-			sprintf(Fname, "%s/intrinsic_%d.txt", Path, selectedCams); FILE*fp = fopen(Fname, "w+");	fclose(fp);
-			sprintf(Fname, "%s/PinfoGL_%d.txt", Path, selectedCams); fp = fopen(Fname, "w+"); fclose(fp);
+			sprintf(Fname, "%s/Intrinsic_%d.txt", Path, selectedCams); FILE*fp = fopen(Fname, "w+");	fclose(fp);
+			sprintf(Fname, "%s/CamPose_%d.txt", Path, selectedCams); fp = fopen(Fname, "w+"); fclose(fp);
 		}
 	}
 
@@ -8941,8 +8937,8 @@ int BundleAdjustDomeMultiNVM(char *Path, int nNvm, int maxPtsPerNvM, bool fixInt
 		{
 			int ninlier = 0;
 			for (int kk = 0; kk < Inliers.size(); kk++)
-			if (Inliers.at(kk))
-				ninlier++;
+				if (Inliers.at(kk))
+					ninlier++;
 
 			if (ninlier < 3)
 			{
@@ -9087,6 +9083,70 @@ int BundleAdjustDomeMultiNVM(char *Path, int nNvm, int maxPtsPerNvM, bool fixInt
 	return 0;
 }
 
+double FmatPointError(double *Fmat, Point2d p1, Point2d p2)
+{
+	//F*p1
+	double Fx[3] = { Fmat[0] * p1.x + Fmat[1] * p1.y + Fmat[2],
+		Fmat[3] * p1.x + Fmat[4] * p1.y + Fmat[5],
+		Fmat[6] * p1.x + Fmat[7] * p1.y + Fmat[8] };
+
+	//F'*p2
+	double FTXp[3] = { Fmat[0] * p2.x + Fmat[3] * p2.y + Fmat[6],
+		Fmat[1] * p2.x + Fmat[4] * p2.y + Fmat[7],
+		Fmat[2] * p2.x + Fmat[5] * p2.y + Fmat[8] };
+
+	double error = pow(p2.x * Fx[0] + p2.y*Fx[1] + Fx[2], 2) *
+		(1.0 / (Fx[0] * Fx[0] + Fx[1] * Fx[1])
+		+ 1.0 / (FTXp[0] * FTXp[0] + FTXp[1] * FTXp[1]));
+
+	return error;
+}
+void computeFmat(CameraData Cam1, CameraData Cam2, double *Fmat)
+{
+	int ii;
+	double tmat[9], tmat2[9];
+	double K1[9] = { Cam1.K[0], Cam1.K[1], Cam1.K[2], 0, Cam1.K[4], Cam1.K[5], 0, 0, 1.0 };
+	double K2[9] = { Cam2.K[0], Cam2.K[1], Cam2.K[2], 0, Cam2.K[4], Cam2.K[5], 0, 0, 1.0 };
+	double rt1[6] = { Cam1.rt[0], Cam1.rt[1], Cam1.rt[2], Cam1.rt[3], Cam1.rt[4], Cam1.rt[5] };
+	double rt2[6] = { Cam2.rt[0], Cam2.rt[1], Cam2.rt[2], Cam2.rt[3], Cam2.rt[4], Cam2.rt[5] };
+
+	double RT1[16], RT2[16], R1[9], R2[9], T1[3], T2[3];
+	GetRTFromrt(rt1, R1, T1);
+	RT1[0] = R1[0], RT1[1] = R1[1], RT1[2] = R1[2], RT1[3] = T1[0];
+	RT1[4] = R1[3], RT1[5] = R1[4], RT1[6] = R1[5], RT1[7] = T1[1];
+	RT1[8] = R1[6], RT1[9] = R1[7], RT1[10] = R1[8], RT1[11] = T1[2];
+	RT1[12] = 0, RT1[13] = 0, RT1[14] = 0, RT1[15] = 1;
+
+	GetRTFromrt(rt2, R2, T2);
+	RT2[0] = R2[0], RT2[1] = R2[1], RT2[2] = R2[2], RT2[3] = T2[0];
+	RT2[4] = R2[3], RT2[5] = R2[4], RT2[6] = R2[5], RT2[7] = T2[1];
+	RT2[8] = R2[6], RT2[9] = R2[7], RT2[10] = R2[8], RT2[11] = T2[2];
+	RT2[12] = 0, RT2[13] = 0, RT2[14] = 0, RT2[15] = 1;
+
+	double iRT1[16], RT12[16], R12[9], T12[3];
+	mat_invert(RT1, iRT1, 4);
+	mat_mul(RT2, iRT1, RT12, 4, 4, 4);
+	DesembleRT(R12, T12, RT12);
+
+	double Emat12[9], Tx[9];
+	Tx[0] = 0.0, Tx[1] = -T12[2], Tx[2] = T12[1];
+	Tx[3] = T12[2], Tx[4] = 0.0, Tx[5] = -T12[0];
+	Tx[6] = -T12[1], Tx[7] = T12[0], Tx[8] = 0.0;
+
+	mat_mul(Tx, R12, Emat12, 3, 3, 3);
+
+	double iK1[9], iK2[9];
+	mat_invert(K1, iK1, 3);
+	mat_invert(K2, iK2, 3);
+	mat_transpose(iK2, tmat, 3, 3);
+	mat_mul(tmat, Emat12, tmat2, 3, 3, 3);
+	mat_mul(tmat2, iK1, Fmat, 3, 3, 3);
+
+	for (ii = 0; ii < 9; ii++)
+		Fmat[ii] = Fmat[ii] / Fmat[8];
+
+	return;
+}
 void computeFmatfromKRT(CameraData *CameraInfo, int nviews, int *selectedIDs, double *Fmat)
 {
 	int ii;
@@ -9142,7 +9202,7 @@ void computeFmatfromKRT(CameraData *CameraInfo, int nviews, int *selectedIDs, do
 //if ChooseCorpusView != -1, selectedCams and seletectedTime will be overwritten
 void computeFmatfromKRT(CorpusandVideo &CorpusandVideoInfo, int *selectedCams, int *seletectedTime, int ChooseCorpusView1, int ChooseCorpusView2, double *Fmat)
 {
-	int ii, startTime = CorpusandVideoInfo.startTime, stopTime = CorpusandVideoInfo.stopTime;
+	int ii;
 	double tmat[9], tmat2[9];
 	double K1[9], K2[9], rt1[6], rt2[6];
 
@@ -9157,7 +9217,7 @@ void computeFmatfromKRT(CorpusandVideo &CorpusandVideoInfo, int *selectedCams, i
 	}
 	else
 	{
-		int ID = selectedCams[0] * (stopTime - startTime + 1) + seletectedTime[0];
+		int ID = selectedCams[0] * MaxnFrames + seletectedTime[0];
 		K1[0] = CorpusandVideoInfo.VideoInfo[ID].K[0], K1[1] = CorpusandVideoInfo.VideoInfo[ID].K[1], K1[2] = CorpusandVideoInfo.VideoInfo[ID].K[2],
 			K1[3] = 0, K1[4] = CorpusandVideoInfo.VideoInfo[ID].K[4], K1[5] = CorpusandVideoInfo.VideoInfo[ID].K[5],
 			K1[6] = 0, K1[7] = 0, K1[8] = 1.0;
@@ -9177,7 +9237,7 @@ void computeFmatfromKRT(CorpusandVideo &CorpusandVideoInfo, int *selectedCams, i
 	}
 	else
 	{
-		int ID = selectedCams[1] * (stopTime - startTime + 1) + seletectedTime[1];
+		int ID = selectedCams[1] * MaxnFrames + seletectedTime[1];
 		K2[0] = CorpusandVideoInfo.VideoInfo[ID].K[0], K2[1] = CorpusandVideoInfo.VideoInfo[ID].K[1], K2[2] = CorpusandVideoInfo.VideoInfo[ID].K[2],
 			K2[3] = 0, K2[4] = CorpusandVideoInfo.VideoInfo[ID].K[4], K2[5] = CorpusandVideoInfo.VideoInfo[ID].K[5],
 			K2[6] = 0, K2[7] = 0, K2[8] = 1.0;

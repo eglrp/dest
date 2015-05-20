@@ -22,6 +22,7 @@ using namespace std;
 
 #define VIEWING_DISTANCE_MIN  1.0
 
+void Draw_Axes();
 void DrawCamera();
 void RenderObjects();
 void display(void);
@@ -41,13 +42,14 @@ bool ReadCurrent3DGL(char *path, bool hasColor, bool hasNormal, int timeID, bool
 bool ReadCurrent3DGL2(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
 bool ReadCurrent3DGL3(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
 int ReadCurrentTrajectory(char *path, int timeID);
-int ReadCurrentTrajectory2(char *path);
+int ReadCurrentTrajectory2(char *path, int timeID);
+int ReadCurrentTrajectoryWithCovariance(char *path, int timeID);
 
-void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID);
-void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime = 0);
 void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime);
 int screenShot(char *Fname, int width, int height, bool color);
 
+
+bool ReadDomePointCloud(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
 #endif
 
 

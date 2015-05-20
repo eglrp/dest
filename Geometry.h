@@ -49,6 +49,8 @@ void LensCorrectionPoint(Point2d *uv, double *K, double *distortion, int npts = 
 void LensCorrectionPoint(vector<Point2d> &uv, double *K, double *distortion);
 void LensUndistortion(unsigned char *Img, int width, int height, int nchannels, double *K, double *distortion, int intepAlgo, double ImgMag, double Contscale, double *Para = NULL);
 
+double FmatPointError(double *Fmat, Point2d p1, Point2d p2);
+void computeFmat(CameraData Cam1, CameraData Cam2, double *Fmat);
 void computeFmatfromKRT(CameraData *CameraInfo, int nvews, int *selectedIDs, double *Fmat);
 void computeFmatfromKRT(CorpusandVideo &CorpusandVideoInfo, int *selectedCams, int *seletectedTime, int ChooseCorpusView1, int ChooseCorpusView2, double *Fmat);
 
@@ -91,6 +93,9 @@ void NviewTriangulationNonLinear(double *P, double *Point2D, double *Point3D, do
 void MultiViewQualityCheck(Point2d *Pts, double *Pmat, int LensType, double *K, double *distortion, bool *PassedPoints, int nviews, int npts, double thresh, Point3d *aWC, Point2d *apts = 0, Point2d *bkapts = 0, int *DeviceMask = 0, double *tK = 0, double *tdistortion = 0, double *tP = 0, double *A = 0, double *B = 0);
 double MinDistanceTwoLines(double *P0, double *u, double *Q0, double *v, double &s, double &t);
 
+//ceres cost:
+double IdealReprojectionErrorSimple(double *P, Point3d Point, Point2d uv);
+
 int TwoCameraReconstruction(char *Path, CameraData *AllViewsParas, int nviews, int timeID, vector<int> cumulativePts, vector<int> AvailViews, Point3d *ThreeD);
 void DetermineDevicePose(double *K, double *distortion, int LensModel, double *R, double *T, Point2d *pts, Point3d *ThreeD, int npts, int distortionCorrected, double thresh, int &ninliers);
 int AddNewViewReconstruction(char *Path, CameraData *AllViewsParas, int nviews, int timeID, vector<int> cumulativePts, Point3d *ThreeD, double threshold, vector<int> &availViews);
@@ -98,7 +103,7 @@ int IncrementalBA(char *Path, int nviews, int timeID, CameraData *AllViewsParas,
 void IncrementalBundleAdjustment(char *Path, int nviews, int timeID, int maxKeypoints);
 
 int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, vector< int> sharedCam, int NDplus = 5);
-int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime, int timeStep, int LensType, int distortionCorrected, int NDplus, double Reprojectionthreshold, int *FrameOffset = NULL, bool Save2DCorres = false, bool Gen3DPatchFile = false, double Patch_World_Unit = 1.0, bool useRANSAC = true);
+int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime, int timeStep, int LensType, int distortionCorrected, int NDplus, double Reprojectionthreshold, double DepthThresh, int *FrameOffset = NULL, bool Save2DCorres = false, bool Gen3DPatchFile = false, double Patch_World_Unit = 1.0, bool useRANSAC = true);
 int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d> uvAll3D, vector<bool> &Good, bool fixIntrinsic, bool fixDistortion, int distortionCorrected, bool debug);
 
 int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int cameraID, int timeID, int distortionCorrected, vector<int> CorpusViewToMatch, const float nndrRatio = 0.6f, const int ninlierThresh = 40);

@@ -2,17 +2,28 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
 PROJECT(EventReconstruction)
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -O4")
 
-FIND_PACKAGE( OpenCV REQUIRED )
+find_package( OpenCV REQUIRED )
 
-FIND_PACKAGE(Boost REQUIRED)
-INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
-INCLUDE_DIRECTORIES(${Boost_LIBRARY_DIR})
+find_package(Boost REQUIRED)
+include_directories(${Boost_INCLUDE_DIR})
+include_directories(${Boost_LIBRARY_DIR})
 
-FIND_PACKAGE(Ceres REQUIRED)
-INCLUDE_DIRECTORIES(${CERES_INCLUDE_DIRS})
+find_package(Ceres REQUIRED)
+include_directories(${CERES_INCLUDE_DIRS})
 
-add_executable(  EventReconstruction main.cpp VideoSequence.cpp Visualization.cpp Geometry.cpp BAutil.cpp ImagePro.cpp  Matrix.cpp Ultility.cpp USAC.cpp FundamentalMatrixEstimator.cpp HomographyEstimator.cpp)
-target_link_libraries( EventReconstruction ${OpenCV_LIBS}  ${CERES_LIBRARIES} ${Boost_LIBRARIES})
+
+find_package(GLUT REQUIRED)
+include_directories(${GLUT_INCLUDE_DIRS})
+link_directories(${GLUT_LIBRARY_DIRS})
+add_definitions(${GLUT_DEFINITIONS})
+
+find_package(OpenGL REQUIRED)
+include_directories(${OpenGL_INCLUDE_DIRS})
+link_directories(${OpenGL_LIBRARY_DIRS})
+add_definitions(${OpenGL_DEFINITIONS})
+
+add_executable(  EventReconstruction main.cpp VideoSequence.cpp Visualization.cpp Geometry.cpp ImagePro.cpp  Matrix.cpp Ultility.cpp USAC.cpp FundamentalMatrixEstimator.cpp HomographyEstimator.cpp)
+target_link_libraries( EventReconstruction ${OpenCV_LIBS}  ${CERES_LIBRARIES} ${Boost_LIBRARIES} ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} )
 
 
 

@@ -1,7 +1,8 @@
 #include <cstdlib>
-#include <opencv\cv.hpp>
-#include "GL\glut.h"
-
+#include <opencv2/opencv.hpp>
+//#ifdef _WIN32
+#include "GL/glut.h"
+//#endif
 
 using namespace cv;
 using namespace std;
@@ -67,12 +68,12 @@ struct Corpus
 
 	vector<Point3d>  xyz;
 	vector<Point3i >  rgb;
-	vector < vector<int>> viewIdAll3D; //3D -> visiable views index
-	vector < vector<int>> pointIdAll3D; //3D -> 2D index in those visible views
-	vector<vector<Point2d>> uvAll3D; //3D -> uv of that point in those visible views
-	vector < vector<int>>threeDIdAllViews; //2D point in visible view -> 3D index
-	vector < vector<int>> orgtwoDIdAll3D; //visualsfm output order
-	vector<vector<Point2d>> uvAllViews;
+	vector <vector<int> > viewIdAll3D; //3D -> visiable views index
+	vector <vector<int> > pointIdAll3D; //3D -> 2D index in those visible views
+	vector<vector<Point2d> > uvAll3D; //3D -> uv of that point in those visible views
+	vector <vector<int> >threeDIdAllViews; //2D point in visible view -> 3D index
+	vector <vector<int> > orgtwoDIdAll3D; //visualsfm output order
+	vector<vector<Point2d> > uvAllViews;
 	Mat SiftDesc, SurfDesc;
 };
 struct CorpusandVideo
@@ -91,7 +92,7 @@ struct CamInfo
 {
 	int frameID;
 	float camCenter[3];
-	GLfloat Rgl[16];
+	float Rgl[16];
 };
 struct ImgPtEle
 {
@@ -157,7 +158,7 @@ struct PerCamNonRigidTrajectory
 
 	Track3D *Track3DInfo;
 	Track2D *Track2DInfo;
-	Track3D *CamCenter;
+	Track3D *camcenter;
 	Track4D *quaternion;
 	double F;
 	int npts;
@@ -171,7 +172,8 @@ struct Trajectory2D
 };
 struct Trajectory3D
 {
-	int timeID;
+	double timeID, viewID;
+	int frameID;
 	vector<int>viewIDs;
 	vector<Point2d> uv;
 	Point3d WC, STD;
@@ -184,8 +186,8 @@ struct TrajectoryData
 	vector<Point3d> *fNormal;
 	vector<Point2d> *cpTwoD;
 	vector<Point2d> *fTwoD;
-	vector<vector<int>> *cpVis;
-	vector<vector<int>> *fVis;
+	vector<vector<int> > *cpVis;
+	vector<vector<int> > *fVis;
 	int nTrajectories, nViews;
 	vector<Trajectory2D> *trajectoryUnit;
 };

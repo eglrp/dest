@@ -1,4 +1,3 @@
-#ifdef _WINDOWS
 #pragma once
 #include <iostream>
 #include <fstream>
@@ -6,9 +5,6 @@
 #include <stdio.h>
 #include <vector>
 #include <opencv2/opencv.hpp>
-#include "libsndfile/include/sndfile.h"
-
-#pragma comment(lib, "../libsndfile/lib/libsndfile-1.lib")
 
 using namespace std;
 using namespace cv;
@@ -35,17 +31,20 @@ public:
 	}
 };
 
+#ifdef _WIN32
+#include "libsndfile/include/sndfile.h"
+#pragma comment(lib, "../libsndfile/lib/libsndfile-1.lib")
+#endif
+int ReadAudio(char *Fin, Sequence &mySeq, char *Fout = 0);
+int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample, double &finalframeOffset, double &MaxZNCC, double reliableThreshold = 0.25);
 
 bool GrabVideoFrame2Mem(char *fname, char *Data, int &width, int &height, int &nchannels, int &nframes, int frameSample = 1, int fixnframes = 99999999);
-int ReadAudio(char *Fin, Sequence &mySeq, char *Fout = 0);
 
-int PrismMST(char *Path, int nvideos);
-int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample, double &finalframeOffset, double &MaxZNCC, double reliableThreshold = 0.25);
-int AssignOffsetFromMST(char *Path, int nvideos);
+int PrismMST(char *Path, char *PairwiseSyncFilename, int nvideos);
+int AssignOffsetFromMST(char *Path, char *PairwiseSyncFilename, int nvideos);
 
 void DynamicTimeWarping3Step(Mat pM, vector<int>&p, vector<int> &q);
 void DynamicTimeWarping5Step(Mat pM, vector<int>&p, vector<int> &q);
-#endif
 
 
 

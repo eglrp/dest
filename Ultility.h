@@ -2,9 +2,6 @@
 #define ULTILITY_H
 #pragma once
 
-#ifdef _WINDOWS
-#include <direct.h>
-#endif
 #include <cstdlib>
 #include <stdio.h>
 #include <iostream>
@@ -15,17 +12,25 @@
 #include <math.h>
 #include <omp.h>
 #include <stdint.h>
+
 #include "ceres/ceres.h"
 #include "ceres/rotation.h"
 #include <opencv2/opencv.hpp>
-#include "opencv2\nonfree\features2d.hpp"
-#include <opencv2/nonfree/nonfree.hpp>
-#include "SiftGPU\src\SiftGPU\SiftGPU.h"
+#include <opencv2/features2d/features2d.hpp>
 #include "DataStructure.h"
 #include "ImagePro.h"
+#include "SiftGPU/src/SiftGPU/SiftGPU.h"
+
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
 
 using namespace cv;
 using namespace std;
+
+void makeDir(char *Fname);
 
 //Phase shifting:
 void Average_Filtering_All(char *lpD, int width, int height, int ni, int HSize, int VSize);
@@ -42,7 +47,7 @@ bool GrabImage(char *fname, double *Img, int &width, int &height, int nchannels,
 
 void ShowDataToImage(char *Fname, char *Img, int width, int height, int nchannels, IplImage *cvImg = 0);
 
-bool SaveDataToImageCVFormat(char *fname, char *Img, int width, int height, int nchannels = 1) ;
+bool SaveDataToImageCVFormat(char *fname, char *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, char *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, unsigned char *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, float *Img, int width, int height, int nchannels = 1);
@@ -524,7 +529,7 @@ void nonMaximaSuppression(const Mat& src, const int sz, Mat& dst, const Mat mask
 
 int LensCorrectionVideoDriver(char *Path, char *VideoName, double *K, double *distortion, int LensType, int nimages, double Imgscale = 1.0, double Contscale = 1.0, int interpAlgo = 5);
 int LensCorrectionImageSequenceDriver(char *Path, double *K, double *distortion, int LensType, int StartFrame, int StopFrame, double Imgscale = 1.0, double Contscale = 1.0, int interpAlgo = 5);
-int LensCorrectionDriver(char *Path, double *K, double *distortion, int LensType, int startID, int stopID, double Imgscale = 1.0, double Contscale = 1.0, int interpAlgo=5);
+int LensCorrectionDriver(char *Path, double *K, double *distortion, int LensType, int startID, int stopID, double Imgscale = 1.0, double Contscale = 1.0, int interpAlgo = 5);
 
 int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, vector<KeyPoint> keypoints1, vector<KeyPoint> keypoints2, vector<int>pair, double density);
 int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, vector<Point2d> keypoints1, vector<Point2d> keypoints2, vector<int>pair, double density);
@@ -535,7 +540,7 @@ int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams);
 void SaveCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>AvailViews, Point3d *All3D, int npts);
 void ReadCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>&AvailViews, Point3d *All3D, int npts);
 int ReadCumulativePoints(char *Path, int nviews, int timeID, vector<int>&cumulativePts);
-void ReadPointCorrespondences(char *Path, int nviews, int timeID, vector<int> *PointCorres, vector<int>&mask, int totalPts, bool Merge =false);
+void ReadPointCorrespondences(char *Path, int nviews, int timeID, vector<int> *PointCorres, vector<int>&mask, int totalPts, bool Merge = false);
 void ReadPointCorrespondences(char *Path, int nviews, int timeID, vector<int> *PointCorres, int totalPts, bool Merge);
 void GenerateMergePointCorrespondences(vector<int> *MergePointCorres, vector<int> *PointCorres, int totalPts);
 void GenerateViewandPointCorrespondences(vector<int> *ViewCorres, vector<int> *PointIDCorres, vector<int> *PointCorres, vector<int> CumIDView, int totalPts);
@@ -581,7 +586,7 @@ int IsBlurred(const unsigned char* const luminance, const int width, const int h
 void BlurDetectionDriver(char *Path, int nimages, int width, int height, float blurThresh);
 
 int BAVisualSfMDriver(char *Path, char *nvmName, char *camInfo, char *IntrinsicInfo = NULL, bool lensconversion = 1, int sharedIntrinsics = 0);
-bool loadNVMLite(const string filepath, Corpus &CorpusData, int sharedIntrinsics, int nHDs = 30, int nVGAs = 24, int nPanels = 20);
+bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics, int nHDs = 30, int nVGAs = 24, int nPanels = 20);
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool saveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor = 1.0);
@@ -631,6 +636,8 @@ void TransformImage(double *oImg, int Owidth, int Oheight, double *iImg, int Iwi
 int ComputeAverageImage(char *Path, unsigned char *MeanImg, int width, int height, int camID, int panelID, int startF, int stopF);
 int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, unsigned char *MeanImg, vector<Point2d> &kpts, double sigma, int PatternSize, int nscales, int NMS_BW, double thresh, bool visualize,
 	unsigned char *ColorImg, float *colorResponse, double *DImg, double *ImgPara, double *maskSmooth, double *Znssd_reqd);
+
+int CleanCheckBoardDetection(char *Path, int viewID, int startF, int stopF);
 
 double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, int nchannels, Point2i &POI, int search_area, double thresh, double *T = NULL);
 double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, int nchannels, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd = 0);

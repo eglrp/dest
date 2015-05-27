@@ -10,9 +10,12 @@
 #include <stdint.h>
 
 #include <opencv2/opencv.hpp>
-#include "GL\glut.h"
 #include "DataStructure.h"
 #include "Ultility.h"
+
+//#ifdef _WIN32
+#include "GL/glut.h"
+//#endif
 
 using namespace cv;
 using namespace std;
@@ -41,9 +44,8 @@ void ReadCurrentSfmGL(char *path, bool hasColor, bool hasNormal);
 bool ReadCurrent3DGL(char *path, bool hasColor, bool hasNormal, int timeID, bool setCoordinate);
 bool ReadCurrent3DGL2(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
 bool ReadCurrent3DGL3(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
-int ReadCurrentTrajectory(char *path, int timeID);
-int ReadCurrentTrajectory2(char *path, int timeID);
-int ReadCurrentTrajectoryWithCovariance(char *path, int timeID);
+int Read3DTrajectory(char *path, int trialID = 0);
+int Read3DTrajectoryWithCovariance(char *path, int trialID = 0);
 
 void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime);
 int screenShot(char *Fname, int width, int height, bool color);

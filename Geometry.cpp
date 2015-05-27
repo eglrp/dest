@@ -1,7 +1,7 @@
 #include "Geometry.h"
 #include "Ultility.h"
 #include "Visualization.h"
-#include "Eigen\Sparse"
+#include "Eigen/Sparse"
 
 using ceres::AutoDiffCostFunction;
 using ceres::CostFunction;
@@ -3590,6 +3590,7 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 				Vrgb.push_back(rgb);
 			}
 
+			sprintf(Fname, "%s/%d", Path, ii), makeDir(Fname);
 			if (timeID < 0)
 			{
 				sprintf(Fname, "%s/K%d.dat", Path, ii); WriteKPointsBinarySIFTGPU(Fname, keys);
@@ -3598,9 +3599,6 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 			}
 			else
 			{
-#ifdef _WINDOWS
-				sprintf(Fname, "%s/%d", Path, ii); mkdir(Fname);
-#endif
 				sprintf(Fname, "%s/%d/K%d.dat", Path, ii, timeID + FrameOffset[ii]); WriteKPointsBinarySIFTGPU(Fname, keys);
 				sprintf(Fname, "%s/%d/RGB%d.dat", Path, ii, timeID + FrameOffset[ii]); WriteRGBBinarySIFTGPU(Fname, Vrgb);
 				sprintf(Fname, "%s/%d/D%d.dat", Path, ii, timeID + FrameOffset[ii]); WriteDescriptorBinarySIFTGPU(Fname, descriptors);
@@ -3628,7 +3626,7 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 		sprintf(Fname, "%s/CumlativePoints.txt", Path);
 	else
 	{
-		sprintf(Fname, "%s/Dynamic", Path); mkdir(Fname);
+		sprintf(Fname, "%s/Dynamic", Path), makeDir(Fname);
 		sprintf(Fname, "%s/Dynamic/CumlativePoints_%d.txt", Path, timeID);
 	}
 	FILE* fp = fopen(Fname, "w+");
@@ -3758,7 +3756,7 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 
 			//To remove the nonsense case of every point matchces to 1 point-->IT HAPPENED
 			SRawPairWiseMatchID[threadID].push_back(RawPairWiseMatchID[threadID].at(0));
-			for (unsigned int i = 1; i < min(RawPairWiseMatchID[threadID].size(), 50000); i++)
+			for (unsigned int i = 1; i < min((int)RawPairWiseMatchID[threadID].size(), 50000); i++)
 				if (RawPairWiseMatchID[threadID].at(i).x != RawPairWiseMatchID[threadID].at(i - 1).x)
 					SRawPairWiseMatchID[threadID].push_back(RawPairWiseMatchID[threadID].at(i));
 
@@ -3766,16 +3764,16 @@ int GeneratePointsCorrespondenceMatrix_SiftGPU2(char *Path, int nviews, int time
 				continue;
 
 			//Start sorting
-			for (unsigned int i = 0; i < min(SRawPairWiseMatchID[threadID].size(), 50000); i++)
+			for (unsigned int i = 0; i < min((int)SRawPairWiseMatchID[threadID].size(), 50000); i++)
 			{
 				SortingVec[i + 50000 * threadID] = SRawPairWiseMatchID[threadID].at(i).x;
 				tId[i + 50000 * threadID] = i;
 			}
-			Quick_Sort_Int(SortingVec + 50000 * threadID, tId + 50000 * threadID, 0, min(SRawPairWiseMatchID[threadID].size(), 50000) - 1);
+			Quick_Sort_Int(SortingVec + 50000 * threadID, tId + 50000 * threadID, 0, min((int)SRawPairWiseMatchID[threadID].size(), 50000) - 1);
 
 			//Store sorted vector
 			RawPairWiseMatchID[threadID].push_back(SRawPairWiseMatchID[threadID].at(tId[0 + 50000 * threadID]));
-			for (unsigned int i = 1; i < min(SRawPairWiseMatchID[threadID].size(), 50000); i++)
+			for (unsigned int i = 1; i < min((int)SRawPairWiseMatchID[threadID].size(), 50000); i++)
 				if (SortingVec[i + 50000 * threadID] != SortingVec[i - 1 + 50000 * threadID])
 					RawPairWiseMatchID[threadID].push_back(SRawPairWiseMatchID[threadID].at(tId[i + 50000 * threadID]));
 
@@ -6305,7 +6303,7 @@ void IncrementalBundleAdjustment(char *Path, int nviews, int timeID, int maxKeyp
 
 	return;
 }
-int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < vector<int>> viewIdAll3D, vector<vector<Point2d>> uvAll3D, int nviews, vector<int> sharedIntrinsics, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, int distortionCorrected, bool debug)
+int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, int nviews, vector<int> sharedIntrinsics, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, int distortionCorrected, bool debug)
 {
 	char Fname[200]; FILE *fp = 0;
 	int ii, viewID, npts = Vxyz.size();
@@ -6881,7 +6879,7 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, vector< i
 
 	//And generate 3D id, uv, sift id for all views
 	printf("and generate Corpus visibility info....");
-	vector<vector<int>> siftIDAllViews;
+	vector<vector<int> > siftIDAllViews;
 	corpusData.threeDIdAllViews.reserve(nviews);
 	corpusData.uvAllViews.reserve(nviews);
 	siftIDAllViews.reserve(nviews);
@@ -9007,11 +9005,15 @@ int BundleAdjustDomeMultiNVM(char *Path, int nNvm, int maxPtsPerNvM, bool fixInt
 	}
 	else
 	{
+		#ifdef _WIN32
 		options.linear_solver_type = ceres::ITERATIVE_SCHUR;
-		options.preconditioner_type = ceres::PreconditionerType::CLUSTER_JACOBI;
+		options.preconditioner_type = ceres::PreconditionerType::JACOBI;
 		options.visibility_clustering_type = ceres::VisibilityClusteringType::CANONICAL_VIEWS;
 		options.sparse_linear_algebra_library_type = ceres::SUITE_SPARSE;
 		options.minimizer_progress_to_stdout = true;
+		#else
+		printf("Error! Only works for windows\n");
+		#endif
 	}
 
 	ceres::Solver::Summary summary;

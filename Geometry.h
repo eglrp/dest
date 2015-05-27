@@ -18,16 +18,23 @@
 #include "glog/logging.h"
 #include "ceres/types.h"
 #include "ceres/rotation.h"
-//#include "gflags/gflags.h"
 #include "precomp.hpp"
 #include "_modelest.h"
-
 #include "DataStructure.h"
 #include "ImagePro.h"
-#include "SiftGPU\src\SiftGPU\SiftGPU.h"
+
 #include "USAC.h"
 #include "FundamentalMatrixEstimator.h"
 #include "HomographyEstimator.h"
+
+#include "SiftGPU/src/SiftGPU/SiftGPU.h"
+
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
+
 
 using namespace cv;
 

@@ -10,7 +10,10 @@ bool readPROSACDataFromFile(std::string& sortedPointsFile, unsigned int numPts, 
 #define MATHFUNCTIONS_H
 
 #include <stdlib.h>
+#include <cmath>
 #include <math.h>
+
+using namespace std;
 
 namespace MathTools
 {
@@ -437,8 +440,8 @@ template <class ProblemType> bool USAC<ProblemType>::solve()
 	}
 
 	// timing stuff
-	LARGE_INTEGER tick, tock, freq;
-	QueryPerformanceCounter(&tick);
+	//LARGE_INTEGER tick, tock, freq;
+	//QueryPerformanceCounter(&tick);
 
 	// ------------------------------------------------------------------------
 	// main USAC loop
@@ -634,8 +637,8 @@ template <class ProblemType> bool USAC<ProblemType>::solve()
 
 	// ------------------------------------------------------------------------	
 	// output statistics
-	QueryPerformanceCounter(&tock);
-	QueryPerformanceFrequency(&freq);
+	//QueryPerformanceCounter(&tock);
+	//QueryPerformanceFrequency(&freq);
 	std::cout << "Number of hypotheses/models: " << usac_results_.hyp_count_ << "/" << usac_results_.model_count_ << std::endl;
 	std::cout << "Number of samples rejected by pre-validation: " << usac_results_.rejected_sample_count_ << std::endl;
 	std::cout << "Number of models rejected by pre-validation: " << usac_results_.rejected_model_count_ << std::endl;
@@ -645,8 +648,8 @@ template <class ProblemType> bool USAC<ProblemType>::solve()
 
 	// ------------------------------------------------------------------------
 	// timing stuff
-	usac_results_.total_runtime_ = (double)(tock.QuadPart - tick.QuadPart) / (double)freq.QuadPart;
-	std::cout << "Time: " << usac_results_.total_runtime_ << std::endl;
+	//usac_results_.total_runtime_ = (double)(tock.QuadPart - tick.QuadPart) / (double)freq.QuadPart;
+	//std::cout << "Time: " << usac_results_.total_runtime_ << std::endl;
 
 	// ------------------------------------------------------------------------
 	// clean up

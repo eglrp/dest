@@ -1,4 +1,4 @@
-#ifdef _WINDOWS
+
 
 #include "VideoSequence.h"
 #include "Ultility.h"
@@ -10,41 +10,7 @@
 using namespace cv;
 using namespace std;
 
-bool GrabVideoFrame2Mem(char *fname, char *Data, int &width, int &height, int &nchannels, int &nframes, int frameSample, int fixnframes)
-{
-	IplImage  *frame = 0;
-	CvCapture *capture = cvCaptureFromFile(fname);
-	if (!capture)
-		return false;
-
-	bool flag = false;
-	int length, frameID = 0, frameID2 = 0;
-	while (true && fixnframes > frameID)
-	{
-		IplImage  *frame = cvQueryFrame(capture);
-		if (!frame)
-		{
-			cvReleaseImage(&frame);
-			return true;
-		}
-
-		if (frameID == 0)
-			width = frame->width, height = frame->height, nchannels = frame->nChannels, length = width*height*nchannels;
-
-		for (int ii = 0; ii < length; ii++)
-			Data[ii + length*frameID] = frame->imageData[ii];
-
-		frameID2++;
-		if (frameID2 == frameSample)
-			frameID++, frameID2 = 0;
-		nframes = frameID;
-	}
-
-	//cvReleaseImage(&frame);
-	cvReleaseCapture(&capture);
-
-	return true;
-}
+#ifdef _WIN32
 int ReadAudio(char *Fin, Sequence &mySeq, char *Fout)
 {
 	SNDFILE      *infile;
@@ -73,102 +39,6 @@ int ReadAudio(char *Fin, Sequence &mySeq, char *Fout)
 
 	if (Fout != NULL)
 		WriteGridBinary(Fout, mySeq.Audio, 1, mySeq.nsamples);
-
-	return 0;
-}
-
-int PrismMST(char *Path, int nvideos)
-{
-	using namespace boost;
-	typedef adjacency_list < vecS, vecS, undirectedS, property<vertex_distance_t, int>, property < edge_weight_t, double > > Graph;
-	typedef std::pair < int, int >E;
-
-	int v1, v2; double offset;
-	char Fname[200];
-	double *TimeOffset = new double[nvideos*nvideos];
-	sprintf(Fname, "%s/audioSync.txt", Path);
-	FILE *fp = fopen(Fname, "r");
-	if (fp == NULL)
-	{
-		printf("Cannot open %s\n", Fname);
-		return 1;
-	}
-	while (fscanf(fp, "%d %d %lf ", &v1, &v2, &offset) != EOF)
-		TimeOffset[v1 + v2*nvideos] = offset, TimeOffset[v2 + v1*nvideos] = offset;
-	fclose(fp);
-
-	int num_nodes = nvideos, nedges = nvideos*(nvideos - 1) / 2;
-	E *edges = new E[nedges];
-	double *weightTable = new double[nvideos*nvideos];
-	double *weights = new double[nedges];
-
-	sprintf(Fname, "%s/timeConstrantoffset.txt", Path);	fp = fopen(Fname, "w+");
-	for (int kk = 0; kk < nvideos; kk++)
-	{
-		for (int ll = 0; ll < nvideos; ll++)
-			fprintf(fp, "%.4f ", TimeOffset[kk + ll*nvideos]);
-		fprintf(fp, "\n");
-	}
-	fclose(fp);
-
-	//Form edges weight based on the consistency of the triplet
-	int count = 0;
-	for (int kk = 0; kk < nvideos - 1; kk++)
-	{
-		for (int ll = kk + 1; ll < nvideos; ll++)
-		{
-			edges[count] = E(kk, ll);
-			weights[count] = 0.0;
-			for (int jj = 0; jj < nvideos; jj++)
-			{
-				if (jj == ll || jj == kk)
-					continue;
-				if (jj >= ll) //ab = ac+cb;
-					weights[count] += abs(TimeOffset[ll + jj*nvideos] + TimeOffset[kk + ll*nvideos] - TimeOffset[kk + jj*nvideos]);
-				else if (jj <= kk)
-					weights[count] += abs(TimeOffset[jj + kk*nvideos] + TimeOffset[kk + ll*nvideos] - TimeOffset[jj + ll*nvideos]);
-				else
-					weights[count] += abs(TimeOffset[kk + jj*nvideos] + TimeOffset[ll + jj*nvideos] - TimeOffset[kk + ll*nvideos]);
-			}
-			weightTable[kk + ll*nvideos] = weights[count];
-			weightTable[ll + kk*nvideos] = weights[count];
-			count++;
-		}
-	}
-
-	/*fp = fopen("C:/temp/weightTable.txt", "w+");
-	for (int kk = 0; kk < nvideos; kk++)
-	{
-	for (int ll = 0; ll < nvideos; ll++)
-	fprintf(fp, "%.2f ", weightTable[kk + ll*nvideos]);
-	fprintf(fp, "\n");
-	}
-	fclose(fp);*/
-
-	Graph g(edges, edges + sizeof(E)*nedges / sizeof(E), weights, num_nodes);
-	property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, g);
-	std::vector < graph_traits < Graph >::vertex_descriptor >p(num_vertices(g));
-
-	prim_minimum_spanning_tree(g, &p[0]);
-
-	sprintf(Fname, "%s/MST_audioSync.txt", Path);
-	fp = fopen(Fname, "w+");
-	for (std::size_t i = 0; i != p.size(); ++i)
-	{
-		if (p[i] != i)
-		{
-			std::cout << "parent[" << i << "] = " << p[i] << std::endl;
-			fprintf(fp, "%d %d\n", p[i], i);
-		}
-		else
-		{
-			std::cout << "parent[" << i << "] = no parent" << std::endl;
-			fprintf(fp, "%d %d\n", i, i);
-		}
-	}
-	fclose(fp);
-
-	delete[]weights, delete[]weightTable, delete[]TimeOffset, delete[]edges;
 
 	return 0;
 }
@@ -379,12 +249,147 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 		return 0;
 	}
 }
-int AssignOffsetFromMST(char *Path, int nvideos)
+#endif
+
+bool GrabVideoFrame2Mem(char *fname, char *Data, int &width, int &height, int &nchannels, int &nframes, int frameSample, int fixnframes)
+{
+	IplImage  *frame = 0;
+	CvCapture *capture = cvCaptureFromFile(fname);
+	if (!capture)
+		return false;
+
+	bool flag = false;
+	int length, frameID = 0, frameID2 = 0;
+	while (true && fixnframes > frameID)
+	{
+		IplImage  *frame = cvQueryFrame(capture);
+		if (!frame)
+		{
+			cvReleaseImage(&frame);
+			return true;
+		}
+
+		if (frameID == 0)
+			width = frame->width, height = frame->height, nchannels = frame->nChannels, length = width*height*nchannels;
+
+		for (int ii = 0; ii < length; ii++)
+			Data[ii + length*frameID] = frame->imageData[ii];
+
+		frameID2++;
+		if (frameID2 == frameSample)
+			frameID++, frameID2 = 0;
+		nframes = frameID;
+	}
+
+	//cvReleaseImage(&frame);
+	cvReleaseCapture(&capture);
+
+	return true;
+}
+int PrismMST(char *Path, char *PairwiseSyncFilename, int nvideos)
+{
+	using namespace boost;
+	typedef adjacency_list < vecS, vecS, undirectedS, property<vertex_distance_t, int>, property < edge_weight_t, double > > Graph;
+	typedef std::pair < int, int >E;
+
+	int v1, v2; double offset;
+	char Fname[200];
+	double *TimeOffset = new double[nvideos*nvideos];
+	for (int ii = 0; ii < nvideos*nvideos; ii++)
+		TimeOffset[ii] = 0;
+
+	sprintf(Fname, "%s/%s.txt", Path, PairwiseSyncFilename);
+	FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot open %s\n", Fname);
+		return 1;
+	}
+	while (fscanf(fp, "%d %d %lf ", &v1, &v2, &offset) != EOF)
+		TimeOffset[v1 + v2*nvideos] = offset, TimeOffset[v2 + v1*nvideos] = offset;
+	fclose(fp);
+
+	sprintf(Fname, "%s/timeConstrantoffset.txt", Path);	fp = fopen(Fname, "w+");
+	for (int kk = 0; kk < nvideos; kk++)
+	{
+		for (int ll = 0; ll < nvideos; ll++)
+			fprintf(fp, "%.4f ", TimeOffset[kk + ll*nvideos]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	//Form edges weight based on the consistency of the triplet
+	int num_nodes = nvideos, nedges = nvideos*(nvideos - 1) / 2;
+	E *edges = new E[nedges];
+	double *weightTable = new double[nvideos*nvideos];
+	double *weights = new double[nedges];
+	for (int ii = 0; ii < nvideos*nvideos; ii++)
+		weightTable[ii] = 0;
+
+	int count = 0;
+	for (int kk = 0; kk < nvideos - 1; kk++)
+	{
+		for (int ll = kk + 1; ll < nvideos; ll++)
+		{
+			edges[count] = E(kk, ll);
+			weights[count] = 0.0;
+			for (int jj = 0; jj < nvideos; jj++)
+			{
+				if (jj == ll || jj == kk)
+					continue;
+				if (jj >= ll) //kl = kj-lj
+					weights[count] += abs(TimeOffset[kk + jj*nvideos] - TimeOffset[ll + jj*nvideos] - TimeOffset[kk + ll*nvideos]);
+				else if (jj <= kk) //kl = -jk + jl
+					weights[count] += abs(-TimeOffset[jj + kk*nvideos] + TimeOffset[jj + ll*nvideos] - TimeOffset[kk + ll*nvideos]);
+				else //kl = kj+jl
+					weights[count] += abs(TimeOffset[kk + jj*nvideos] + TimeOffset[jj + ll*nvideos] - TimeOffset[kk + ll*nvideos]);
+			}
+			weightTable[kk + ll*nvideos] = weights[count], weightTable[ll + kk*nvideos] = weights[count];
+			count++;
+		}
+	}
+
+	sprintf(Fname, "%s/weightTable.txt", Path);	fp = fopen(Fname, "w+");
+	for (int kk = 0; kk < nvideos; kk++)
+	{
+		for (int ll = 0; ll < nvideos; ll++)
+			fprintf(fp, "%.2f ", weightTable[kk + ll*nvideos]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	Graph g(edges, edges + sizeof(E)*nedges / sizeof(E), weights, num_nodes);
+	property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, g);
+	std::vector < graph_traits < Graph >::vertex_descriptor >p(num_vertices(g));
+
+	prim_minimum_spanning_tree(g, &p[0]);
+
+	sprintf(Fname, "%s/MST_Sync.txt", Path);	fp = fopen(Fname, "w+");
+	for (std::size_t i = 0; i != p.size(); ++i)
+	{
+		if (p[i] != i)
+		{
+			std::cout << "parent[" << i << "] = " << p[i] << std::endl;
+			fprintf(fp, "%d %d\n", p[i], i);
+		}
+		else
+		{
+			std::cout << "parent[" << i << "] = no parent" << std::endl;
+			fprintf(fp, "%d %d\n", i, i);
+		}
+	}
+	fclose(fp);
+
+	delete[]weights, delete[]weightTable, delete[]TimeOffset, delete[]edges;
+
+	return 0;
+}
+int AssignOffsetFromMST(char *Path, char *PairwiseSyncFilename, int nvideos)
 {
 	char Fname[200];
 	vector<Point2i> ParentChild;
 
-	sprintf(Fname, "%s/MST_audioSync.txt", Path);
+	sprintf(Fname, "%s/MST_Sync.txt", Path);
 	FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
@@ -397,7 +402,7 @@ int AssignOffsetFromMST(char *Path, int nvideos)
 	fclose(fp);
 
 	double *Offset = new double[nvideos*nvideos], t;
-	sprintf(Fname, "%s/audioSync.txt", Path);
+	sprintf(Fname, "%s/%s.txt", Path, PairwiseSyncFilename);
 	fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
@@ -460,7 +465,7 @@ int AssignOffsetFromMST(char *Path, int nvideos)
 		OrderedOffset[ii] -= earliest;
 
 	//Write results:
-	sprintf(Fname, "%s/FaudioSync.txt", Path);
+	sprintf(Fname, "%s/F%s.txt", Path, PairwiseSyncFilename);
 	fp = fopen(Fname, "w+");
 	for (int ii = 0; ii < nvideos; ii++)
 		fprintf(fp, "%d %.3f\n", ii, OrderedOffset[ii]);
@@ -628,4 +633,4 @@ void DynamicTimeWarping5Step(Mat pM, vector<int>&pp, vector<int> &qq)
 
 	return;
 }
-#endif
+

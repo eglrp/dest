@@ -1,7 +1,8 @@
 #ifndef FTOOLS_H
 #define FTOOLS_H
 #include <vector>
-
+#include <cstdio>
+#include <cstring>
 namespace FTools
 {
 	void normalizePoints(double* inputPointsUnNorm, double* inputPoints, unsigned int numPoints,

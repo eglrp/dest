@@ -2,28 +2,38 @@
 #include "ImagePro.h"
 #include "Geometry.h"
 #include "BAutil.h"
+
 using namespace cv;
 using namespace std;
 
 //SiftGPU 
 #define SIFTGPU_DLL_RUNTIME// Load at runtime if the above macro defined comment the macro above to use static linking
 #ifdef _WIN32
-#ifdef SIFTGPU_DLL_RUNTIME
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#define FREE_MYLIB FreeLibrary
-#define GET_MYPROC GetProcAddress
-#endif
+	#ifdef SIFTGPU_DLL_RUNTIME
+		#define WIN32_LEAN_AND_MEAN
+		#include <windows.h>
+		#define FREE_MYLIB FreeLibrary
+		#define GET_MYPROC GetProcAddress
+	#endif
 #else
-#ifdef SIFTGPU_DLL_RUNTIME
-#include <d.8fcn.h>
-#define FREE_MYLIB dlclose
-#define GET_MYPROC dlsym
+	#ifdef SIFTGPU_DLL_RUNTIME
+		#include <dlfcn.h>
+		#define FREE_MYLIB dlclose
+		#define GET_MYPROC dlsym
+	#endif
 #endif
+
+void makeDir(char *Fname)
+{
+#ifdef _WIN32
+	mkdir(Fname);
+#else
+	mkdir(Fname, 0755);
 #endif
+	return;
+}
 
 int siftgpu(char *Fname1, char *Fname2, const float nndrRatio, const double fractionMatchesDisplayed)
-
 {
 	// Allocation size to the largest width and largest height 1920x1080
 	// Maximum working dimension. All the SIFT octaves that needs a larger texture size will be skipped. maxd = 2560 <-> 768MB of graphic memory. 
@@ -226,7 +236,7 @@ void dec2bin(int dec, int*bin, int num_bin)
 	}
 
 	if (digit > num_bin)
-		Beep(1000, 200);
+		cout<<'\a';
 
 	for (ii = 0; ii < num_bin - digit; ii++)
 		bin[ii] = 0;
@@ -1113,8 +1123,8 @@ bool LoadTrackData(char* filePath, int CurrentFrame, TrajectoryData &TrajectoryI
 	ii++;
 	fclose(fp);*/
 
-	TrajectoryInfo.cpVis = new vector<vector<int>>[TrajectoryInfo.nTrajectories];
-	TrajectoryInfo.fVis = new vector<vector<int>>[TrajectoryInfo.nTrajectories];
+	TrajectoryInfo.cpVis = new vector<vector<int> >[TrajectoryInfo.nTrajectories];
+	TrajectoryInfo.fVis = new vector<vector<int> >[TrajectoryInfo.nTrajectories];
 
 	vector<int>cpVis, fVis;
 	fin >> dummy; //Visiblity
@@ -5773,129 +5783,7 @@ void BlurDetectionDriver(char *Path, int nimages, int width, int height, float b
 	return;
 }
 
-// <Path>  : Where nvm file is located. All results are output here.
-// <nvmName>: result from Visual SFM
-// <camInfo>: filename width height [model of intrinsic parameters] [ model of lends distortion] [model of extrinsic parameters] availability
-// <IntrinsicInfo>: (optional)  filename fx fy skew u0 v0 radiral(1,2,3) tangential(1,2) prism(1,2)
-// lensconversion: convert from visSfm to Opencv format
-// sharedIntrinsics: 0 (not share), 1 (shared)
-int BAVisualSfMDriver(char *Path, char *nvmName, char *camInfo, char *IntrinsicInfo, bool lensconversion, int sharedIntrinsics)
-{
-	//Path = "C:/temp/X",
-	//	nvmName = "fountain.nvm",
-	//	camInfo = "camInfo.txt",
-	//	IntrinsicInfo = "Intrinsics.txt";
-
-	string rootfolder(Path);
-
-	//---------load an NVM file--------------
-	cout << "Loading the NVM file...";
-	string nvmfile = nvmName;
-	string nvmpath = rootfolder + "/" + nvmfile;
-
-	BA::NVM    nvmdata;
-	if (!BA::loadNVM(nvmpath, nvmdata))
-		return 1;
-	cout << "Done." << endl;
-	//-------------------------------------
-
-	//---------convert NVM data to CameraData---------
-	cout << "Converting NVM data to CameraData...";
-	string imginfofile = rootfolder + "/" + camInfo;
-	vector<BA::CameraData> camera_before;
-	if (!BA::initCameraData(nvmdata, imginfofile, camera_before, sharedIntrinsics))
-		return 1;
-
-	cout << "Done." << endl;
-	//-------------------------------------
-
-
-	//---------load initial parameters if applicable---------
-	if (IntrinsicInfo != NULL)
-	{
-		cout << "Loading initial intrinsic parameters...";
-		string intrinsicfile = rootfolder + "/" + IntrinsicInfo;
-		if (!BA::loadInitialIntrinsics(intrinsicfile, nvmdata.filename_id, camera_before, sharedIntrinsics))
-			return 1;
-
-		cout << "Done." << endl;
-	}
-	//-------------------------------------
-
-	//---------perform bundle adjustment---------
-	vector< vector<double> > xyz_before(nvmdata.xyz);
-	vector< vector<double> > xyz_after(nvmdata.xyz);
-	vector<BA::CameraData> camera_after(camera_before);
-
-	if (lensconversion)
-	{
-		cout << "\n" << "Converting Lens Model...";
-		convertLendsModel(camera_before, xyz_before);
-		cout << "Done." << endl;
-	}
-
-
-	//---------reprojection error before BA---------
-	cout << "Calculating reprojection erros (before) and Saving the result...";
-	BA::residualData resdata_before;
-	BA::calcReprojectionError(camera_before, xyz_before, resdata_before);
-	BA::saveAllData(rootfolder, camera_before, xyz_before, resdata_before, "BA_", false);
-
-	double mean_err_before[2] = { resdata_before.mean_abs_error[0], resdata_before.mean_abs_error[1] };
-
-	ceres::Solver::Summary summary;
-	ceres::Solver::Options options;
-	BA::setCeresOption(nvmdata, options);
-	//options.use_nonmonotonic_steps = false;
-
-
-	cout << "\n" << "Run Bundle Adjustment..." << endl;
-	cout << "\t# of Cameras: " << camera_before.size() << "\n" << "\t# of Points : " << nvmdata.n3dPoints << "\n" << endl;
-
-	double thresh = lensconversion ? 10.0 : -1.0; //if minus value, all points from NVM are regarded as inliers.
-	//double thresh = -1.0;
-
-	BA::runBundleAdjustment(camera_after, xyz_after, options, summary, thresh);
-	cout << summary.FullReport() << "\n";
-
-	string ceres_report = rootfolder + "/BA_CeresReport.txt";
-	ofstream ofs(ceres_report);
-	if (ofs.fail())
-		cerr << "Cannot write " << ceres_report << endl;
-	else
-		ofs << summary.FullReport();
-	ofs.close();
-	//-------------------------------------
-
-
-	//--------save as NVM format------------------
-	cout << "\n";
-	cout << "Saving the result as NVM format...";
-	BA::saveNVM(rootfolder, nvmfile, camera_after, xyz_after, nvmdata);
-	cout << "Done." << endl;
-	//-------------------------------------
-
-
-	//---------reprojection error after BA---------
-	cout << "Calculating reprojection erros ( after) and Saving the result...";
-	BA::residualData resdata_after;
-	BA::calcReprojectionError(camera_after, xyz_after, resdata_after);
-	BA::saveAllData(rootfolder, camera_after, xyz_after, resdata_after, "BA_", true);
-	double mean_err_after[2] = { resdata_after.mean_abs_error[0], resdata_after.mean_abs_error[1] };
-
-	cout << "Done." << endl;
-	//-------------------------------------
-
-
-	cout << "Mean Absolute Reprojection Errors (x,y)\n" << fixed << setprecision(3)
-		<< "\t" << "before: (" << mean_err_before[0] << ", " << mean_err_before[1] << ")\n"
-		<< "\t" << "after : (" << mean_err_after[0] << ", " << mean_err_after[1] << ")" << endl;
-
-	cout << "X" << endl;
-	return 0;
-}
-
-bool loadNVMLite(const string filepath, Corpus &CorpusData, int sharedIntrinsics, int nHDs, int nVGAs, int nPanels)
+bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics, int nHDs, int nVGAs, int nPanels)
 {
 	ifstream ifs(filepath);
 	if (ifs.fail())
@@ -10161,7 +10049,7 @@ int CornerDetectorDriver(char *Path, int checkerSize, double ZNCCThreshold, int 
 	double *SImg = new double[width*height];
 	double *IPara = new double[width*height];
 
-	sprintf(Fname, "%s/Corner", Path); mkdir(Fname);
+	sprintf(Fname, "%s/Corner", Path), makeDir(Fname);
 	for (int fid = startF; fid <= stopF; fid++)
 	{
 		sprintf(Fname, "%s/%d.png", Path, fid);
@@ -11229,7 +11117,7 @@ int ComputeAverageImage(char *Path, unsigned char *MeanImg, int width, int heigh
 	delete[]Mean;
 	return 0;
 }
-int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, unsigned char *MeanImg, vector<Point2d> &kpts, double sigma, int PatternSize, int nscales, int NMS_BW, double thresh, bool visualize, 	unsigned char *ColorImg, float *colorResponse, double *DImg, double *ImgPara, double *maskSmooth, double *Znssd_reqd)
+int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, unsigned char *MeanImg, vector<Point2d> &kpts, double sigma, int PatternSize, int nscales, int NMS_BW, double thresh, bool visualize, unsigned char *ColorImg, float *colorResponse, double *DImg, double *ImgPara, double *maskSmooth, double *Znssd_reqd)
 {
 	int length = width*height;
 
@@ -11434,7 +11322,7 @@ int CheckerBoardDetection(char *Path, int viewID, int startF, int stopF)
 		if (firsttime)
 		{
 			viewGray = cvCreateImage(cvGetSize(view), 8, 1), firsttime = false;
-			sprintf(Fname, "%s/%d/Corner", Path, viewID); mkdir(Fname);
+			sprintf(Fname, "%s/%d/Corner", Path, viewID), makeDir(Fname);
 		}
 
 		img_size = cvGetSize(view);
@@ -11523,7 +11411,7 @@ int RefineCheckBoardDetection2(char *Path, int viewID, int startF, int stopF)
 		}
 	}
 
-	sprintf(Fname, "%s/Track2D", Path); mkdir(Fname);
+	sprintf(Fname, "%s/Track2D", Path), makeDir(Fname);
 	sprintf(Fname, "%s/Track2D/%d.txt", Path, viewID); FILE *fp = fopen(Fname, "w+");
 	for (int ii = 0; ii < npts; ii++)
 	{
@@ -11536,7 +11424,7 @@ int RefineCheckBoardDetection2(char *Path, int viewID, int startF, int stopF)
 
 	return 0;
 }
-int CleanCheckBoardDetection(char *Path, int viewID, int startF, int stopF)
+int CleanCheckBoardDetection3(char *Path, int viewID, int startF, int stopF)
 {
 	char Fname[200];
 
@@ -11608,8 +11496,50 @@ int CleanCheckBoardDetection(char *Path, int viewID, int startF, int stopF)
 		goodId.clear(), cvPts.clear(), TemplPts.clear();
 	}
 
-	sprintf(Fname, "%s/Track2D", Path); mkdir(Fname);
+	sprintf(Fname, "%s/Track2D", Path), makeDir(Fname);
+	sprintf(Fname, "%s/Track2D/%d.txt", Path, viewID); FILE *fp = fopen(Fname, "w+");
+	for (int ii = 0; ii < npts; ii++)
+	{
+		fprintf(fp, "%d %d ", ii, AllPts[ii].size());
+		for (int jj = 0; jj < AllPts[ii].size(); jj++)
+			fprintf(fp, "%d %.3f %.3f ", AllPts[ii][jj].frameID, AllPts[ii][jj].pt2D.x - 1, AllPts[ii][jj].pt2D.y - 1);//matlab
+		//fprintf(fp, "%d %.3f %.3f ", AllPts[ii][jj].frameID, AllPts[ii][jj].pt2D.x, AllPts[ii][jj].pt2D.y );//C++
+		fprintf(fp, "%\n");
+	}
+	fclose(fp);
 
+	return 0;
+}
+int CleanCheckBoardDetection(char *Path, int viewID, int startF, int stopF)
+{
+	char Fname[200];
+
+	int npts = 0;
+	double u, v;
+	vector<Point2d> cvPts;
+	vector<ImgPtEle> *AllPts = NULL;
+	for (int fid = startF; fid < stopF; fid++)
+	{
+		sprintf(Fname, "%s/%d/Corner/CV2_%d.txt", Path, viewID, fid); FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+			continue;
+		while (fscanf(fp, "%lf %lf", &u, &v) != EOF)
+			cvPts.push_back(Point2d(u, v));
+		fclose(fp);
+
+		if (AllPts == NULL)
+			npts = cvPts.size(), AllPts = new vector<ImgPtEle>[cvPts.size()];
+
+		for (int ii = 0; ii < cvPts.size(); ii++)
+		{
+			ImgPtEle impt; impt.frameID = fid;
+			impt.pt2D = cvPts[ii];
+			AllPts[ii].push_back(impt);
+		}
+		cvPts.clear();
+	}
+
+	sprintf(Fname, "%s/Track2D", Path), makeDir(Fname);
 	sprintf(Fname, "%s/Track2D/%d.txt", Path, viewID); FILE *fp = fopen(Fname, "w+");
 	for (int ii = 0; ii < npts; ii++)
 	{
@@ -11755,7 +11685,7 @@ int TrajectoryTrackingDriver(char *Path)
 {
 	char Fname[512];
 	int FrameOffset[8] = { 0, -1, 15, 1, 8, 3, 5, -2 };
-	sprintf(Fname, "%s/Track2D", Path), mkdir(Fname);
+	sprintf(Fname, "%s/Track2D", Path), 
 	for (int viewID = 0; viewID < 8; viewID++)
 	{
 		sprintf(Fname, "%s/Track2D/%d.txt", Path, viewID); FILE *fp = fopen(Fname, "w+"); fclose(fp);

@@ -51,66 +51,6 @@ using namespace std;
 #define BA_OPT_EXTRINSIC_R_FIXED    2
 #define BA_OPT_EXTRINSIC_T_FIXED    3
 
-//TODO:
-//#define BA_LENS_PINHOLE 0
-//#define BA_LENS_FISHEYE 1
-
-//namespace BA 
-//{
-//	namespace OptimizeParameter
-//	{
-//		enum class Intrinsics
-//		{
-//			optimize_all,      // All parameters (fx, fy, s, u0, v0) are optimized in BA.
-//			fix_all,           // All parameters (fx, fy, s, u0, v0) are NOT optimized in BA. Automatically ON if the parameters are loaded from a file, except load_from_file_but_just_as_initial_guess is set.
-//			fix_skew,          // Skew is NOT optimized in BA. Other parameters are optimized.
-//			fix_opticalcenter, // Optical center (u0, v0) is NOT optimized in BA. Other parameters are optimized.
-//			load_from_file_but_just_as_initial_guess // Even if the parameters are loaded from a file, they are optimized in BA.
-//		};
-//
-//
-//		enum class LensDistortion
-//		{
-//			optimize_all,  // All parameters (set by LensDistortionModel) are optimized in BA.
-//			fix_all,        // All parameters (set by LensDistortionModel) are NOT optimized in BA.
-//		};
-//
-//
-//		enum class Extrinsics
-//		{
-//			optimize_all,      // All parameters (R, t) are optimized in BA.
-//			fix_all,           // All parameters (R, t) are NOT optimized in BA. Automatically ON if the parameters are loaded from a file, except load_from_file_but_just_as_initial_guess is set.
-//			fix_rotation,      // Rotation is NOT optimized in BA. Rotation is optimized.
-//			fix_translation,   // Translation is NOT optimized in BA. Translation is optimized.
-//			load_from_file_but_just_as_initial_guess // Even if the parameters are loaded from a file, they are optimized in BA.
-//		};
-//
-//	}
-//
-//
-//
-//	namespace ParameterModel
-//	{
-//		enum class Intrinsics
-//		{
-//			full,      // fx, fy, s, u0, v0
-//			zero_skew  // 
-//		};
-//
-//		enum class LensDistortion
-//		{
-//			radial_and_tangential,       // 3 radial and 2 tangential terms
-//			radial_1st_only,             // Only 1 radial term
-//			radial_only,                 // 3 radial terms
-//			radial_tangential_and_prism, // 3 radial, 2 tangential, and 2 prism terms
-//			no_distortion                // Ideal pinhole model
-//		};
-//	}
-//}
-
-
-
-
 
 namespace BA
 {
@@ -185,48 +125,6 @@ namespace BA
 
 		vector< vector<double> > error;//[err_x, err_y]  Nx2
 		double mean_abs_error[2];//(err_x, err_y)
-	};
-
-
-
-	struct PinholeReprojectionError {
-		PinholeReprojectionError(double observed_x, double observed_y)
-			: observed_x(observed_x), observed_y(observed_y) {}
-
-		template <typename T>
-		bool operator()(
-			const T* const FocalLength,
-			const T* const OpticalCenter,
-			const T* const Skew,
-			const T* const Radialfirst,
-			const T* const Radialothers,
-			const T* const Tangential,
-			const T* const Prism,
-			const T* const AngleAxis,
-			const T* const Translation,
-			const T* const point3D,
-			T* residuals)
-			const
-		{
-			T reprojected2D[2];
-			PinholeReprojection(FocalLength, OpticalCenter, Skew, Radialfirst, Radialothers, Tangential, Prism, AngleAxis, Translation, point3D, reprojected2D);
-
-			residuals[0] = reprojected2D[0] - T(observed_x);
-			residuals[1] = reprojected2D[1] - T(observed_y);
-
-
-			return true;
-		}
-
-		// Factory to hide the construction of the CostFunction object from the client code.
-		static ceres::CostFunction* Create(const double observed_x, const double observed_y)
-		{
-			return (new ceres::AutoDiffCostFunction<PinholeReprojectionError, 2, 2, 2, 1, 1, 2, 2, 2, 3, 3, 3>(
-				new PinholeReprojectionError(observed_x, observed_y)));
-		}
-
-		double observed_x;
-		double observed_y;
 	};
 
 

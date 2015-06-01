@@ -643,136 +643,6 @@ int recoverPose(const Mat & E, InputArray _points1, InputArray _points2, Mat & _
 	}
 
 }
-
-int TwoCamerasReconstructionFmat(CameraData *AllViewsInfo, Point2d *PCcorres, Point3d *ThreeD, int *CameraPair, int nCams, int nProjectors, int nPpts)
-{
-	int ii, jj;
-
-	//Estimate fundamental matrix
-	vector<int> pid;
-	vector<Point2f>imgpts1, imgpts2;
-	for (ii = 0; ii < nPpts*nProjectors; ii++)
-	{
-		if (PCcorres[CameraPair[0] + ii*(nProjectors + nCams)].x > 0.0001 && PCcorres[CameraPair[1] + ii*(nProjectors + nCams)].x > 0.0001)
-		{
-			pid.push_back(ii);
-			imgpts1.push_back(Point2f(PCcorres[CameraPair[0] + ii*(nProjectors + nCams)].x, PCcorres[CameraPair[0] + ii*(nProjectors + nCams)].y));
-			imgpts2.push_back(Point2f(PCcorres[CameraPair[1] + ii*(nProjectors + nCams)].x, PCcorres[CameraPair[1] + ii*(nProjectors + nCams)].y));
-		}
-	}
-	Mat cvF = findFundamentalMat(imgpts1, imgpts2, FM_8POINT, 0.1, 0.99);
-
-	cout << "Fmat: " << endl;
-	cout << cvF << endl << endl;
-
-	//Extract essential matrix
-	Mat cvK1(3, 3, CV_64F, AllViewsInfo[CameraPair[0]].K);
-	Mat cvK2(3, 3, CV_64F, AllViewsInfo[CameraPair[1]].K);
-
-	Mat cvE = cvK2.t()*cvF*cvK1;
-	cout << "Emat: " << endl;
-	cout << cvE << endl << endl;
-
-	//Decompose into RT
-	SVD svd(cvE, SVD::MODIFY_A);
-	double m = (svd.w.at<double>(0) + svd.w.at<double>(1)) / 2;
-	double nW[9] = { m, 0, 0, 0, m, 0, 0, 0, 0 };
-	Mat cvnW(3, 3, CV_64F, nW);
-	Mat cvnE = svd.u*cvnW*svd.vt;
-	SVD svd2(cvnE, SVD::MODIFY_A);
-
-	cvnW.at<double>(0, 0) = 0.0, cvnW.at<double>(0, 1) = -1.0, cvnW.at<double>(0, 2) = 0.0;
-	cvnW.at<double>(1, 0) = 1.0, cvnW.at<double>(1, 1) = 0.0, cvnW.at<double>(1, 2) = 0.0;
-	cvnW.at<double>(2, 0) = 0.0, cvnW.at<double>(2, 1) = 0.0, cvnW.at<double>(2, 2) = 1.0;
-
-	//Make sure we return rotation matrices with det(R) == 1
-	Mat UWVt = svd2.u*cvnW*svd2.vt;
-	if (determinant(UWVt) < 0.0)
-	{
-		cvnW.at<double>(0, 0) = 0.0, cvnW.at<double>(0, 1) = 1.0, cvnW.at<double>(0, 2) = 0.0;
-		cvnW.at<double>(1, 0) = -1.0, cvnW.at<double>(1, 1) = 0.0, cvnW.at<double>(1, 2) = 0.0;
-		cvnW.at<double>(2, 0) = 0.0, cvnW.at<double>(2, 1) = 0.0, cvnW.at<double>(2, 2) = -1.0;
-	}
-
-	UWVt = svd2.u*cvnW*svd2.vt;
-	Mat UWtVt = svd2.u*cvnW.t()*svd2.vt;
-
-	double maxU = 0.0;
-	for (ii = 0; ii < 3; ii++)
-		if (maxU < abs(svd2.u.at<double>(ii, 2)))
-			maxU = abs(svd2.u.at<double>(ii, 2));
-
-	//There are 4 possible cases
-	double RT2[] = { UWVt.at<double>(0, 0), UWVt.at<double>(0, 1), UWVt.at<double>(0, 2), svd2.u.at<double>(0, 2) / maxU,
-		UWVt.at<double>(1, 0), UWVt.at<double>(1, 1), UWVt.at<double>(1, 2), svd2.u.at<double>(1, 2) / maxU,
-		UWVt.at<double>(2, 0), UWVt.at<double>(2, 1), UWVt.at<double>(2, 2), svd2.u.at<double>(2, 2) / maxU,
-
-		UWVt.at<double>(0, 0), UWVt.at<double>(0, 1), UWVt.at<double>(0, 2), -svd2.u.at<double>(0, 2) / maxU,
-		UWVt.at<double>(1, 0), UWVt.at<double>(1, 1), UWVt.at<double>(1, 2), -svd2.u.at<double>(1, 2) / maxU,
-		UWVt.at<double>(2, 0), UWVt.at<double>(2, 1), UWVt.at<double>(2, 2), -svd2.u.at<double>(2, 2) / maxU,
-
-		UWtVt.at<double>(0, 0), UWtVt.at<double>(0, 1), UWtVt.at<double>(0, 2), svd2.u.at<double>(0, 2) / maxU,
-		UWtVt.at<double>(1, 0), UWtVt.at<double>(1, 1), UWtVt.at<double>(1, 2), svd2.u.at<double>(1, 2) / maxU,
-		UWtVt.at<double>(2, 0), UWtVt.at<double>(2, 1), UWtVt.at<double>(2, 2), svd2.u.at<double>(2, 2) / maxU,
-
-		UWtVt.at<double>(0, 0), UWtVt.at<double>(0, 1), UWtVt.at<double>(0, 2), -svd2.u.at<double>(0, 2) / maxU,
-		UWtVt.at<double>(1, 0), UWtVt.at<double>(1, 1), UWtVt.at<double>(1, 2), -svd2.u.at<double>(1, 2) / maxU,
-		UWtVt.at<double>(2, 0), UWtVt.at<double>(2, 1), UWtVt.at<double>(2, 2), -svd2.u.at<double>(2, 2) / maxU };
-
-	//Cherality check
-	double P1[12], P2[48], RT1[] = { 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0 };
-	mat_mul(AllViewsInfo[CameraPair[0]].K, RT1, P1, 3, 3, 4);
-	for (ii = 0; ii < 4; ii++)
-		mat_mul(AllViewsInfo[CameraPair[1]].K, RT2 + 12 * ii, P2 + 12 * ii, 3, 3, 4);
-
-	Point2d pt1, pt2; Point3d WC;
-	int positivePoints[4] = { 0, 0, 0, 0 }, RTid[4] = { 0, 1, 2, 3 };
-	for (ii = 0; ii < imgpts1.size(); ii++)
-	{
-		pt1.x = imgpts1.at(ii).x, pt1.y = imgpts1.at(ii).y;
-		pt2.x = imgpts2.at(ii).x, pt2.y = imgpts2.at(ii).y;
-
-		for (jj = 0; jj<4; jj++)
-		{
-			//Stereo_Triangulation2(&pt1, &pt2, P1, P2+12*jj, &WC); 
-			if (WC.z > 0.0)
-				positivePoints[jj] ++;
-		}
-	}
-
-	Quick_Sort_Int(positivePoints, RTid, 0, 3);
-	if (positivePoints[3] < 10)
-	{
-		cout << "Something wrong. Only a few points have positve z values" << endl;
-		return 1;
-	}
-
-	/*for(ii=0; ii<6; ii++)
-	AllViewsInfo[CameraPair[0]].rt[ii] = 0.0;
-
-	Mat rvec, Rmat = (Mat_<double>(3,3) << RT2[RTid[3]*12], RT2[RTid[3]*12+1], RT2[RTid[3]*12+2],
-	RT2[RTid[3]*12+4], RT2[RTid[3]*12+5], RT2[RTid[3]*12+6],
-	RT2[RTid[3]*12+8], RT2[RTid[3]*12+9], RT2[RTid[3]*12+10]);
-	Rodrigues( Rmat, rvec);
-
-	for(ii=0; ii<3; ii++)
-	{
-	AllViewsInfo[CameraPair[1]].RT[ii] = rvec.at<double>(ii);
-	AllViewsInfo[CameraPair[1]].RT[ii+3] = RT2[RTid[3]*12+3+4*ii];
-	}
-
-	//Triangulate
-	for(ii = 0; ii<nPpts*nProjectors; ii++ )
-	{
-	if(PCcorres[CameraPair[0]+ii*(nProjectors+nCams)].x > 0.0001 && PCcorres[CameraPair[1]+ii*(nProjectors+nCams)].x > 0.0001)
-	;//Stereo_Triangulation(&PCcorres[CameraPair[0]+ii*(nProjectors+nCams)], &PCcorres[CameraPair[1]+ii*(nProjectors+nCams)], P1, P2+12*RTid[3], &ThreeD[ii]);
-	else
-	{
-	ThreeD[ii].x = 0.0, ThreeD[ii].y = 0.0, ThreeD[ii].z = 0.0;
-	}
-	}*/
-	return 0;
-}
 int EMatTest()
 {
 	int N = 500;
@@ -820,7 +690,7 @@ int EMatTest()
 	Mat E = findEssentialMat(x1s, x2s, K1, K2, CV_RANSAC, 0.99, 1, 200, noArray());
 	printf("Time: %.6fs\n", omp_get_wtime() - start);
 
-	std::cout << "=====================================================" << std::endl;
+	std::cout << "============================= ========================" << std::endl;
 	Mat R1_5pt, R2_5pt, tvec_5pt, rvec1_5pt, rvec2_5pt;
 	decomposeEssentialMat(E, R1_5pt, R2_5pt, tvec_5pt);
 	Rodrigues(R1_5pt, rvec1_5pt);
@@ -2005,6 +1875,19 @@ void FishEyeCorrectionPoint(Point2d *Points, double omega, double DistCtrX, doub
 		Points[iPoint].x = x_u + DistCtrX, Points[iPoint].y = y_u + DistCtrY;
 	}
 }
+void FishEyeCorrectionPoint(vector<Point2f> &Points, double omega, double DistCtrX, double DistCtrY)
+{
+	double x, y, ru, rd, x_u, y_u, t;
+	int npts = Points.size();
+	for (int iPoint = 0; iPoint < npts; iPoint++)
+	{
+		x = Points[iPoint].x - DistCtrX, y = Points[iPoint].y - DistCtrY;
+		ru = sqrt(x*x + y*y), rd = tan(ru*omega) / 2 / tan(omega / 2);
+		t = rd / ru;
+		x_u = t*x, y_u = t*y;
+		Points[iPoint].x = x_u + DistCtrX, Points[iPoint].y = y_u + DistCtrY;
+	}
+}
 void FishEyeCorrectionPoint(vector<Point2d> &Points, double omega, double DistCtrX, double DistCtrY)
 {
 	double x, y, ru, rd, x_u, y_u, t;
@@ -2195,7 +2078,7 @@ void LensDistortionPoint(Point2d *img_point, double *K, double *distortion, int 
 		double s0 = distortion[5], s1 = distortion[6];
 
 		double radial = 1 + a0*r2 + a1*r4 + a2*r6;
-		double tangential_x = p0*(r2 + 2.0*X2) + 2.0*p1*XY;
+		double tangential_x = 2.0*p1*XY + p0*(r2 + 2.0*X2);
 		double tangential_y = p1*(r2 + 2.0*Y2) + 2.0*p0*XY;
 		double prism_x = s0*r2;
 		double prism_y = s1*r2;
@@ -2226,7 +2109,7 @@ void LensDistortionPoint(vector<Point2d> &img_point, double *K, double *distorti
 		double s0 = distortion[5], s1 = distortion[6];
 
 		double radial = 1 + a0*r2 + a1*r4 + a2*r6;
-		double tangential_x = p0*(r2 + 2.0*X2) + 2.0*p1*XY;
+		double tangential_x = 2.0*p1*XY + p0*(r2 + 2.0*X2);
 		double tangential_y = p1*(r2 + 2.0*Y2) + 2.0*p0*XY;
 		double prism_x = s0*r2;
 		double prism_y = s1*r2;
@@ -2261,8 +2144,9 @@ void CC_Calculate_xcn_ycn_from_i_j(double i, double j, double &xcn, double &ycn,
 		r2 = xcn*xcn + ycn*ycn, r4 = r2*r2, r6 = r2*r4, x2 = xcn*xcn, y2 = ycn*ycn, xy = xcn*ycn;
 
 		radial = 1.0 + a0*r2 + a1*r4 + a2*r6;
-		tangential_x = p0*(r2 + 2.0*x2) + 2.0*p1*xy;
-		tangential_y = p1*(r2 + 2.0*y2) + 2.0*p0*xy;
+		 tangential_x = 2.0*p1*xy + p0*(r2 + 2.0*x2);
+		 tangential_y = p1*(r2 + 2.0*y2) + 2.0*p0*xy;
+
 		prism_x = s0*r2;
 		prism_y = s1*r2;
 
@@ -2286,6 +2170,22 @@ void LensCorrectionPoint(Point2d *uv, double *K, double *distortion, int npts)
 	for (int ii = 0; ii < npts; ii++)
 	{
 		CC_Calculate_xcn_ycn_from_i_j(uv[ii].x, uv[ii].y, xcn, ycn, A, distortion, 0);
+
+		uv[ii].x = A[0] * xcn + A[2] * ycn + A[3];
+		uv[ii].y = A[1] * ycn + A[4];
+	}
+
+	return;
+}
+void LensCorrectionPoint(vector<Point2f> &uv, double *K, double *distortion)
+{
+	double u, v, xcn, ycn, A[] = { K[0], K[4], K[1], K[2], K[5] };
+
+	int npts = uv.size();
+	for (int ii = 0; ii < npts; ii++)
+	{
+		u = uv[ii].x, v = uv[ii].y;
+		CC_Calculate_xcn_ycn_from_i_j(u, v, xcn, ycn, A, distortion, 0);
 
 		uv[ii].x = A[0] * xcn + A[2] * ycn + A[3];
 		uv[ii].y = A[1] * ycn + A[4];
@@ -4487,7 +4387,50 @@ void Stereo_Triangulation(Point2d *pts1, Point2d *pts2, double *P1, double *P2, 
 
 	return;
 }
-void TwoViewTriangulationQualityCheck(Point2d *pts1, Point2d *pts2, Point3d *WC, double *P1, double *P2, double *K1, double *K2, double *distortion1, double *distortion2, bool *GoodPoints, int npts, double thresh)
+void Stereo_Triangulation(vector<Point2d> pts1, vector<Point2d> pts2, double *P1, double *P2, vector<Point3d> &WC)
+{
+	int ii;
+	double A[12], B[4], u1, v1, u2, v2;
+	double p11 = P1[0], p12 = P1[1], p13 = P1[2], p14 = P1[3];
+	double p21 = P1[4], p22 = P1[5], p23 = P1[6], p24 = P1[7];
+	double p31 = P1[8], p32 = P1[9], p33 = P1[10], p34 = P1[11];
+
+	double P11 = P2[0], P12 = P2[1], P13 = P2[2], P14 = P2[3];
+	double P21 = P2[4], P22 = P2[5], P23 = P2[6], P24 = P2[7];
+	double P31 = P2[8], P32 = P2[9], P33 = P2[10], P34 = P2[11];
+
+	for (ii = 0; ii < (int)pts1.size(); ii++)
+	{
+		u1 = pts1[ii].x, v1 = pts1[ii].y;
+		u2 = pts2[ii].x, v2 = pts2[ii].y;
+
+		A[0] = p11 - u1*p31;
+		A[1] = p12 - u1*p32;
+		A[2] = p13 - u1*p33;
+		A[3] = p21 - v1*p31;
+		A[4] = p22 - v1*p32;
+		A[5] = p23 - v1*p33;
+
+		A[6] = P11 - u2*P31;
+		A[7] = P12 - u2*P32;
+		A[8] = P13 - u2*P33;
+		A[9] = P21 - v2*P31;
+		A[10] = P22 - v2*P32;
+		A[11] = P23 - v2*P33;
+
+		B[0] = u1*p34 - p14;
+		B[1] = v1*p34 - p24;
+		B[2] = u2*P34 - P14;
+		B[3] = v2*P34 - P24;
+
+		QR_Solution_Double(A, B, 4, 3);
+
+		WC.push_back(Point3d(B[0], B[1], B[2]));
+	}
+
+	return;
+}
+void TwoViewTriangulationQualityCheck(Point2d *pts1, Point2d *pts2, Point3d *WC, double *P1, double *P2, bool *GoodPoints, double thresh, int npts, double *K1, double *K2, double *distortion1, double *distortion2)
 {
 	double u1, v1, u2, v2, denum, reprojectionError;
 	for (int ii = 0; ii < npts; ii++)
@@ -5263,6 +5206,7 @@ void NviewTriangulationNonLinear(double *P, double *Point2D, double *Point3D, do
 
 	return;
 }
+
 double MinDistanceTwoLines(double *P0, double *u, double *Q0, double *v, double &s, double &t)
 {
 	//http://geomalgorithms.com/a07-_distance.html
@@ -5382,6 +5326,252 @@ bool SelectRefCam_InitPatchFixedScale(Point3d *expansionVec, double &scale3D, Po
 	return true;
 }
 
+int CameraProjector3DReconstructionFmat(CameraData *AllViewsInfo, Point2d *PCcorres, Point3d *ThreeD, int *CameraPair, int nCams, int nProjectors, int nPpts)
+{
+	int ii, jj;
+
+	//Estimate fundamental matrix
+	vector<int> pid;
+	vector<Point2f>imgpts1, imgpts2;
+	for (ii = 0; ii < nPpts*nProjectors; ii++)
+	{
+		if (PCcorres[CameraPair[0] + ii*(nProjectors + nCams)].x > 0.0001 && PCcorres[CameraPair[1] + ii*(nProjectors + nCams)].x > 0.0001)
+		{
+			pid.push_back(ii);
+			imgpts1.push_back(Point2f(PCcorres[CameraPair[0] + ii*(nProjectors + nCams)].x, PCcorres[CameraPair[0] + ii*(nProjectors + nCams)].y));
+			imgpts2.push_back(Point2f(PCcorres[CameraPair[1] + ii*(nProjectors + nCams)].x, PCcorres[CameraPair[1] + ii*(nProjectors + nCams)].y));
+		}
+	}
+	Mat cvF = findFundamentalMat(imgpts1, imgpts2, FM_8POINT, 0.1, 0.99);
+
+	cout << "Fmat: " << endl;
+	cout << cvF << endl << endl;
+
+	//Extract essential matrix
+	Mat cvK1(3, 3, CV_64F, AllViewsInfo[CameraPair[0]].K);
+	Mat cvK2(3, 3, CV_64F, AllViewsInfo[CameraPair[1]].K);
+
+	Mat cvE = cvK2.t()*cvF*cvK1;
+	cout << "Emat: " << endl;
+	cout << cvE << endl << endl;
+
+	//Decompose into RT
+	SVD svd(cvE, SVD::MODIFY_A);
+	double m = (svd.w.at<double>(0) + svd.w.at<double>(1)) / 2;
+	double nW[9] = { m, 0, 0, 0, m, 0, 0, 0, 0 };
+	Mat cvnW(3, 3, CV_64F, nW);
+	Mat cvnE = svd.u*cvnW*svd.vt;
+	SVD svd2(cvnE, SVD::MODIFY_A);
+
+	cvnW.at<double>(0, 0) = 0.0, cvnW.at<double>(0, 1) = -1.0, cvnW.at<double>(0, 2) = 0.0;
+	cvnW.at<double>(1, 0) = 1.0, cvnW.at<double>(1, 1) = 0.0, cvnW.at<double>(1, 2) = 0.0;
+	cvnW.at<double>(2, 0) = 0.0, cvnW.at<double>(2, 1) = 0.0, cvnW.at<double>(2, 2) = 1.0;
+
+	//Make sure we return rotation matrices with det(R) == 1
+	Mat UWVt = svd2.u*cvnW*svd2.vt;
+	if (determinant(UWVt) < 0.0)
+	{
+		cvnW.at<double>(0, 0) = 0.0, cvnW.at<double>(0, 1) = 1.0, cvnW.at<double>(0, 2) = 0.0;
+		cvnW.at<double>(1, 0) = -1.0, cvnW.at<double>(1, 1) = 0.0, cvnW.at<double>(1, 2) = 0.0;
+		cvnW.at<double>(2, 0) = 0.0, cvnW.at<double>(2, 1) = 0.0, cvnW.at<double>(2, 2) = -1.0;
+	}
+
+	UWVt = svd2.u*cvnW*svd2.vt;
+	Mat UWtVt = svd2.u*cvnW.t()*svd2.vt;
+
+	double maxU = 0.0;
+	for (ii = 0; ii < 3; ii++)
+		if (maxU < abs(svd2.u.at<double>(ii, 2)))
+			maxU = abs(svd2.u.at<double>(ii, 2));
+
+	//There are 4 possible cases
+	double RT2[] = { UWVt.at<double>(0, 0), UWVt.at<double>(0, 1), UWVt.at<double>(0, 2), svd2.u.at<double>(0, 2) / maxU,
+		UWVt.at<double>(1, 0), UWVt.at<double>(1, 1), UWVt.at<double>(1, 2), svd2.u.at<double>(1, 2) / maxU,
+		UWVt.at<double>(2, 0), UWVt.at<double>(2, 1), UWVt.at<double>(2, 2), svd2.u.at<double>(2, 2) / maxU,
+
+		UWVt.at<double>(0, 0), UWVt.at<double>(0, 1), UWVt.at<double>(0, 2), -svd2.u.at<double>(0, 2) / maxU,
+		UWVt.at<double>(1, 0), UWVt.at<double>(1, 1), UWVt.at<double>(1, 2), -svd2.u.at<double>(1, 2) / maxU,
+		UWVt.at<double>(2, 0), UWVt.at<double>(2, 1), UWVt.at<double>(2, 2), -svd2.u.at<double>(2, 2) / maxU,
+
+		UWtVt.at<double>(0, 0), UWtVt.at<double>(0, 1), UWtVt.at<double>(0, 2), svd2.u.at<double>(0, 2) / maxU,
+		UWtVt.at<double>(1, 0), UWtVt.at<double>(1, 1), UWtVt.at<double>(1, 2), svd2.u.at<double>(1, 2) / maxU,
+		UWtVt.at<double>(2, 0), UWtVt.at<double>(2, 1), UWtVt.at<double>(2, 2), svd2.u.at<double>(2, 2) / maxU,
+
+		UWtVt.at<double>(0, 0), UWtVt.at<double>(0, 1), UWtVt.at<double>(0, 2), -svd2.u.at<double>(0, 2) / maxU,
+		UWtVt.at<double>(1, 0), UWtVt.at<double>(1, 1), UWtVt.at<double>(1, 2), -svd2.u.at<double>(1, 2) / maxU,
+		UWtVt.at<double>(2, 0), UWtVt.at<double>(2, 1), UWtVt.at<double>(2, 2), -svd2.u.at<double>(2, 2) / maxU };
+
+	//Cherality check
+	double P1[12], P2[48], RT1[] = { 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0 };
+	mat_mul(AllViewsInfo[CameraPair[0]].K, RT1, P1, 3, 3, 4);
+	for (ii = 0; ii < 4; ii++)
+		mat_mul(AllViewsInfo[CameraPair[1]].K, RT2 + 12 * ii, P2 + 12 * ii, 3, 3, 4);
+
+	Point2d pt1, pt2; Point3d WC;
+	int positivePoints[4] = { 0, 0, 0, 0 }, RTid[4] = { 0, 1, 2, 3 };
+	for (ii = 0; ii < imgpts1.size(); ii++)
+	{
+		pt1.x = imgpts1.at(ii).x, pt1.y = imgpts1.at(ii).y;
+		pt2.x = imgpts2.at(ii).x, pt2.y = imgpts2.at(ii).y;
+
+		for (jj = 0; jj<4; jj++)
+		{
+			//Stereo_Triangulation2(&pt1, &pt2, P1, P2+12*jj, &WC); 
+			if (WC.z > 0.0)
+				positivePoints[jj] ++;
+		}
+	}
+
+	Quick_Sort_Int(positivePoints, RTid, 0, 3);
+	if (positivePoints[3] < 10)
+	{
+		cout << "Something wrong. Only a few points have positve z values" << endl;
+		return 1;
+	}
+
+	/*for(ii=0; ii<6; ii++)
+	AllViewsInfo[CameraPair[0]].rt[ii] = 0.0;
+
+	Mat rvec, Rmat = (Mat_<double>(3,3) << RT2[RTid[3]*12], RT2[RTid[3]*12+1], RT2[RTid[3]*12+2],
+	RT2[RTid[3]*12+4], RT2[RTid[3]*12+5], RT2[RTid[3]*12+6],
+	RT2[RTid[3]*12+8], RT2[RTid[3]*12+9], RT2[RTid[3]*12+10]);
+	Rodrigues( Rmat, rvec);
+
+	for(ii=0; ii<3; ii++)
+	{
+	AllViewsInfo[CameraPair[1]].RT[ii] = rvec.at<double>(ii);
+	AllViewsInfo[CameraPair[1]].RT[ii+3] = RT2[RTid[3]*12+3+4*ii];
+	}
+
+	//Triangulate
+	for(ii = 0; ii<nPpts*nProjectors; ii++ )
+	{
+	if(PCcorres[CameraPair[0]+ii*(nProjectors+nCams)].x > 0.0001 && PCcorres[CameraPair[1]+ii*(nProjectors+nCams)].x > 0.0001)
+	;//Stereo_Triangulation(&PCcorres[CameraPair[0]+ii*(nProjectors+nCams)], &PCcorres[CameraPair[1]+ii*(nProjectors+nCams)], P1, P2+12*RTid[3], &ThreeD[ii]);
+	else
+	{
+	ThreeD[ii].x = 0.0, ThreeD[ii].y = 0.0, ThreeD[ii].z = 0.0;
+	}
+	}*/
+	return 0;
+}
+int TwoViewsClean3DReconstructionFmat(CameraData &View1, CameraData &View2, vector<Point2d>imgpts1, vector<Point2d> imgpts2, vector<Point3d> &P3D)
+{
+	//Assuming correspondences are perfect. Note that points are not undistorted
+	int ii, jj;
+	int npts = (int)imgpts1.size();
+
+	if (View1.LensModel == RADIAL_TANGENTIAL_PRISM)
+		LensCorrectionPoint(imgpts1, View1.K, View1.distortion);
+	else
+		FishEyeCorrectionPoint(imgpts1, View1.distortion[0], View1.distortion[1], View1.distortion[2]);
+
+	if (View2.LensModel == RADIAL_TANGENTIAL_PRISM)
+		LensCorrectionPoint(imgpts2, View2.K, View2.distortion);
+	else
+		FishEyeCorrectionPoint(imgpts2, View2.distortion[0], View2.distortion[1], View2.distortion[2]);
+
+	//Estimate fundamental matrix
+	vector<int> pid;
+	Mat cvF = findFundamentalMat(imgpts1, imgpts2, FM_8POINT, 3.0);
+
+	//cout << "Fmat: " << cvF << endl << endl;
+
+	//Extract essential matrix
+	Mat cvK1(3, 3, CV_64F, View1.K);
+	Mat cvK2(3, 3, CV_64F, View2.K);
+
+	Mat cvE = cvK2.t()*cvF*cvK1;
+	//cout << "Emat: " << cvE << endl << endl;
+
+	//Decompose into RT
+	SVD svd(cvE, SVD::MODIFY_A);
+	double m = (svd.w.at<double>(0) + svd.w.at<double>(1)) / 2;
+	double nW[9] = { m, 0, 0, 0, m, 0, 0, 0, 0 };
+	Mat cvnW(3, 3, CV_64F, nW);
+	Mat cvnE = svd.u*cvnW*svd.vt;
+	SVD svd2(cvnE, SVD::MODIFY_A);
+
+	cvnW.at<double>(0, 0) = 0.0, cvnW.at<double>(0, 1) = -1.0, cvnW.at<double>(0, 2) = 0.0;
+	cvnW.at<double>(1, 0) = 1.0, cvnW.at<double>(1, 1) = 0.0, cvnW.at<double>(1, 2) = 0.0;
+	cvnW.at<double>(2, 0) = 0.0, cvnW.at<double>(2, 1) = 0.0, cvnW.at<double>(2, 2) = 1.0;
+
+	//Make sure we return rotation matrices with det(R) == 1
+	Mat UWVt = svd2.u*cvnW*svd2.vt;
+	if (determinant(UWVt) < 0.0)
+	{
+		cvnW.at<double>(0, 0) = 0.0, cvnW.at<double>(0, 1) = 1.0, cvnW.at<double>(0, 2) = 0.0;
+		cvnW.at<double>(1, 0) = -1.0, cvnW.at<double>(1, 1) = 0.0, cvnW.at<double>(1, 2) = 0.0;
+		cvnW.at<double>(2, 0) = 0.0, cvnW.at<double>(2, 1) = 0.0, cvnW.at<double>(2, 2) = -1.0;
+	}
+
+	UWVt = svd2.u*cvnW*svd2.vt;
+	Mat UWtVt = svd2.u*cvnW.t()*svd2.vt;
+
+	double maxU = 0.0;
+	for (ii = 0; ii < 3; ii++)
+		if (maxU < abs(svd2.u.at<double>(ii, 2)))
+			maxU = abs(svd2.u.at<double>(ii, 2));
+
+	//There are 4 possible cases
+	double RT2[] = { UWVt.at<double>(0, 0), UWVt.at<double>(0, 1), UWVt.at<double>(0, 2), svd2.u.at<double>(0, 2) / maxU,
+		UWVt.at<double>(1, 0), UWVt.at<double>(1, 1), UWVt.at<double>(1, 2), svd2.u.at<double>(1, 2) / maxU,
+		UWVt.at<double>(2, 0), UWVt.at<double>(2, 1), UWVt.at<double>(2, 2), svd2.u.at<double>(2, 2) / maxU,
+
+		UWVt.at<double>(0, 0), UWVt.at<double>(0, 1), UWVt.at<double>(0, 2), -svd2.u.at<double>(0, 2) / maxU,
+		UWVt.at<double>(1, 0), UWVt.at<double>(1, 1), UWVt.at<double>(1, 2), -svd2.u.at<double>(1, 2) / maxU,
+		UWVt.at<double>(2, 0), UWVt.at<double>(2, 1), UWVt.at<double>(2, 2), -svd2.u.at<double>(2, 2) / maxU,
+
+		UWtVt.at<double>(0, 0), UWtVt.at<double>(0, 1), UWtVt.at<double>(0, 2), svd2.u.at<double>(0, 2) / maxU,
+		UWtVt.at<double>(1, 0), UWtVt.at<double>(1, 1), UWtVt.at<double>(1, 2), svd2.u.at<double>(1, 2) / maxU,
+		UWtVt.at<double>(2, 0), UWtVt.at<double>(2, 1), UWtVt.at<double>(2, 2), svd2.u.at<double>(2, 2) / maxU,
+
+		UWtVt.at<double>(0, 0), UWtVt.at<double>(0, 1), UWtVt.at<double>(0, 2), -svd2.u.at<double>(0, 2) / maxU,
+		UWtVt.at<double>(1, 0), UWtVt.at<double>(1, 1), UWtVt.at<double>(1, 2), -svd2.u.at<double>(1, 2) / maxU,
+		UWtVt.at<double>(2, 0), UWtVt.at<double>(2, 1), UWtVt.at<double>(2, 2), -svd2.u.at<double>(2, 2) / maxU };
+
+	//Cherality check
+	double P1[12], P2[48], RT1[] = { 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0 };
+	mat_mul(View1.K, RT1, P1, 3, 3, 4);
+	for (ii = 0; ii < 4; ii++)
+		mat_mul(View2.K, RT2 + 12 * ii, P2 + 12 * ii, 3, 3, 4);
+
+	Point3d p3d;
+	int positivePoints[4] = { 0, 0, 0, 0 }, RTid[4] = { 0, 1, 2, 3 };
+	for (ii = 0; ii < imgpts1.size(); ii++)
+	{
+		for (jj = 0; jj<4; jj++)
+		{
+			Stereo_Triangulation(&imgpts1[ii], &imgpts2[ii], P1, P2 + 12 * jj, &p3d);
+			if (p3d.z > 0.0)
+				positivePoints[jj] ++;
+		}
+	}
+
+	Quick_Sort_Int(positivePoints, RTid, 0, 3);
+	if (positivePoints[3] < 10)
+	{
+		cout << "Something wrong. Only a few points have positve z values" << endl;
+		return 1;
+	}
+
+	//Finalize data
+	for (ii = 0; ii < 3; ii++)
+		View1.rt[ii] = 0.0, View1.rt[ii + 3] = 0.0;
+
+	Mat rvec, Rmat = (Mat_<double>(3, 3) << RT2[RTid[3] * 12], RT2[RTid[3] * 12 + 1], RT2[RTid[3] * 12 + 2],
+		RT2[RTid[3] * 12 + 4], RT2[RTid[3] * 12 + 5], RT2[RTid[3] * 12 + 6],
+		RT2[RTid[3] * 12 + 8], RT2[RTid[3] * 12 + 9], RT2[RTid[3] * 12 + 10]);
+	Rodrigues(Rmat, rvec);
+
+	for (ii = 0; ii < 3; ii++)
+		View2.rt[ii] = rvec.at<double>(ii), View2.rt[ii + 3] = RT2[RTid[3] * 12 + 3 + 4 * ii];
+
+	//Triangulate
+	Stereo_Triangulation(imgpts1, imgpts2, P1, P2 + 12 * RTid[3], P3D);
+
+	return 0;
+}
 int TwoCameraReconstruction(char *Path, CameraData *AllViewsInfo, int nviews, int timeID, vector<int> cumulativePts, vector<int>*PointCorres, vector<int> availViews, Point3d *ThreeD)
 {
 	vector<int>CorrespondencesID, SelectedIndex;
@@ -5449,7 +5639,7 @@ int TwoCameraReconstruction(char *Path, CameraData *AllViewsInfo, int nviews, in
 		P1[ii] = cvP1.at<double>(ii), P2[ii] = cvP2.at<double>(ii);
 
 	double threshold = AllViewsInfo[0].threshold;
-	TwoViewTriangulationQualityCheck(pts1, pts2, t3D, P1, P2, NULL, NULL, NULL, NULL, goodPoints, npts, threshold);
+	TwoViewTriangulationQualityCheck(pts1, pts2, t3D, P1, P2, goodPoints, threshold, npts, NULL, NULL, NULL, NULL);
 
 	int count = 0;
 	for (int ii = 0; ii < npts; ii++)
@@ -5511,7 +5701,7 @@ void DetermineDevicePose(double *K, double *distortion, int LensModel, double *R
 	if (distortionCorrected == 0 && LensModel == RADIAL_TANGENTIAL_PRISM)
 		LensCorrectionPoint(pts, K, distortion, npts);
 	else if (distortionCorrected == 0 && LensModel == FISHEYE)
-		FishEyeCorrectionPoint(pts, distortion[0], distortion[1], distortion[2]);
+		FishEyeCorrectionPoint(pts, distortion[0], distortion[1], distortion[2], npts);
 
 	for (ii = 0; ii < npts; ii++)
 	{
@@ -5536,6 +5726,53 @@ void DetermineDevicePose(double *K, double *distortion, int LensModel, double *R
 	ninliers = Inliers.rows;
 	//cout << rvec << endl;
 	//cout << tvec << endl;
+
+	Mat Rmat(3, 3, CV_64F);
+	Rodrigues(rvec, Rmat);
+	for (ii = 0; ii < 9; ii++)
+		R[ii] = Rmat.at<double>(ii);
+	for (ii = 0; ii < 3; ii++)
+		T[ii] = tvec.at<double>(ii);
+
+	return;
+}
+void DetermineDevicePose(double *K, double *distortion, int LensModel, double *R, double *T, vector<Point2d> pts, vector<Point3d> ThreeD, int distortionCorrected, double thresh, int &ninliers, bool directMethod)
+{
+	int ii, npts = (int)pts.size();
+	Mat cvpts(npts, 2, CV_32F), cv3D(npts, 3, CV_32F);
+
+	if (distortionCorrected == 0 && LensModel == RADIAL_TANGENTIAL_PRISM)
+		LensCorrectionPoint(pts, K, distortion);
+	else if (distortionCorrected == 0 && LensModel == FISHEYE)
+		FishEyeCorrectionPoint(pts, distortion[0], distortion[1], distortion[2]);
+
+	for (ii = 0; ii < npts; ii++)
+	{
+		cvpts.at<float>(ii, 0) = pts[ii].x, cvpts.at<float>(ii, 1) = pts[ii].y;
+		cv3D.at<float>(ii, 0) = ThreeD[ii].x, cv3D.at<float>(ii, 1) = ThreeD[ii].y, cv3D.at<float>(ii, 2) = ThreeD[ii].z;
+	}
+
+	/*FILE *fp = fopen("C:/temp/_2d3dCorres.txt", "w+");
+	for (int ii = 0; ii < npts; ii++)
+	fprintf(fp, "%.6f %.6f %.6f %.6f %.6f\n", cvpts.at<float>(ii, 0), cvpts.at<float>(ii, 1), cv3D.at<float>(ii,0), cv3D.at<float>(ii,1), cv3D.at<float>(ii,2));
+	fclose(fp);*/
+
+	Mat cvK = Mat(3, 3, CV_32F), rvec(1, 3, CV_32F), tvec(1, 3, CV_32F);
+	for (ii = 0; ii < 9; ii++)
+		cvK.at<float>(ii) = (float)K[ii];
+
+	if (directMethod)
+		solvePnP(cv3D, cvpts, cvK, Mat(), rvec, tvec, false, ITERATIVE);
+	else
+	{
+		Mat Inliers;
+		double ProThresh = 0.995, PercentInlier = 0.4;
+		int iterMax = (int)(log(1.0 - ProThresh) / log(1.0 - pow(PercentInlier, 4)) + 0.5); //log(1-eps) / log(1 - (inlier%)^min_pts_requires)
+		solvePnPRansac(cv3D, cvpts, cvK, Mat(), rvec, tvec, false, iterMax, thresh, npts*PercentInlier, Inliers, CV_EPNP);// CV_ITERATIVE);
+
+		ninliers = Inliers.rows;
+	}
+	cout << rvec << endl<< tvec << endl;
 
 	Mat Rmat(3, 3, CV_64F);
 	Rodrigues(rvec, Rmat);
@@ -5647,7 +5884,7 @@ int AddNewViewReconstruction(char *Path, CameraData *AllViewsInfo, int nviews, i
 	bool *goodPoints = new bool[npts];
 	Point3d *_t3D = new Point3d[npts];
 	Stereo_Triangulation(pts1, pts2, P1, P2, _t3D, npts);
-	TwoViewTriangulationQualityCheck(pts1, pts2, _t3D, P1, P2, NULL, NULL, NULL, NULL, goodPoints, npts, threshold);
+	TwoViewTriangulationQualityCheck(pts1, pts2, _t3D, P1, P2, goodPoints, threshold, npts, NULL, NULL, NULL, NULL);
 
 	int count = 0;
 	for (int ii = 0; ii < npts; ii++)
@@ -5705,6 +5942,11 @@ struct IdealReprojectionError {
 	static ceres::CostFunction* Create(const double observed_x, const double observed_y)
 	{
 		return (new ceres::AutoDiffCostFunction<IdealReprojectionError, 2, 5, 6, 3>(new IdealReprojectionError(observed_x, observed_y)));
+	}
+
+	static ceres::CostFunction* CreateNumerDiff(const double observed_x, const double observed_y)
+	{
+		return (new ceres::NumericDiffCostFunction<IdealReprojectionError, ceres::CENTRAL, 2, 5, 6, 3>(new IdealReprojectionError(observed_x, observed_y)));
 	}
 
 	double observed_x;
@@ -5840,8 +6082,8 @@ struct PinholeReprojectionError {
 		// Apply second and fourth order radial distortion.
 		T xcn2 = xcn*xcn, ycn2 = ycn*ycn, xycn = xcn*ycn, r2 = xcn2 + ycn2, r4 = r2*r2, r6 = r2*r4;
 		T radial = T(1.0) + distortion[0] * r2 + distortion[1] * r4 + distortion[2] * r6;
-		T tangentialX = T(2.0)*distortion[3] * xycn + distortion[4] * (r2 + T(2.0)*xcn2);
-		T tangentailY = distortion[3] * (r2 + T(2.0)*ycn2) + T(2.0)*distortion[4] * xycn;
+		T tangentialX = T(2.0)*distortion[4] * xycn + distortion[3] * (r2 + T(2.0)*xcn2);
+		T tangentailY = distortion[4] * (r2 + T(2.0)*ycn2) + T(2.0)*distortion[3] * xycn;
 		T prismX = distortion[5] * r2;
 		T prismY = distortion[6] * r2;
 		T xcn_ = radial*xcn + tangentialX + prismX;
@@ -5860,6 +6102,12 @@ struct PinholeReprojectionError {
 	static ceres::CostFunction* Create(const double observed_x, const double observed_y) {
 		return (new ceres::AutoDiffCostFunction<PinholeReprojectionError, 2, 5, 7, 6, 3>(new PinholeReprojectionError(observed_x, observed_y)));
 	}
+
+	static ceres::CostFunction* CreateNumerDiff(const double observed_x, const double observed_y)
+	{
+		return (new ceres::NumericDiffCostFunction<PinholeReprojectionError, ceres::CENTRAL, 2, 5, 7, 6, 3>(new PinholeReprojectionError(observed_x, observed_y)));
+	}
+
 	double observed_x, observed_y;
 };
 struct PinholeReprojectionError2 {
@@ -5880,8 +6128,8 @@ struct PinholeReprojectionError2 {
 		// Apply second and fourth order radial distortion.
 		T xcn2 = xcn*xcn, ycn2 = ycn*ycn, xycn = xcn*ycn, r2 = xcn2 + ycn2, r4 = r2*r2, r6 = r2*r4;
 		T radial = T(1.0) + Radial12[0] * r2 + Radial12[1] * r4 + Radial3[0] * r6;
-		T tangentialX = T(2.0)*Tangential12[0] * xycn + Tangential12[1] * (r2 + T(2.0)*xcn2);
-		T tangentailY = Tangential12[0] * (r2 + T(2.0)*ycn2) + T(2.0)*Tangential12[1] * xycn;
+		T tangentialX = T(2.0)*Tangential12[1] * xycn + Tangential12[0] * (r2 + T(2.0)*xcn2);
+		T tangentailY = Tangential12[1] * (r2 + T(2.0)*ycn2) + T(2.0)*Tangential12[0] * xycn;
 		T prismX = Prism[0] * r2;
 		T prismY = Prism[1] * r2;
 		T xcn_ = radial*xcn + tangentialX + prismX;
@@ -5920,8 +6168,8 @@ struct PinholeReprojectionError3 {
 		// Apply second and fourth order radial distortion.
 		T xcn2 = xcn*xcn, ycn2 = ycn*ycn, xycn = xcn*ycn, r2 = xcn2 + ycn2, r4 = r2*r2, r6 = r2*r4;
 		T radial = T(1.0) + Radial12[0] * r2 + Radial12[1] * r4 + Radial3[0] * r6;
-		T tangentialX = T(2.0)*Tangential12[0] * xycn + Tangential12[1] * (r2 + T(2.0)*xcn2);
-		T tangentailY = Tangential12[0] * (r2 + T(2.0)*ycn2) + T(2.0)*Tangential12[1] * xycn;
+		T tangentialX = T(2.0)*Tangential12[1] * xycn + Tangential12[0] * (r2 + T(2.0)*xcn2);
+		T tangentailY = Tangential12[1] * (r2 + T(2.0)*ycn2) + T(2.0)*Tangential12[0] * xycn;
 		T prismX = Prism[0] * r2;
 		T prismY = Prism[1] * r2;
 		T xcn_ = radial*xcn + tangentialX + prismX;
@@ -5983,8 +6231,8 @@ void PinholeReprojectionDebug2(double *fxfy, double *skew, double* u0v0, double 
 	// Apply second and fourth order radial distortion.
 	double xcn2 = xcn*xcn, ycn2 = ycn*ycn, xycn = xcn*ycn, r2 = xcn2 + ycn2, r4 = r2*r2, r6 = r2*r4;
 	double radial = 1.0 + Radial12[0] * r2 + Radial12[1] * r4 + Radial3[0] * r6;
-	double tangentialX = 2.0*Tangential12[0] * xycn + Tangential12[1] * (r2 + 2.0*xcn2);
-	double tangentailY = Tangential12[0] * (r2 + 2.0*ycn2) + 2.0*Tangential12[1] * xycn;
+	double tangentialX = 2.0*Tangential12[1] * xycn + Tangential12[0] * (r2 + 2.0*xcn2);
+	double tangentailY = Tangential12[1] * (r2 + 2.0*ycn2) + 2.0*Tangential12[0] * xycn;
 	double prismX = Prism[0] * r2;
 	double prismY = Prism[1] * r2;
 	double xcn_ = radial*xcn + tangentialX + prismX;
@@ -6303,17 +6551,17 @@ void IncrementalBundleAdjustment(char *Path, int nviews, int timeID, int maxKeyp
 
 	return;
 }
-int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, int nviews, vector<int> sharedIntrinsics, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, int distortionCorrected, bool debug)
+int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<int> AvailViews, vector<int> sharedIntrinsics, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, bool fixFirstCamPose, int distortionCorrected, bool debug, bool silent)
 {
 	char Fname[200]; FILE *fp = 0;
-	int ii, viewID, npts = Vxyz.size();
+	int viewID, nviews = AvailViews.size(), npts = Vxyz.size();
 	double residuals[2];
 
 	double *xyz = new double[npts * 3];
-	for (ii = 0; ii < npts; ii++)
+	for (int ii = 0; ii < npts; ii++)
 		xyz[3 * ii] = Vxyz[ii].x, xyz[3 * ii + 1] = Vxyz[ii].y, xyz[3 * ii + 2] = Vxyz[ii].z;
 
-	printf("Set up BA ...");
+	printf("Set up BA (%d views) ...", (int)AvailViews.size());
 	ceres::Problem problem;
 
 	if (debug)
@@ -6321,8 +6569,8 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 
 	bool *discard3Dpoint = new bool[npts];
 	vector<bool> *Good = new vector<bool>[npts];
-	for (int jj = 0; jj < npts; jj++)
-		discard3Dpoint[jj] = false, Good[ii].reserve(viewIdAll3D[ii].size());
+	for (int ii = 0; ii < npts; ii++)
+		discard3Dpoint[ii] = false, Good[ii].reserve(viewIdAll3D[ii].size());
 
 	int nBadCounts = 0, goodCount = 0;
 	vector<double> ReProjectionErrorX; ReProjectionErrorX.reserve(npts);
@@ -6332,7 +6580,9 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 	int refCam = -1, nProjections = 0, nPossibleProjections = 0;;
 	for (int jj = 0; jj < npts; jj++)
 	{
-		for (ii = 0; ii < viewIdAll3D[jj].size(); ii++)
+		if (abs(xyz[3 * jj]) + abs(xyz[3 * jj + 1]) + abs(xyz[3 * jj + 2]) < LIMIT3D)
+			continue;
+		for (int ii = 0; ii < viewIdAll3D[jj].size(); ii++)
 		{
 			viewID = viewIdAll3D[jj].at(ii);
 			vector<int>::iterator it;
@@ -6379,7 +6629,7 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 
 		//Discard point 
 		int count = 0;
-		for (ii = 0; ii < viewIdAll3D[jj].size(); ii++)
+		for (int ii = 0; ii < viewIdAll3D[jj].size(); ii++)
 			if (Good[jj].at(ii) == true)
 				count++;
 
@@ -6394,7 +6644,7 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 		bool once = true;
 		int validViewcount = 0;
 		double pointErrX = 0.0, pointErrY = 0.0;
-		for (ii = 0; ii < viewIdAll3D[jj].size(); ii++)
+		for (int ii = 0; ii < viewIdAll3D[jj].size(); ii++)
 		{
 			if (!Good[jj].at(ii))
 				continue;
@@ -6428,6 +6678,8 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 					problem.SetParameterBlockConstant(camera[viewID].distortion);
 				if (fixPose)
 					problem.SetParameterBlockConstant(camera[viewID].rt);
+				if (fixFirstCamPose && viewID == AvailViews[0])
+					problem.SetParameterBlockConstant(camera[AvailViews[0]].rt);
 
 				if (distortionCorrected == 1)
 					IdealReprojectionDebug(camera[viewID].intrinsic, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
@@ -6458,7 +6710,10 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 					problem.SetParameterBlockConstant(camera[refCam].intrinsic);
 				if (distortionCorrected == 0 && fixDistortion)
 					problem.SetParameterBlockConstant(camera[refCam].distortion);
-
+				if (fixPose)
+					problem.SetParameterBlockConstant(camera[viewID].rt);
+				if (fixFirstCamPose && viewID == AvailViews[0])
+					problem.SetParameterBlockConstant(camera[AvailViews[0]].rt);
 
 				if (distortionCorrected == 1)
 					IdealReprojectionDebug(camera[refCam].intrinsic, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
@@ -6481,7 +6736,7 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 				fprintf(fp, "V %d: %.4f %.4f %.4f %.4f ", viewID, uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y, residuals[0], residuals[1]);
 			}
 		}
-		if (validViewcount > 0)
+		if (validViewcount > 1)
 		{
 			goodCount++;
 			ReProjectionErrorX.push_back(sqrt(pointErrX / validViewcount));
@@ -6508,7 +6763,7 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 	fclose(fp);
 
 	printf("%d good points\n", goodCount);
-	printf("\n %d bad points with maximum reprojection error of (%.2f %.2f) \n", nBadCounts, maxOutlierX, maxOutlierY);
+	printf("%d bad points with maximum reprojection error of (%.2f %.2f) \n", nBadCounts, maxOutlierX, maxOutlierY);
 
 	double miniX = *min_element(ReProjectionErrorX.begin(), ReProjectionErrorX.end());
 	double maxiX = *max_element(ReProjectionErrorX.begin(), ReProjectionErrorX.end());
@@ -6518,21 +6773,27 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 	double maxiY = *max_element(ReProjectionErrorY.begin(), ReProjectionErrorY.end());
 	double avgY = MeanArray(ReProjectionErrorY);
 	double stdY = sqrt(VarianceArray(ReProjectionErrorY, avgY));
-	printf("Reprojection error before BA \n Min: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
+	printf("Reprojection error before BA:\nMin: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
 
-	printf("...run BA...\n");
 	ceres::Solver::Options options;
 	options.num_threads = 4;
-	options.max_num_iterations = 30;
+	options.max_num_iterations = 500;
 	options.linear_solver_type = ceres::DENSE_SCHUR;
-	options.minimizer_progress_to_stdout = true;
+	options.minimizer_progress_to_stdout = silent ? false : true;
 	options.trust_region_strategy_type = ceres::DOGLEG;
 	options.use_nonmonotonic_steps = false;
 
 	ceres::Solver::Summary summary;
 	ceres::Solve(options, &problem, &summary);
-	//std::cout << summary.BriefReport() << "\n";
-	std::cout << summary.FullReport() << "\n";
+	if (silent)
+		std::cout << summary.BriefReport() << "\n";
+	else
+		std::cout << summary.FullReport() << "\n";
+
+	//options.num_threads = 1;
+	//options.max_num_iterations = 1;
+	//ceres::Solve(options, &problem, &summary);
+	//std::cout << summary.FullReport() << "\n";
 
 	//Store refined parameters
 	for (int ii = 0; ii < nviews; ii++)
@@ -6540,13 +6801,15 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 		vector<int>::iterator it;
 		it = find(sharedIntrinsics.begin(), sharedIntrinsics.end(), viewID);
 		if (it != sharedIntrinsics.end()) //shared cameras
-			CopyCamereInfo(camera[refCam], camera[ii], false);
+			CopyCamereInfo(camera[refCam], camera[AvailViews[ii]], false);
 	}
 
-	GetKFromIntrinsic(camera, nviews);
-	GetRTFromrt(camera, nviews);
 	for (int ii = 0; ii < nviews; ii++)
-		AssembleP(camera[ii].K, camera[ii].R, camera[ii].T, camera[ii].P);
+	{
+		GetKFromIntrinsic(camera[AvailViews[ii]]);
+		GetRTFromrt(camera[AvailViews[ii]]);
+		AssembleP(camera[AvailViews[ii]].K, camera[AvailViews[ii]].R, camera[AvailViews[ii]].T, camera[AvailViews[ii]].P);
+	}
 	for (int ii = 0; ii < npts; ii++)
 		Vxyz.at(ii) = Point3d(xyz[3 * ii], xyz[3 * ii + 1], xyz[3 * ii + 2]);
 
@@ -6555,17 +6818,17 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 		sprintf(Fname, "C:/temp/reprojectionA.txt"), fp = fopen(Fname, "w+");
 	for (int jj = 0; jj < npts; jj++)
 	{
-		if (abs(xyz[3 * jj]) > LIMIT3D && !discard3Dpoint[jj])
+		if (abs(xyz[3 * jj]) + abs(xyz[3 * jj + 1]) + abs(xyz[3 * jj + 2]) > LIMIT3D && !discard3Dpoint[jj])
 		{
 			bool once = true;
 			int validViewcount = 0;
 			double pointErrX = 0.0, pointErrY = 0.0;
 			for (int ii = 0; ii < viewIdAll3D[jj].size(); ii++)
 			{
-				if (!Good[jj].at(ii))
+				if (!Good[jj][ii])
 					continue;
 
-				viewID = viewIdAll3D[jj].at(ii);
+				viewID = viewIdAll3D[jj][ii];
 				if (distortionCorrected == 1)
 					IdealReprojectionDebug(camera[viewID].intrinsic, camera[viewID].rt, uvAll3D[jj].at(ii), Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
 				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
@@ -6601,7 +6864,7 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  Vxyz, vector < v
 	maxiY = *max_element(ReProjectionErrorY.begin(), ReProjectionErrorY.end());
 	avgY = MeanArray(ReProjectionErrorY);
 	stdY = sqrt(VarianceArray(ReProjectionErrorY, avgY));
-	printf("Reprojection error after BA \n Min: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
+	printf("Reprojection error after BA:\nMin: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
 
 	delete[]xyz, delete[]discard3Dpoint;
 	delete[]Good;
@@ -6815,7 +7078,10 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, vector< i
 	printf("Found %d (%d+) points.\n", goodNDplus, NDplus);
 
 	printf("Runing BA on the triangulated points...");
-	AllViewsBA(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, nviews, sharedCam, true, true, true, distortionCorrected, true);
+	vector<int> AvailViews; AvailViews.reserve(nviews);
+	for (int ii = 0; ii < nviews; ii++)
+		AvailViews.push_back(ii);
+	AllViewsBA(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, AvailViews, sharedCam, true, true, true, false, distortionCorrected, true);
 
 	/*//Corpus intrinisc is not useful anymore
 	if (CameraToScan != -1)
@@ -6834,9 +7100,6 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, vector< i
 		rgb = AllRGB[viewi].at(pi);
 		corpusData.rgb.push_back(rgb);
 	}
-	vector<int> AvailViews; AvailViews.reserve(nviews);
-	for (int ii = 0; ii < nviews; ii++)
-		AvailViews.push_back(ii);
 	SaveCurrentSfmGL(Path, corpusData.camera, AvailViews, corpusData.xyz, corpusData.rgb); // OK for visualization
 
 	//Prune corpus for bad points
@@ -7271,7 +7534,7 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 	for (ii = 0; ii < npts; ii++)
 		xyz[3 * ii] = Vxyz[ii].x, xyz[3 * ii + 1] = Vxyz[ii].y, xyz[3 * ii + 2] = Vxyz[ii].z;
 
-	//printf("Set up Pose BA ...");
+	printf("Set up Pose BA ...");
 	ceres::Problem problem;
 
 	int nBadCounts = 0, validPtsCount = 0;
@@ -7354,15 +7617,15 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 
 #pragma omp critical
 	{
-		printf("\n %d bad points (%d good points) detected with maximum reprojection error of (%.2f %.2f) \n", nBadCounts, validPtsCount, maxOutlierX, maxOutlierY);
-		printf("Reprojection error before BA \n Min: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
+		printf("%d good points\n", validPtsCount);
+		printf("%d bad points detected with maximum reprojection error of (%.2f %.2f) \n", nBadCounts, maxOutlierX, maxOutlierY);
+		printf("Reprojection error before BA:\nMin: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
 	}
 
 	if (nBadCounts > npts * 80 / 100)
 		return 1;
 
 	//Set up constant parameters:
-	printf("...set up fixed parameters ...");
 	if (distortionCorrected == 1)
 		problem.SetParameterBlockConstant(camera.intrinsic);
 	else
@@ -7376,11 +7639,9 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 		if (Good.at(ii))
 			problem.SetParameterBlockConstant(xyz + 3 * ii);
 
-
-	//printf("...run \n");
 	ceres::Solver::Options options;
 	options.num_threads = 4;
-	options.max_num_iterations = 30;
+	options.max_num_iterations = 300;
 	options.linear_solver_type = ceres::DENSE_SCHUR;
 	options.minimizer_progress_to_stdout = false;
 	options.trust_region_strategy_type = ceres::DOGLEG;
@@ -7451,7 +7712,7 @@ int PoseBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d
 	avgY = MeanArray(ReProjectionErrorY);
 	stdY = sqrt(VarianceArray(ReProjectionErrorY, avgY));
 #pragma omp critical
-	printf("Reprojection error after BA \n Min: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
+	printf("Reprojection error after BA:\nMin: (%.2f, %.2f) Max: (%.2f,%.2f) Mean: (%.2f,%.2f) Std: (%.2f,%.2f)\n\n", miniX, miniY, maxiX, maxiY, avgX, avgY, stdX, stdY);
 
 	delete[]xyz;
 	return 0;
@@ -9005,15 +9266,15 @@ int BundleAdjustDomeMultiNVM(char *Path, int nNvm, int maxPtsPerNvM, bool fixInt
 	}
 	else
 	{
-		#ifdef _WIN32
+#ifdef _WIN32
 		options.linear_solver_type = ceres::ITERATIVE_SCHUR;
 		options.preconditioner_type = ceres::PreconditionerType::JACOBI;
 		options.visibility_clustering_type = ceres::VisibilityClusteringType::CANONICAL_VIEWS;
 		options.sparse_linear_algebra_library_type = ceres::SUITE_SPARSE;
 		options.minimizer_progress_to_stdout = true;
-		#else
+#else
 		printf("Error! Only works for windows\n");
-		#endif
+#endif
 	}
 
 	ceres::Solver::Summary summary;

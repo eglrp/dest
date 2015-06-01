@@ -9,18 +9,18 @@ using namespace std;
 //SiftGPU 
 #define SIFTGPU_DLL_RUNTIME// Load at runtime if the above macro defined comment the macro above to use static linking
 #ifdef _WIN32
-	#ifdef SIFTGPU_DLL_RUNTIME
-		#define WIN32_LEAN_AND_MEAN
-		#include <windows.h>
-		#define FREE_MYLIB FreeLibrary
-		#define GET_MYPROC GetProcAddress
-	#endif
+#ifdef SIFTGPU_DLL_RUNTIME
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#define FREE_MYLIB FreeLibrary
+#define GET_MYPROC GetProcAddress
+#endif
 #else
-	#ifdef SIFTGPU_DLL_RUNTIME
-		#include <dlfcn.h>
-		#define FREE_MYLIB dlclose
-		#define GET_MYPROC dlsym
-	#endif
+#ifdef SIFTGPU_DLL_RUNTIME
+#include <dlfcn.h>
+#define FREE_MYLIB dlclose
+#define GET_MYPROC dlsym
+#endif
 #endif
 
 void makeDir(char *Fname)
@@ -236,7 +236,7 @@ void dec2bin(int dec, int*bin, int num_bin)
 	}
 
 	if (digit > num_bin)
-		cout<<'\a';
+		cout << '\a';
 
 	for (ii = 0; ii < num_bin - digit; ii++)
 		bin[ii] = 0;
@@ -3355,7 +3355,6 @@ void ShowDataAsImage(char *fname, double *Img, int width, int height, int nchann
 	return;
 }
 
-
 void RemoveNoiseMedianFilter(float *data, int width, int height, int ksize, float thresh)
 {
 	Mat src = Mat(height, width, CV_32F, data);
@@ -3402,7 +3401,6 @@ void RemoveNoiseMedianFilter(double *data, int width, int height, int ksize, flo
 		delete[]fdata;
 	return;
 }
-
 
 bool WriteKPointsBinary(char *fn, vector<KeyPoint>kpts, bool silent)
 {
@@ -5202,7 +5200,6 @@ void GetrtFromRT(CameraData &cam)
 
 	return;
 }
-
 void GetrtFromRT(double *rt, double *R, double *T)
 {
 	Mat Rmat(3, 3, CV_64F), r(3, 1, CV_64F);
@@ -5231,12 +5228,42 @@ void GetRCGL(CameraData &camInfo)
 	camInfo.camCenter[0] = -center[0], camInfo.camCenter[1] = -center[1], camInfo.camCenter[2] = -center[2];
 	return;
 }
+void GetRCGL(double *R, double *T, double *Rgl, double *C)
+{
+	double iR[9], center[3];
+	mat_invert(R, iR);
+
+	Rgl[0] = R[0], Rgl[1] = R[1], Rgl[2] = R[2], Rgl[3] = 0.0;
+	Rgl[4] = R[3], Rgl[5] = R[4], Rgl[6] = R[5], Rgl[7] = 0.0;
+	Rgl[8] = R[6], Rgl[9] = R[7], Rgl[10] = R[8], Rgl[11] = 0.0;
+	Rgl[12] = 0, Rgl[13] = 0, Rgl[14] = 0, Rgl[15] = 1.0;
+
+	mat_mul(iR, T, center, 3, 3, 1);
+	C[0] = -center[0], C[1] = -center[1], C[2] = -center[2];
+	return;
+}
 void GetTfromC(CameraData &camInfo)
 {
 	double T[3];
 
 	mat_mul(camInfo.R, camInfo.camCenter, T, 3, 3, 1);
 	camInfo.T[0] = -T[0], camInfo.T[1] = -T[1], camInfo.T[2] = -T[2];
+	return;
+}
+void InvertCameraPose(double *R, double *T, double *iR, double *iT)
+{
+	double RT[16] = { R[0], R[1], R[2], T[0],
+		R[3], R[4], R[5], T[1],
+		R[6], R[7], R[8], T[2],
+		0, 0, 0, 1 };
+
+	double iRT[16];
+	mat_invert(RT, iRT, 4);
+
+	iR[0] = iRT[0], iR[1] = iRT[1], iR[2] = iRT[2], iT[0] = iRT[3];
+	iR[3] = iRT[4], iR[4] = iRT[5], iR[5] = iRT[6], iT[1] = iRT[7];
+	iR[6] = iRT[8], iR[7] = iRT[9], iR[8] = iRT[10], iT[2] = iRT[11];
+
 	return;
 }
 void CopyCamereInfo(CameraData Src, CameraData &Dst, bool Extrinsic)
@@ -5383,6 +5410,30 @@ void AssembleP(double *K, double *R, double *T, double *P)
 void AssembleP(double *K, double *RT, double *P)
 {
 	mat_mul(K, RT, P, 3, 3, 4);
+	return;
+}
+
+void ComputeInterCamerasPose(double *R1, double *T1, double *R2, double *T2, double *R21, double *T21)
+{
+	//C1 = RT21*C1
+	double RT1[16] = { R1[0], R1[1], R1[2], T1[0],
+		R1[3], R1[4], R1[5], T1[1],
+		R1[6], R1[7], R1[8], T1[2],
+		0, 0, 0, 1 };
+	double RT2[16] = { R2[0], R2[1], R2[2], T2[0],
+		R2[3], R2[4], R2[5], T2[1],
+		R2[6], R2[7], R2[8], T2[2],
+		0, 0, 0, 1 };
+
+	double iRT2[16], RT21[16];
+	mat_invert(RT2, iRT2, 4);
+
+	mat_mul(RT1, iRT2, RT21, 4, 4, 4);
+
+	R21[0] = RT21[0], R21[1] = RT21[1], R21[2] = RT21[2], T21[0] = RT21[3];
+	R21[3] = RT21[4], R21[4] = RT21[5], R21[5] = RT21[6], T21[1] = RT21[7];
+	R21[6] = RT21[8], R21[7] = RT21[9], R21[8] = RT21[10], T21[2] = RT21[11];
+
 	return;
 }
 
@@ -6976,6 +7027,7 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 			mat_invert(VideoInfo.VideoInfo[frameID].K, VideoInfo.VideoInfo[frameID].invK);
 
 			VideoInfo.VideoInfo[frameID].LensModel = LensType, VideoInfo.VideoInfo[frameID].threshold = 3.0, VideoInfo.VideoInfo[frameID].ninlierThresh = 40;
+			VideoInfo.VideoInfo[frameID].valid = true;
 		}
 
 		if (LensType == RADIAL_TANGENTIAL_PRISM)
@@ -7039,6 +7091,42 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 	}
 	fclose(fp);
 	//READ FROM VIDEO POSE: END
+
+	return 0;
+}
+int WriteVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime)
+{
+	//WRITE  INTRINSIC
+	char Fname[200]; sprintf(Fname, "%s/_Intrinsic_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "w+");
+	for (int fid = startTime; fid <= stopTime; fid++)
+	{
+		if (!VideoInfo.VideoInfo[fid].valid)
+			continue;
+		fprintf(fp, "%d %d %d %d %.8f %.8f %.8f %.8f %.8f  ", fid, VideoInfo.VideoInfo[fid].LensModel, VideoInfo.VideoInfo[fid].width, VideoInfo.VideoInfo[fid].height,
+			VideoInfo.VideoInfo[fid].K[0], VideoInfo.VideoInfo[fid].K[4], VideoInfo.VideoInfo[fid].K[1], VideoInfo.VideoInfo[fid].K[2], VideoInfo.VideoInfo[fid].K[5]);
+
+		if (VideoInfo.VideoInfo[fid].LensModel == RADIAL_TANGENTIAL_PRISM)
+			fprintf(fp, "%.6f %.6f %.6f %.6f %.6f %.6f %.6f ", VideoInfo.VideoInfo[fid].distortion[0], VideoInfo.VideoInfo[fid].distortion[1], VideoInfo.VideoInfo[fid].distortion[2],
+			VideoInfo.VideoInfo[fid].distortion[3], VideoInfo.VideoInfo[fid].distortion[4], VideoInfo.VideoInfo[fid].distortion[5], VideoInfo.VideoInfo[fid].distortion[6]);
+		else
+			fprintf(fp, "%.8f %.8f %.8f \n", VideoInfo.VideoInfo[fid].distortion[0], VideoInfo.VideoInfo[fid].distortion[1], VideoInfo.VideoInfo[fid].distortion[2]);
+	}
+	fclose(fp);
+	
+	//WRITE VIDEO POSE
+	sprintf(Fname, "%s/_CamPose_%d.txt", Path, viewID); fp = fopen(Fname, "w+");
+	for (int fid = startTime; fid <= stopTime; fid++)
+	{
+		if (!VideoInfo.VideoInfo[fid].valid)
+			continue;
+
+		fprintf(fp, "%d %.16f %.16f %.16f 0.0 %.16f %.16f %.16f 0.0 %.16f %.16f %.16f 0.0 0.0 0.0 0.0 1.0 %.16f %.16f %.16f ", fid, 
+			VideoInfo.VideoInfo[fid].R[0], VideoInfo.VideoInfo[fid].R[1], VideoInfo.VideoInfo[fid].R[2],
+			VideoInfo.VideoInfo[fid].R[3], VideoInfo.VideoInfo[fid].R[4], VideoInfo.VideoInfo[fid].R[5],
+			VideoInfo.VideoInfo[fid].R[6], VideoInfo.VideoInfo[fid].R[7], VideoInfo.VideoInfo[fid].R[8],
+			VideoInfo.VideoInfo[fid].camCenter[0], VideoInfo.VideoInfo[fid].camCenter[1], VideoInfo.VideoInfo[fid].camCenter[2]);
+	}
+	fclose(fp);
 
 	return 0;
 }
@@ -11518,7 +11606,7 @@ int CleanCheckBoardDetection(char *Path, int viewID, int startF, int stopF)
 	double u, v;
 	vector<Point2d> cvPts;
 	vector<ImgPtEle> *AllPts = NULL;
-	for (int fid = startF; fid < stopF; fid++)
+	for (int fid = startF; fid <= stopF; fid++)
 	{
 		sprintf(Fname, "%s/%d/Corner/CV2_%d.txt", Path, viewID, fid); FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
@@ -11545,7 +11633,7 @@ int CleanCheckBoardDetection(char *Path, int viewID, int startF, int stopF)
 	{
 		fprintf(fp, "%d %d ", ii, AllPts[ii].size());
 		for (int jj = 0; jj < AllPts[ii].size(); jj++)
-			fprintf(fp, "%d %.3f %.3f ", AllPts[ii][jj].frameID, AllPts[ii][jj].pt2D.x - 1, AllPts[ii][jj].pt2D.y - 1);//matlab
+			fprintf(fp, "%d %.8f %.8f ", AllPts[ii][jj].frameID, AllPts[ii][jj].pt2D.x - 1, AllPts[ii][jj].pt2D.y - 1);//matlab
 		//fprintf(fp, "%d %.3f %.3f ", AllPts[ii][jj].frameID, AllPts[ii][jj].pt2D.x, AllPts[ii][jj].pt2D.y );//C++
 		fprintf(fp, "%\n");
 	}
@@ -11685,7 +11773,7 @@ int TrajectoryTrackingDriver(char *Path)
 {
 	char Fname[512];
 	int FrameOffset[8] = { 0, -1, 15, 1, 8, 3, 5, -2 };
-	sprintf(Fname, "%s/Track2D", Path), 
+	sprintf(Fname, "%s/Track2D", Path), makeDir(Fname);
 	for (int viewID = 0; viewID < 8; viewID++)
 	{
 		sprintf(Fname, "%s/Track2D/%d.txt", Path, viewID); FILE *fp = fopen(Fname, "w+"); fclose(fp);
@@ -11951,6 +12039,240 @@ int TemplateMatchingECCDriver(char *Path, double *H, int matchingType, int MaxIt
 
 	return 0;
 }
+
+
+void calcBoardCornerPositions(Size boardSize, float squareSize, vector<Point3f>& corners, int boardType)
+{
+	corners.clear();
+
+	switch (boardType)
+	{
+	case 1://CHESSBOARD:
+	case 2://CIRCLES_GRID:
+		for (int i = 0; i < boardSize.height; ++i)
+			for (int j = 0; j < boardSize.width; ++j)
+				corners.push_back(Point3f(float(j*squareSize), float(i*squareSize), 0));
+		break;
+
+	case 3://ASYMMETRIC_CIRCLES_GRID
+		for (int i = 0; i < boardSize.height; i++)
+			for (int j = 0; j < boardSize.width; j++)
+				corners.push_back(Point3f(float((2 * j + i % 2)*squareSize), float(i*squareSize), 0));
+		break;
+	default:
+		break;
+	}
+}
+double computeReprojectionErrors(const vector<vector<Point3f> >& objectPoints, const vector<vector<Point2f> >& imagePoints, const vector<Mat>& rvecs, const vector<Mat>& tvecs, const Mat& cameraMatrix, const Mat& distCoeffs, vector<float>& perViewErrors)
+{
+	vector<Point2f> imagePoints2;
+	int i, totalPoints = 0;
+	double totalErr = 0, err;
+	perViewErrors.resize(objectPoints.size());
+
+	for (i = 0; i < (int)objectPoints.size(); ++i)
+	{
+		projectPoints(Mat(objectPoints[i]), rvecs[i], tvecs[i], cameraMatrix, distCoeffs, imagePoints2);
+		err = norm(Mat(imagePoints[i]), Mat(imagePoints2), CV_L2);
+
+		int n = (int)objectPoints[i].size();
+		perViewErrors[i] = (float)std::sqrt(err*err / n);
+		totalErr += err*err;
+		totalPoints += n;
+	}
+
+	return std::sqrt(totalErr / totalPoints);
+}
+int SingleCameraCalibration(char *Path, int camID, int nimages, int bw, int bh, bool hasPoint, int step, float squareSize, int calibrationPattern, int width, int height, bool showUndistorsed)
+{
+	int calibFlag = 0;
+	calibFlag |= CV_CALIB_FIX_K4 | CV_CALIB_FIX_K5; //CV_CALIB_FIX_PRINCIPAL_POINT
+
+	char Fname[512];
+	const Scalar RED(0, 0, 255);
+	Size imageSize, boardSize(bw, bh);
+
+	vector<int>ValidFrame;
+	vector<Point2f> pointBuf;
+	vector<vector<Point2f> > imagePoints;
+	vector<vector<Point3f> > objectPoints(1);
+
+	vector<Mat> rvecs, tvecs;
+	Mat cameraMatrix = Mat::eye(3, 3, CV_64F), distCoeffs = Mat::zeros(8, 1, CV_64F);
+
+	//Get 2d points
+	if (!hasPoint)
+	{
+		Mat view, viewGray;
+		for (int ii = 0; ii < nimages; ii++)
+		{
+			sprintf(Fname, "%s/%d/%d.png", Path, camID, ii*step);
+			view = imread(Fname);
+			if (view.empty())
+				continue;
+
+			imageSize = view.size();  // Format input image.
+			pointBuf.clear();
+
+			bool found;
+			switch (calibrationPattern) // Find feature points on the input format
+			{
+			case 1: //Checkerboard
+				found = findChessboardCorners(view, boardSize, pointBuf, CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_FAST_CHECK | CV_CALIB_CB_NORMALIZE_IMAGE);
+				break;
+			case 2: //CIRCLES_GRID :
+				found = findCirclesGrid(view, boardSize, pointBuf);
+				break;
+			case 3://ASYMMETRIC_CIRCLES_GRID:
+				found = findCirclesGrid(view, boardSize, pointBuf, CALIB_CB_ASYMMETRIC_GRID);
+				break;
+			}
+
+			if (found)
+			{
+				if (calibrationPattern == 1) // improve the found corners' coordinate accuracy for chessboard
+				{
+					cvtColor(view, viewGray, COLOR_BGR2GRAY);
+					cornerSubPix(viewGray, pointBuf, Size(11, 11), Size(-1, -1), TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
+				}
+
+				imagePoints.push_back(pointBuf);
+				drawChessboardCorners(view, boardSize, Mat(pointBuf), found);
+
+				sprintf(Fname, "%s/%d/Corner/CV2_%d.txt", Path, camID, ii*step); FILE *fp = fopen(Fname, "w+");
+				for (int jj = 0; jj < bw*bh; jj++)
+					fprintf(fp, "%f %f ", pointBuf[jj].x, pointBuf[jj].y);
+				fclose(fp);
+			}
+
+			int baseLine = 0;
+			sprintf(Fname, "Frame: %d/%d", ii*step + 1, nimages / step);
+			Size textSize = getTextSize(Fname, 1, 1, 1, &baseLine);
+			Point textOrigin(view.cols - 2 * textSize.width - 10, view.rows - 2 * baseLine - 10);
+			putText(view, Fname, textOrigin, 1, 1, RED);
+
+			imshow("Image View", view);
+			if (waitKey(10) == 27)
+				break;
+
+			ValidFrame.push_back(ii*step);
+			pointBuf.clear();
+		}
+	}
+	else
+	{
+		float u, v;
+		for (int ii = 0; ii < nimages; ii++)
+		{
+			sprintf(Fname, "%s/%d/Corner/CV2_%d.txt", Path, camID, ii*step); FILE *fp = fopen(Fname, "r");
+			if (fp == NULL)
+				continue;
+			for (int jj = 0; jj < bw*bh; jj++)
+			{
+				fscanf(fp, "%f %f ", &u, &v);
+				pointBuf.push_back(Point2f(u-1, v-1));
+			}
+			fclose(fp);
+
+			imagePoints.push_back(pointBuf);
+
+			ValidFrame.push_back(ii*step);
+			pointBuf.clear();
+		}
+
+		imageSize.width = width, imageSize.height = height;
+	}
+
+	//Calibration routine:
+	switch (calibrationPattern)//Create 3D pattern
+	{
+	case 1://CHESSBOARD:
+	case 2://CIRCLES_GRID:
+		if (1)//Matlab detection
+			for (int i = 0; i < boardSize.width; ++i)
+				for (int j = 0; j < boardSize.height; ++j)
+					objectPoints[0].push_back(Point3f(float(i*squareSize), float(j*squareSize), 0));
+		else//OpenCV detection
+			for (int i = 0; i < boardSize.height; ++i)
+				for (int j = 0; j < boardSize.width; ++j)
+					objectPoints[0].push_back(Point3f(float(j*squareSize), float(i*squareSize), 0));
+		break;
+
+	case 3://ASYMMETRIC_CIRCLES_GRID
+		for (int i = 0; i < boardSize.height; i++)
+			for (int j = 0; j < boardSize.width; j++)
+				objectPoints[0].push_back(Point3f(float((2 * j + i % 2)*squareSize), float(i*squareSize), 0));
+		break;
+	default:
+		break;
+	}
+
+	objectPoints.resize(imagePoints.size(), objectPoints[0]); 	//Make sure points size match
+
+	TermCriteria criteria = TermCriteria(TermCriteria::COUNT + TermCriteria::EPS, 300, DBL_EPSILON);
+	double rms = calibrateCamera(objectPoints, imagePoints, imageSize, cameraMatrix, distCoeffs, rvecs, tvecs, calibFlag, criteria);
+
+	vector<float> reprojErrs; //all reprojection error
+	double totalAvgErr = computeReprojectionErrors(objectPoints, imagePoints, rvecs, tvecs, cameraMatrix, distCoeffs, reprojErrs);
+
+#pragma omp critical
+	{
+		if (!(checkRange(cameraMatrix) && checkRange(distCoeffs)))
+		{
+			printf("Problem with camera %d calibration. Abort!", camID);
+			abort();
+		}
+		printf("Cam %d.  Avg reprojection error: %.3f\n", camID, totalAvgErr);
+		cout << cameraMatrix << "\t" << distCoeffs << endl;
+
+		//Save Data
+		sprintf(Fname, "%s/Intrinsic_%d.txt", Path, camID);	FILE *fp = fopen(Fname, "w+");
+		for (int ii = 0; ii < (int)ValidFrame.size(); ii++)
+			fprintf(fp, "%d 0 %d %d %.6f %.6f 0.0 %.6f %.6f  %.6f %.6f  %.6f %.6f %.6f 0.0 0.0\n", ValidFrame[ii], imageSize.width, imageSize.height, cameraMatrix.at<double>(0, 0), cameraMatrix.at<double>(1, 1), cameraMatrix.at<double>(0, 2), cameraMatrix.at<double>(1, 2),
+			distCoeffs.at<double>(0), distCoeffs.at<double>(1), distCoeffs.at<double>(4), distCoeffs.at<double>(2), distCoeffs.at<double>(3));
+		fclose(fp);
+
+		double  Rvec[3], RTmat[9], Rmat[9],T[3], Rgl[16], C[3];
+		sprintf(Fname, "%s/CamPose_%d.txt", Path, camID); fp = fopen(Fname, "w+");
+		for (int ii = 0; ii < (int)ValidFrame.size(); ii++)
+		{
+			for (int jj = 0; jj < 3; jj++)
+				Rvec[jj] = rvecs[ii].at<double>(jj), T[jj] = tvecs[ii].at<double>(jj);
+
+			ceres::AngleAxisToRotationMatrix(Rvec, RTmat); //actually return the transpose of what you get with rodrigues
+			mat_transpose(RTmat, Rmat, 3, 3);
+			GetRCGL(Rmat, T, Rgl, C);
+
+			fprintf(fp, "%d %.16f %.16f %.16f %.1f %.16f %.16f %.16f %.1f %.16f %.16f %.16f %.1f 0.0 0.0 0.0 1.0 %.16f %.16f %.16f\n",
+				ValidFrame[ii], Rgl[0], Rgl[1], Rgl[2], Rgl[3], Rgl[4], Rgl[5], Rgl[6], Rgl[7], Rgl[8], Rgl[9], Rgl[10], Rgl[11], C[0], C[1], C[2]);
+		}
+		fclose(fp);
+	}
+
+	//Visualization routine
+	if (!hasPoint && showUndistorsed)
+	{
+		Mat view, rview, map1, map2;
+		initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat(), getOptimalNewCameraMatrix(cameraMatrix, distCoeffs, imageSize, 1, imageSize, 0), imageSize, CV_16SC2, map1, map2);
+
+		for (int ii = 0; ii < nimages; ii++)
+		{
+			sprintf(Fname, "%s/%d/%d.png", Path, camID, ii);
+			view = imread(Fname);
+			if (view.empty())
+				continue;
+
+			remap(view, rview, map1, map2, INTER_LINEAR);
+			imshow("Image View", rview);
+			if (waitKey(500) == 27)
+				break;
+		}
+	}
+
+	return 0;
+}
+
+
 
 
 

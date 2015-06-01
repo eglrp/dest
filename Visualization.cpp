@@ -29,7 +29,7 @@ static bool g_bButton1Down = false, ReCenterNeeded = false, PickingMode = false,
 bool drawCorpusPoints = false, drawCorpusCameras = true, drawTimeVaryingCorpusPoints = false;
 bool drawTimeVaryingCameraPose = false, drawCameraTraject = false;
 bool drawTimeVarying3DPoints = false, drawTimeVarying3DPointsTraject = false, FullTrajectoryMode = false;
-bool drawNative3DTrajectory = true, drawNative3DTrajectoryOneInstance = false, IndiviualTrajectory = false, Trajectory_Time = true, EndTime = false;
+bool drawNative3DTrajectory = true, drawNative3DTrajectoryOneInstance = false, IndiviualTrajectory = false, Trajectory_Time = false, EndTime = false;
 static bool TimeVaryingPointsOne = true, TimeVaryingPointsTwo = false, Native3DTrajectoryOne = true;
 
 GLfloat PointsCentroid[3];
@@ -1202,7 +1202,7 @@ int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, b
 	ReadCurrentSfmGL(Path, drawPointColor, drawPatchNormal);
 	//ReadCurrent3DGL(Path, drawPointColor, drawPatchNormal, timeID, false);
 	//ReadCurrent3DGL2(Path, drawPointColor, drawPatchNormal, timeID, false);
-	PointsCentroid[0] = -84.6592407, PointsCentroid[1] = -676.020081, PointsCentroid[2] = 4086.22388;
+	//PointsCentroid[0] = -84.6592407, PointsCentroid[1] = -676.020081, PointsCentroid[2] = 4086.22388;
 
 	//Abitary trajectory input
 	Read3DTrajectory(Path);
@@ -1381,7 +1381,8 @@ void ReadCurrentSfmGL(char *path, bool drawPointColor, bool drawPatchNormal)
 		g_vis.CorpusPointColor.clear(), g_vis.CorpusPointColor.reserve(10e5);
 
 	Point3i iColor; Point3f fColor; Point3f t3d;
-	sprintf(Fname, "%s/Corpus/3dGL.xyz", path); fp = fopen(Fname, "r");
+	//sprintf(Fname, "%s/Corpus/3dGL.xyz", path); fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/3dGL.xyz", path); fp = fopen(Fname, "r");
 	if (fp == NULL)
 		printf("Cannot load %s\n", Fname);
 	else
@@ -1736,8 +1737,7 @@ void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime)
 	CamInfo temp;
 	for (int ii = 0; ii < nviews; ii++)
 	{
-		sprintf(Fname, "%s/CamPose_%d.txt", path, ii);
-		FILE *fp = fopen(Fname, "r");
+		sprintf(Fname, "%s/_CamPose_%d.txt", path, ii);		FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 		{
 			printf("Cannot load %s\n", Fname);

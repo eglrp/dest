@@ -71,9 +71,8 @@ struct Corpus
 	vector <vector<int> > viewIdAll3D; //3D -> visiable views index
 	vector <vector<int> > pointIdAll3D; //3D -> 2D index in those visible views
 	vector<vector<Point2d> > uvAll3D; //3D -> uv of that point in those visible views
+	vector<vector<Point2d> > uvAllViews; //all views valid 2D points
 	vector <vector<int> >threeDIdAllViews; //2D point in visible view -> 3D index
-	vector <vector<int> > orgtwoDIdAll3D; //visualsfm output order
-	vector<vector<Point2d> > uvAllViews;
 	Mat SiftDesc, SurfDesc;
 };
 struct CorpusandVideo

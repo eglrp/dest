@@ -16,7 +16,12 @@
 #include "ceres/ceres.h"
 #include "ceres/rotation.h"
 #include <opencv2/opencv.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/core/core.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/features2d/features2d.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
+
 #include "DataStructure.h"
 #include "ImagePro.h"
 #include "SiftGPU/src/SiftGPU/SiftGPU.h"
@@ -563,7 +568,9 @@ void GetrtFromRT(double *rt, double *R, double *T);
 void GetRTFromrt(CameraData *AllViewsParas, vector<int> AvailViews);
 void GetRTFromrt(CameraData *AllViewsParas, int nviews);
 void GetRCGL(CameraData &camInfo);
+void GetRCGL(double *R, double *T, double *Rgl, double *C);
 void GetTfromC(CameraData &camInfo);
+void InvertCameraPose(double *R, double *T, double *iR, double *iT);
 
 void GetRTFromrt(CameraData &camera);
 void GetRTFromrt(double *rt, double *R, double *T);
@@ -575,10 +582,11 @@ void AssembleP(double *K, double *RT, double *P);
 void AssembleP(double *K, double *R, double *T, double *P);
 void CopyCamereInfo(CameraData Src, CameraData &Dst, bool Extrinsic = true);
 
+void ComputeInterCamerasPose(double *R1, double *T1, double *R2, double *T2, double *R21, double *T21);
+
 void Rotation2Quaternion(double *R, double *q);
 void Quaternion2Rotation(double *q, double *R);
 void QuaternionLinearInterp(double *quad1, double *quad2, double *quadi, double u);
-void Rodrigues_trans(double *RT_vec, double *R_mat, bool vec2mat, double *dR_dm = NULL);
 
 double DistanceOfTwoPointsSfM(char *Path, int id1, int id2, int id3);
 
@@ -598,6 +606,7 @@ bool loadIndividualNVMforpose(char *Path, CameraData *CameraInfo, vector<int>ava
 int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel = RADIAL_TANGENTIAL_PRISM, int distortionCorrected = 1);
 int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime);
 int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime);
+int WriteVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime);
 void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID);
 void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime = 0);
 int DownSampleSpatialCalib(char *Path, int nviews, int startFrame, int stopFrame, int Factor);
@@ -655,4 +664,5 @@ int CleanUp2DTrackingByGradientConsistency(char *Path, int nviews, int ntrajects
 int DownSampleTracking(char *Path, int nviews, int ntrajects, int HighFrameRateFactor);
 int DeletePointsOf2DTracks(char *Path, int nCams, int npts);
 
+int SingleCameraCalibration(char *Path, int camID, int nimages, int bw, int bh, bool hasPoint, int step, float squareSize, int calibrationPattern, int width = 1920, int height = 1080, bool showUndistorsed = false);
 #endif

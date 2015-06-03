@@ -3827,7 +3827,7 @@ void GenerateMatchingTable(char *Path, int nviews, int timeID)
 			}
 		}
 	}
-	printf("Merged correspondences in %.2fs\n ", count3D, omp_get_wtime() - start);
+	printf("Merged correspondences in %.2fs\n ", omp_get_wtime() - start);
 
 	int count = 0, maxmatches = 0, npts = 0;
 	if (timeID < 0)
@@ -6551,7 +6551,7 @@ void IncrementalBundleAdjustment(char *Path, int nviews, int timeID, int maxKeyp
 
 	return;
 }
-int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<int> AvailViews, vector<int> sharedIntrinsics, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, bool fixFirstCamPose, int distortionCorrected, bool debug, bool silent)
+int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<int> AvailViews, vector<int> sharedIntrinsics, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, bool fixFirstCamPose, int distortionCorrected, int LossType, bool debug, bool silent)
 {
 	char Fname[200]; FILE *fp = 0;
 	int viewID, nviews = AvailViews.size(), npts = Vxyz.size();
@@ -6563,6 +6563,10 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < 
 
 	printf("Set up BA (%d views) ...", (int)AvailViews.size());
 	ceres::Problem problem;
+
+	ceres::LossFunction *loss_funcion = 0;
+	if (LossType == 1) //Huber
+		loss_funcion = new ceres::HuberLoss(2.0);
 
 	if (debug)
 		sprintf(Fname, "C:/temp/reprojectionB.txt"), fp = fopen(Fname, "w+");
@@ -6659,17 +6663,17 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < 
 				if (distortionCorrected == 1)
 				{
 					ceres::CostFunction* cost_function = IdealReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
-					problem.AddResidualBlock(cost_function, NULL, camera[viewID].intrinsic, camera[viewID].rt, &xyz[3 * jj]);
+					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].intrinsic, camera[viewID].rt, &xyz[3 * jj]);
 				}
 				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
 				{
 					ceres::CostFunction* cost_function = PinholeReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
-					problem.AddResidualBlock(cost_function, NULL, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
+					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
 				}
 				else
 				{
 					ceres::CostFunction* cost_function = FOVReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
-					problem.AddResidualBlock(cost_function, NULL, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
+					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
 				}
 
 				if (fixIntrinsicHD)
@@ -6693,17 +6697,17 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < 
 				if (distortionCorrected == 1)
 				{
 					ceres::CostFunction* cost_function = IdealReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
-					problem.AddResidualBlock(cost_function, NULL, camera[refCam].intrinsic, camera[viewID].rt, &xyz[3 * jj]);
+					problem.AddResidualBlock(cost_function, loss_funcion, camera[refCam].intrinsic, camera[viewID].rt, &xyz[3 * jj]);
 				}
 				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
 				{
 					ceres::CostFunction* cost_function = PinholeReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
-					problem.AddResidualBlock(cost_function, NULL, camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, &xyz[3 * jj]);
+					problem.AddResidualBlock(cost_function, loss_funcion, camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, &xyz[3 * jj]);
 				}
 				else
 				{
 					ceres::CostFunction* cost_function = FOVReprojectionError::Create(uvAll3D[jj].at(ii).x, uvAll3D[jj].at(ii).y);
-					problem.AddResidualBlock(cost_function, NULL, camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, &xyz[3 * jj]);
+					problem.AddResidualBlock(cost_function, loss_funcion, camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, &xyz[3 * jj]);
 				}
 
 				if (fixIntrinsicHD)
@@ -6790,11 +6794,6 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < 
 	else
 		std::cout << summary.FullReport() << "\n";
 
-	//options.num_threads = 1;
-	//options.max_num_iterations = 1;
-	//ceres::Solve(options, &problem, &summary);
-	//std::cout << summary.FullReport() << "\n";
-
 	//Store refined parameters
 	for (int ii = 0; ii < nviews; ii++)
 	{
@@ -6870,7 +6869,7 @@ int AllViewsBA(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < 
 	delete[]Good;
 	return 0;
 }
-int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, vector< int> sharedCam, int NDplus)
+int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, vector< int> sharedCam, int NDplus, int LossType)
 {
 	printf("Reading Corpus and camera info");
 	char Fname[200];
@@ -7081,7 +7080,7 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, vector< i
 	vector<int> AvailViews; AvailViews.reserve(nviews);
 	for (int ii = 0; ii < nviews; ii++)
 		AvailViews.push_back(ii);
-	AllViewsBA(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, AvailViews, sharedCam, true, true, true, false, distortionCorrected, true);
+	AllViewsBA(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, AvailViews, sharedCam, true, true, true, false, distortionCorrected, LossType, true);
 
 	/*//Corpus intrinisc is not useful anymore
 	if (CameraToScan != -1)
@@ -7745,7 +7744,7 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 		readsucces = ReadKPointsBinary(Fname, keypoints1);
 	if (!readsucces)
 	{
-		printf("%s does not have SIFT points. Please precompute it!\n");
+		printf("%s does not have SIFT points. Please precompute it!\n", Fname);
 		exit(1);
 	}
 
@@ -7780,7 +7779,7 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 	Mat descriptors1 = ReadDescriptorBinarySIFTGPU(Fname);
 	if (descriptors1.rows == 1)
 	{
-		printf("%s does not have SIFT points. Please precompute it!\n");
+		printf("%s does not have SIFT points. Please precompute it!\n", Fname);
 		exit(1);
 	}
 

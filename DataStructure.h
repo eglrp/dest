@@ -95,10 +95,10 @@ struct CamInfo
 };
 struct ImgPtEle
 {
-	int frameID, imWidth, imHeight;
+	int viewID, frameID, imWidth, imHeight;
 	Point2d pt2D;
 	Point3d pt3D;
-	double ray[3], camcenter[3], d;
+	double ray[3], camcenter[3], d, timeStamp;
 	double K[9], R[9], Quat[4], T[3], P[12], Q[6], u[2];
 };
 

@@ -15,7 +15,7 @@ static GLfloat g_nearPlane = 1.0*UnitScale, g_farPlane = 30000 * UnitScale;
 GLfloat CameraSize = 200.0f*UnitScale, pointSize = 5.0f*UnitScale, normalSize = 20.f*UnitScale, arrowThickness = .1f*UnitScale;
 static int g_Width = 1200, g_Height = 900, g_xClick = 0, g_yClick = 0, g_mouseYRotate = 0, g_mouseXRotate = 0;
 
-enum cam_mode { CAM_DEFAULT, CAM_ROTATE, CAM_ZOOM , CAM_PAN};
+enum cam_mode { CAM_DEFAULT, CAM_ROTATE, CAM_ZOOM, CAM_PAN };
 static cam_mode g_camMode = CAM_DEFAULT;
 GLfloat Red[3] = { 1, 0, 0 }, Green[3] = { 0, 1, 0 }, Blue[3] = { 0, 0, 1 }, White[3] = { 1, 1, 1 };
 vector<Point3f> RandTrajColor;
@@ -1202,7 +1202,7 @@ int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, b
 	ReadCurrentSfmGL(Path, drawPointColor, drawPatchNormal);
 	//ReadCurrent3DGL(Path, drawPointColor, drawPatchNormal, timeID, false);
 	//ReadCurrent3DGL2(Path, drawPointColor, drawPatchNormal, timeID, false);
-	//PointsCentroid[0] = -84.6592407, PointsCentroid[1] = -676.020081, PointsCentroid[2] = 4086.22388;
+	PointsCentroid[0] = -84.6592407, PointsCentroid[1] = -676.020081, PointsCentroid[2] = 4086.22388;
 
 	//Abitary trajectory input
 	Read3DTrajectory(Path);
@@ -1381,8 +1381,7 @@ void ReadCurrentSfmGL(char *path, bool drawPointColor, bool drawPatchNormal)
 		g_vis.CorpusPointColor.clear(), g_vis.CorpusPointColor.reserve(10e5);
 
 	Point3i iColor; Point3f fColor; Point3f t3d;
-	//sprintf(Fname, "%s/Corpus/3dGL.xyz", path); fp = fopen(Fname, "r");
-	sprintf(Fname, "%s/3dGL.xyz", path); fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/Corpus/3dGL.xyz", path); fp = fopen(Fname, "r");
 	if (fp == NULL)
 		printf("Cannot load %s\n", Fname);
 	else
@@ -1593,11 +1592,17 @@ int Read3DTrajectory(char *path, int trialID)
 	int npts = 0;
 	while (true)
 	{
-		//if (trialID == 0)
-		//	sprintf(Fname, "%s/ATrack_%d.txt", path, npts);
-		//else
-		//sprintf(Fname, "%s/ATrack_%d_%d.txt", path, pts, trialID);
-		sprintf(Fname, "%s/ATrack_%d_%d.txt", path, 5 * npts, trialID);
+		/*if (trialID == 0)
+		sprintf(Fname, "%s/ATrack_%d.txt", path, npts);
+		else
+		sprintf(Fname, "%s/ATrack_%d_%d.txt", path, npts, trialID);*/
+		if (npts == 0)
+			sprintf(Fname, "%s/ATrack_%d.txt", path, npts);
+		else
+			sprintf(Fname, "%s/ATrack_%d_.txt", path, npts - 1);
+		if (npts == 2)
+			break;
+
 		FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 		{
@@ -1605,10 +1610,10 @@ int Read3DTrajectory(char *path, int trialID)
 			break;
 		}
 		int count = 0, cID, fID;
-		//while (fscanf(fp, "%lf %lf %lf %lf %d %d", &x, &y, &z, &t, &cID, &fID) != EOF)
-		while (fscanf(fp, "%lf %lf %lf %lf", &x, &y, &z, &t) != EOF)
+		while (fscanf(fp, "%lf %lf %lf %lf %d %d", &x, &y, &z, &t, &cID, &fID) != EOF)
+			//while (fscanf(fp, "%lf %lf %lf %lf", &x, &y, &z, &t) != EOF)
 		{
-			cID = 0, fID = 0;
+			//cID = 0, fID = 0;
 			timeStamp[count] = t, camID[count] = cID, frameID[count] = fID;
 			P3dTemp[count].x = x, P3dTemp[count].y = y, P3dTemp[count].z = z;
 			count++;
@@ -1648,8 +1653,6 @@ int Read3DTrajectory(char *path, int trialID)
 
 		maxTime = max(maxTime, count);
 		npts++;
-		if (npts == 5)
-			break;
 	}
 
 	//Arrange all time instances in chronological order
@@ -1737,7 +1740,7 @@ void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime)
 	CamInfo temp;
 	for (int ii = 0; ii < nviews; ii++)
 	{
-		sprintf(Fname, "%s/_CamPose_%d.txt", path, ii);		FILE *fp = fopen(Fname, "r");
+		sprintf(Fname, "%s/CamPose_%d.txt", path, ii);		FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 		{
 			printf("Cannot load %s\n", Fname);

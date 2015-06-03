@@ -174,6 +174,8 @@ void mat_mul(double *aa, double *bb, double *out, int rowa, int col_row, int col
 void mat_add(double *aa, double *bb, double* cc, int row, int col, double scale_a = 1.0, double scale_b = 1.0);
 void mat_subtract(double *aa, double *bb, double* cc, int row, int col, double scale_a = 1.0, double scale_b = 1.0);
 void mat_transpose(double *in, double *out, int row_in, int col_in);
+void mat_mul_symetric(double *A, double *B, int row, int column);
+void mat_add_symetric(double *A, double * B, double *C, int row, int column);
 void mat_completeSym(double *mat, int size, bool upper = true);
 
 template <class myType>void RemoveEleFromArray(myType *Array, int neles, int eleID)

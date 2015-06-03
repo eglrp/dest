@@ -814,6 +814,38 @@ void mat_transpose(double *in, double *out, int row_in, int col_in)
 			out[ii*row_in + jj] = in[jj*col_in + ii];
 	return;
 }
+void mat_mul_symetric(double *A, double *B, int row, int column)
+{
+	for (int I = 0; I < row; I++)
+	{
+		for (int J = 0; J < row; J++)
+		{
+			if (J < I)
+				continue;
+
+			B[I*row + J] = 0.0;
+			for (int K = 0; K < column; K++)
+				B[I*row + J] += A[I*column + K] * A[J*column + K];
+		}
+	}
+
+	return;
+}
+void mat_add_symetric(double *A, double * B, double *C, int row, int column)
+{
+	for (int I = 0; I < row; I++)
+	{
+		for (int J = 0; J < column; J++)
+		{
+			if (J < I)
+				continue;
+
+			C[I*column + J] = A[I*column + J] + B[I*column + J];
+		}
+	}
+
+	return;
+}
 void mat_completeSym(double *mat, int size, bool upper)
 {
 	if (upper)
@@ -867,10 +899,7 @@ void LS_Solution_Double(double *lpA, double *lpB, int m, int n)
 		for (j = 0; j < n; j++)
 		{
 			for (i = 0; i < n; i++)
-			{
 				*(A + j*n + i) += (*(lpA + k*n + i))*(*(lpA + k*n + j));
-			}
-
 			*(B + j) += (*(lpB + k))*(*(lpA + k*n + j));
 		}
 	}
@@ -8355,7 +8384,7 @@ int TMatchingCoarse(double *Pattern, int pattern_size, int hsubset, double *Para
 	bool printout = false;
 	FILE *fp1 = 0, *fp2 = 0;
 	int m;
-	double t_f, t_g, t_5, xxx = 0.0, yyy = 0.0;
+	double t_f, t_g, t_5, CeresResamplingSpline2 = 0.0, yyy = 0.0;
 	double *T = new double[2 * (2 * hsubset + 1)*(2 * hsubset + 1)];
 
 	zncc = 0.0;
@@ -8425,12 +8454,12 @@ int TMatchingCoarse(double *Pattern, int pattern_size, int hsubset, double *Para
 			if (t_3>thresh && t_3 > zncc)
 			{
 				zncc = t_3;
-				xxx = i, yyy = j;
+				CeresResamplingSpline2 = i, yyy = j;
 			}
 			else if (t_3 < -thresh && abs(t_3) > zncc)
 			{
 				zncc = t_3;
-				xxx = i, yyy = j;
+				CeresResamplingSpline2 = i, yyy = j;
 			}
 		}
 	}
@@ -8440,14 +8469,14 @@ int TMatchingCoarse(double *Pattern, int pattern_size, int hsubset, double *Para
 	delete[]T;
 	if (zncc > thresh)
 	{
-		POI.x = (int)(POI.x + 0.5) + xxx;
+		POI.x = (int)(POI.x + 0.5) + CeresResamplingSpline2;
 		POI.y = (int)(POI.y + 0.5) + yyy;
 		zncc = abs(zncc);
 		return 0;
 	}
 	else if (zncc < -thresh)
 	{
-		POI.x = (int)(POI.x + 0.5) + xxx;
+		POI.x = (int)(POI.x + 0.5) + CeresResamplingSpline2;
 		POI.y = (int)(POI.y + 0.5) + yyy;
 		zncc = abs(zncc);
 		return 1;

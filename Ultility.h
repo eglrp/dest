@@ -24,6 +24,9 @@
 
 #include "DataStructure.h"
 #include "ImagePro.h"
+
+#include <gsl/gsl_bspline.h>
+
 #include "SiftGPU/src/SiftGPU/SiftGPU.h"
 
 #ifdef _WIN32
@@ -41,6 +44,10 @@ void makeDir(char *Fname);
 void Average_Filtering_All(char *lpD, int width, int height, int ni, int HSize, int VSize);
 void MConventional_PhaseShifting(char *lpD, char *lpPBM, double* lpFO, int nipf, int length, int Mask_Threshold, double *f_atan2);
 void DecodePhaseShift2(char *Image, char *PBM, double *PhaseUW, int width, int height, int *frequency, int nfrequency, int sstep, int LFstep, int half_filter_size, int m_mask);
+
+//Bspline basis resampling
+void GenerateResamplingSplineBasisWithBreakPts(double *Basis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder);
+void GenerateResamplingSplineBasisWithBreakPts(double *Basis, vector<double> ResampledPts, vector<double>BreakPts, int SplineOrder);
 
 //Image processing
 bool RoateImage180(char *fname, char *Img, int &width, int &height, int nchannels, bool silent = false);

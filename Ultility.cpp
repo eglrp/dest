@@ -219,7 +219,170 @@ int siftgpu(char *Fname1, char *Fname2, const float nndrRatio, const double frac
 
 	return 0;
 }
+void GenerateResamplingSplineBasisWithBreakPts(double *Basis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder)
+{
+	if (ResampledPts[nResamples - 1] > BreakPts[nbreaks - 1])
+	{
+		cout << "Element of the resampled data is out the break point range!" << endl;
+		abort();
+	}
 
+	gsl_bspline_workspace *bw = gsl_bspline_alloc(SplineOrder, nbreaks);
+
+	gsl_vector *Bi = gsl_vector_alloc(nbreaks + 2);
+	gsl_vector *gsl_ResampledPts = gsl_vector_alloc(nResamples);
+	gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
+	gsl_matrix *gsl_Basis = gsl_matrix_alloc(nResamples, nbreaks + 2);
+
+	//copy data to gsl format
+	for (int ii = 0; ii < nbreaks; ii++)
+		gsl_vector_set(gsl_BreakPts, ii, BreakPts[ii]);
+
+	for (int ii = 0; ii < nResamples; ii++)
+		gsl_vector_set(gsl_ResampledPts, ii, ResampledPts[ii]);
+
+	//contruct knots
+	gsl_bspline_knots(gsl_BreakPts, bw);
+
+	//construct basis matrix
+	for (int ii = 0; ii < nResamples; ii++)
+	{
+		gsl_bspline_eval(gsl_vector_get(gsl_ResampledPts, ii), Bi, bw); //compute basis vector for point i
+
+		for (int jj = 0; jj < nbreaks + 2; jj++)
+			gsl_matrix_set(gsl_Basis, ii, jj, gsl_vector_get(Bi, jj));
+	}
+
+	for (int jj = 0; jj < nResamples; jj++)
+		for (int ii = 0; ii < nbreaks + 2; ii++)
+			Basis[ii + jj*(nbreaks + 2)] = gsl_matrix_get(gsl_Basis, jj, ii);
+
+	/*FILE *fp = fopen("C:/temp/gsl_breakpts.txt", "w + ");
+	for (int ii = 0; ii < nbreaks; ii++)
+	fprintf(fp, "%.16f \n", gsl_vector_get(gsl_BreakPts, ii));
+	fclose(fp);
+
+	fp = fopen("C:/temp/gsl_resampled.txt", "w + ");
+	for (int ii = 0; ii < nResamples; ii++)
+	fprintf(fp, "%.16f \n", gsl_vector_get(gsl_ResampledPts, ii));
+	fclose(fp);
+
+	fp = fopen("C:/temp/gsl_knots.txt", "w + ");
+	for (int ii = 0; ii < nbreaks + 2 * SplineOrder - 2; ii++)
+	fprintf(fp, "%.16f \n", gsl_vector_get(bw->knots, ii));
+	fclose(fp);
+
+	fp = fopen("C:/temp/gsl_B.txt", "w + ");
+	for (int jj = 0; jj < nResamples; jj++)
+	{
+	for (int ii = 0; ii < nbreaks + 2; ii++)
+	fprintf(fp, "%.16f ", gsl_matrix_get(gsl_Basis, jj, ii));
+	fprintf(fp, "\n");
+	}
+	fclose(fp);*/
+	gsl_bspline_free(bw);
+	gsl_vector_free(Bi);
+	gsl_vector_free(gsl_ResampledPts);
+	gsl_matrix_free(gsl_Basis);
+
+	return;
+}
+void GenerateResamplingSplineBasisWithBreakPts(double *Basis, vector<double> ResampledPts, vector<double>BreakPts, int SplineOrder)
+{
+	int nResamples = (int)ResampledPts.size(), nbreaks = (int)BreakPts.size();
+	if (ResampledPts[nResamples - 1] > BreakPts[nbreaks - 1])
+	{
+		//cout << "Element of the resampled data is out the break point range!" << endl;
+		abort();
+	}
+
+	gsl_bspline_workspace *bw = gsl_bspline_alloc(SplineOrder, nbreaks);
+
+	gsl_vector *Bi = gsl_vector_alloc(nbreaks + 2);
+	gsl_vector *gsl_ResampledPts = gsl_vector_alloc(nResamples);
+	gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
+	gsl_matrix *gsl_Basis = gsl_matrix_alloc(nResamples, nbreaks + 2);
+
+	//copy data to gsl format
+	for (int ii = 0; ii < nbreaks; ii++)
+		gsl_vector_set(gsl_BreakPts, ii, BreakPts[ii]);
+
+	for (int ii = 0; ii < nResamples; ii++)
+		gsl_vector_set(gsl_ResampledPts, ii, ResampledPts[ii]);
+
+	//contruct knots
+	gsl_bspline_knots(gsl_BreakPts, bw);
+
+	//construct basis matrix
+	for (int ii = 0; ii < nResamples; ii++)
+	{
+		gsl_bspline_eval(gsl_vector_get(gsl_ResampledPts, ii), Bi, bw); //compute basis vector for point i
+
+		for (int jj = 0; jj < nbreaks + 2; jj++)
+			gsl_matrix_set(gsl_Basis, ii, jj, gsl_vector_get(Bi, jj));
+	}
+
+	for (int jj = 0; jj < nResamples; jj++)
+		for (int ii = 0; ii < nbreaks + 2; ii++)
+			Basis[ii + jj*(nbreaks + 2)] = gsl_matrix_get(gsl_Basis, jj, ii);
+
+	/*FILE *fp = fopen("C:/temp/gsl_breakpts.txt", "w + ");
+	for (int ii = 0; ii < nbreaks; ii++)
+	fprintf(fp, "%.16f \n", gsl_vector_get(gsl_BreakPts, ii));
+	fclose(fp);
+
+	fp = fopen("C:/temp/gsl_resampled.txt", "w + ");
+	for (int ii = 0; ii < nResamples; ii++)
+	fprintf(fp, "%.16f \n", gsl_vector_get(gsl_ResampledPts, ii));
+	fclose(fp);
+
+	fp = fopen("C:/temp/gsl_knots.txt", "w + ");
+	for (int ii = 0; ii < nbreaks + 2 * SplineOrder - 2; ii++)
+	fprintf(fp, "%.16f \n", gsl_vector_get(bw->knots, ii));
+	fclose(fp);
+
+	fp = fopen("C:/temp/gsl_B.txt", "w + ");
+	for (int jj = 0; jj < nResamples; jj++)
+	{
+	for (int ii = 0; ii < nbreaks + 2; ii++)
+	fprintf(fp, "%.16f ", gsl_matrix_get(gsl_Basis, jj, ii));
+	fprintf(fp, "\n");
+	}
+	fclose(fp);*/
+	gsl_bspline_free(bw);
+	gsl_vector_free(Bi);
+	gsl_vector_free(gsl_ResampledPts);
+	gsl_matrix_free(gsl_Basis);
+
+	return;
+}
+
+void GenerateResamplingSplineBasisWithBreakPtsExample()
+{
+	int nResamples = 200, nbreaks = 15, SplineOrder = 4;
+	double *Basis = new double[nResamples*(nbreaks + 2)];
+	double *ResampledPts = new double[nResamples];
+	double *BreakPts = new double[nbreaks];
+
+	for (int ii = 0; ii < nbreaks; ii++)
+		BreakPts[ii] = 15.0*ii / 14.0;
+
+	for (int ii = 0; ii < nResamples; ii++)
+		ResampledPts[ii] = (15.0 / (nResamples - 1)) * ii;
+
+	GenerateResamplingSplineBasisWithBreakPts(Basis, ResampledPts, BreakPts, nResamples, nbreaks, SplineOrder);
+
+	FILE *fp = fopen("C:/temp/gsl_B.txt", "w + ");
+	for (int jj = 0; jj < nResamples; jj++)
+	{
+		for (int ii = 0; ii < nbreaks + 2; ii++)
+			fprintf(fp, "%.16f ", Basis[ii + jj*(nbreaks + 2)]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	return;
+}
 void dec2bin(int dec, int*bin, int num_bin)
 {
 	bool stop = false;
@@ -7141,7 +7304,7 @@ int WriteVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime,
 			fprintf(fp, "%.8f %.8f %.8f \n", VideoInfo.VideoInfo[fid].distortion[0], VideoInfo.VideoInfo[fid].distortion[1], VideoInfo.VideoInfo[fid].distortion[2]);
 	}
 	fclose(fp);
-	
+
 	//WRITE VIDEO POSE
 	sprintf(Fname, "%s/_CamPose_%d.txt", Path, viewID); fp = fopen(Fname, "w+");
 	for (int fid = startTime; fid <= stopTime; fid++)
@@ -7149,7 +7312,7 @@ int WriteVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime,
 		if (!VideoInfo.VideoInfo[fid].valid)
 			continue;
 
-		fprintf(fp, "%d %.16f %.16f %.16f 0.0 %.16f %.16f %.16f 0.0 %.16f %.16f %.16f 0.0 0.0 0.0 0.0 1.0 %.16f %.16f %.16f ", fid, 
+		fprintf(fp, "%d %.16f %.16f %.16f 0.0 %.16f %.16f %.16f 0.0 %.16f %.16f %.16f 0.0 0.0 0.0 0.0 1.0 %.16f %.16f %.16f ", fid,
 			VideoInfo.VideoInfo[fid].R[0], VideoInfo.VideoInfo[fid].R[1], VideoInfo.VideoInfo[fid].R[2],
 			VideoInfo.VideoInfo[fid].R[3], VideoInfo.VideoInfo[fid].R[4], VideoInfo.VideoInfo[fid].R[5],
 			VideoInfo.VideoInfo[fid].R[6], VideoInfo.VideoInfo[fid].R[7], VideoInfo.VideoInfo[fid].R[8],
@@ -12199,7 +12362,7 @@ int SingleCameraCalibration(char *Path, int camID, int nimages, int bw, int bh, 
 			for (int jj = 0; jj < bw*bh; jj++)
 			{
 				fscanf(fp, "%f %f ", &u, &v);
-				pointBuf.push_back(Point2f(u-1, v-1));
+				pointBuf.push_back(Point2f(u - 1, v - 1));
 			}
 			fclose(fp);
 
@@ -12261,7 +12424,7 @@ int SingleCameraCalibration(char *Path, int camID, int nimages, int bw, int bh, 
 			distCoeffs.at<double>(0), distCoeffs.at<double>(1), distCoeffs.at<double>(4), distCoeffs.at<double>(2), distCoeffs.at<double>(3));
 		fclose(fp);
 
-		double  Rvec[3], RTmat[9], Rmat[9],T[3], Rgl[16], C[3];
+		double  Rvec[3], RTmat[9], Rmat[9], T[3], Rgl[16], C[3];
 		sprintf(Fname, "%s/CamPose_%d.txt", Path, camID); fp = fopen(Fname, "w+");
 		for (int ii = 0; ii < (int)ValidFrame.size(); ii++)
 		{

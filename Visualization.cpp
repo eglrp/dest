@@ -20,8 +20,8 @@ static cam_mode g_camMode = CAM_DEFAULT;
 GLfloat Red[3] = { 1, 0, 0 }, Green[3] = { 0, 1, 0 }, Blue[3] = { 0, 0, 1 }, White[3] = { 1, 1, 1 };
 vector<Point3f> RandTrajColor;
 
-double Discontinuity3DThresh = 100.0*UnitScale,
-DiscontinuityTimeThresh = 100.0; //unit: ms
+double Discontinuity3DThresh = 1000.0*UnitScale,
+DiscontinuityTimeThresh = 1000.0; //unit: ms
 int nviews = MaxnCams, timeID = 0, TrajecID = 0, otimeID = 0, oTrajecID = 0, TrialID = 0, oTrialID = 0, maxTime = 0, maxTrial = 10000, nTraject = 1;
 bool drawPointColor = false, drawPatchNormal = false;
 static bool g_bButton1Down = false, ReCenterNeeded = false, PickingMode = false, bFullsreen = false, showGroundPlane = false, showAxis = false, SaveScreen = false;
@@ -29,7 +29,7 @@ static bool g_bButton1Down = false, ReCenterNeeded = false, PickingMode = false,
 bool drawCorpusPoints = false, drawCorpusCameras = true, drawTimeVaryingCorpusPoints = false;
 bool drawTimeVaryingCameraPose = false, drawCameraTraject = false;
 bool drawTimeVarying3DPoints = false, drawTimeVarying3DPointsTraject = false, FullTrajectoryMode = false;
-bool drawNative3DTrajectory = true, drawNative3DTrajectoryOneInstance = false, IndiviualTrajectory = false, Trajectory_Time = false, EndTime = false;
+bool drawNative3DTrajectory = true, drawNative3DTrajectoryOneInstance = false, IndiviualTrajectory = true, Trajectory_Time = false, EndTime = false;
 static bool TimeVaryingPointsOne = true, TimeVaryingPointsTwo = false, Native3DTrajectoryOne = true;
 
 GLfloat PointsCentroid[3];
@@ -1202,7 +1202,7 @@ int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, b
 	ReadCurrentSfmGL(Path, drawPointColor, drawPatchNormal);
 	//ReadCurrent3DGL(Path, drawPointColor, drawPatchNormal, timeID, false);
 	//ReadCurrent3DGL2(Path, drawPointColor, drawPatchNormal, timeID, false);
-	PointsCentroid[0] = -84.6592407, PointsCentroid[1] = -676.020081, PointsCentroid[2] = 4086.22388;
+	//PointsCentroid[0] = -84.6592407, PointsCentroid[1] = -676.020081, PointsCentroid[2] = 4086.22388;
 
 	//Abitary trajectory input
 	Read3DTrajectory(Path);
@@ -1592,16 +1592,11 @@ int Read3DTrajectory(char *path, int trialID)
 	int npts = 0;
 	while (true)
 	{
-		/*if (trialID == 0)
-		sprintf(Fname, "%s/ATrack_%d.txt", path, npts);
-		else
-		sprintf(Fname, "%s/ATrack_%d_%d.txt", path, npts, trialID);*/
-		if (npts == 0)
+		if (trialID == 0)
 			sprintf(Fname, "%s/ATrack_%d.txt", path, npts);
 		else
-			sprintf(Fname, "%s/ATrack_%d_.txt", path, npts - 1);
-		if (npts == 2)
-			break;
+			//sprintf(Fname, "%s/ATrack_%d_%d.txt", path, npts, trialID);
+			sprintf(Fname, "%s/ATrack_%d_.txt", path, npts);
 
 		FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
@@ -1611,9 +1606,7 @@ int Read3DTrajectory(char *path, int trialID)
 		}
 		int count = 0, cID, fID;
 		while (fscanf(fp, "%lf %lf %lf %lf %d %d", &x, &y, &z, &t, &cID, &fID) != EOF)
-			//while (fscanf(fp, "%lf %lf %lf %lf", &x, &y, &z, &t) != EOF)
 		{
-			//cID = 0, fID = 0;
 			timeStamp[count] = t, camID[count] = cID, frameID[count] = fID;
 			P3dTemp[count].x = x, P3dTemp[count].y = y, P3dTemp[count].z = z;
 			count++;
@@ -1648,7 +1641,7 @@ int Read3DTrajectory(char *path, int trialID)
 		g_vis.Track3DLength.push_back(count);
 		g_vis.Traject3D.push_back(track3D);
 
-		Point3f RandTrajColorI(1.0f*rand() / RAND_MAX, 1.0f*rand() / RAND_MAX, 1.0f*rand() / RAND_MAX);
+		Point3f RandTrajColorI(0.8f*rand() / RAND_MAX + 0.2, 0.8f*rand() / RAND_MAX + 0.2f, 0.8f*rand() / RAND_MAX + 0.2f); //Offset 0.2 so that non of the trajectories can be too dark to be seen
 		RandTrajColor.push_back(RandTrajColorI);
 
 		maxTime = max(maxTime, count);

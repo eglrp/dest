@@ -1,11 +1,9 @@
-
-
-#include "VideoSequence.h"
-#include "Ultility.h"
-#include <boost/config.hpp>
 #include <iostream>
+#include <boost/config.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/prim_minimum_spanning_tree.hpp>
+#include "VideoSequence.h"
+#include "Ultility.h"
 
 using namespace cv;
 using namespace std;
@@ -288,8 +286,7 @@ bool GrabVideoFrame2Mem(char *fname, char *Data, int &width, int &height, int &n
 }
 int PrismMST(char *Path, char *PairwiseSyncFilename, int nvideos)
 {
-	using namespace boost;
-	typedef adjacency_list < vecS, vecS, undirectedS, property<vertex_distance_t, int>, property < edge_weight_t, double > > Graph;
+	typedef boost::adjacency_list < boost::vecS, boost::vecS, boost::undirectedS, boost::property<boost::vertex_distance_t, int>, boost::property < boost::edge_weight_t, double > > Graph;
 	typedef std::pair < int, int >E;
 
 	int v1, v2; double offset;
@@ -309,6 +306,7 @@ int PrismMST(char *Path, char *PairwiseSyncFilename, int nvideos)
 		TimeOffset[v1 + v2*nvideos] = offset, TimeOffset[v2 + v1*nvideos] = offset;
 	fclose(fp);
 
+#ifdef ENABLE_DEBUG_FLAG
 	sprintf(Fname, "%s/timeConstrantoffset.txt", Path);	fp = fopen(Fname, "w+");
 	for (int kk = 0; kk < nvideos; kk++)
 	{
@@ -317,6 +315,7 @@ int PrismMST(char *Path, char *PairwiseSyncFilename, int nvideos)
 		fprintf(fp, "\n");
 	}
 	fclose(fp);
+#endif
 
 	//Form edges weight based on the consistency of the triplet
 	int num_nodes = nvideos, nedges = nvideos*(nvideos - 1) / 2;
@@ -349,20 +348,22 @@ int PrismMST(char *Path, char *PairwiseSyncFilename, int nvideos)
 		}
 	}
 
+#ifdef ENABLE_DEBUG_FLAG
 	sprintf(Fname, "%s/weightTable.txt", Path);	fp = fopen(Fname, "w+");
 	for (int kk = 0; kk < nvideos; kk++)
 	{
 		for (int ll = 0; ll < nvideos; ll++)
-			fprintf(fp, "%.2f ", weightTable[kk + ll*nvideos]);
+			fprintf(fp, "%.4f ", weightTable[kk + ll*nvideos]);
 		fprintf(fp, "\n");
 	}
 	fclose(fp);
+#endif
 
 	Graph g(edges, edges + sizeof(E)*nedges / sizeof(E), weights, num_nodes);
-	property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, g);
-	std::vector < graph_traits < Graph >::vertex_descriptor >p(num_vertices(g));
+	boost::property_map<Graph, boost::edge_weight_t>::type weightmap = get(boost::edge_weight, g);
+	std::vector < boost::graph_traits < Graph >::vertex_descriptor >p(boost::num_vertices(g));
 
-	prim_minimum_spanning_tree(g, &p[0]);
+	boost::prim_minimum_spanning_tree(g, &p[0]);
 
 	sprintf(Fname, "%s/MST_Sync.txt", Path);	fp = fopen(Fname, "w+");
 	for (std::size_t i = 0; i != p.size(); ++i)
@@ -384,8 +385,12 @@ int PrismMST(char *Path, char *PairwiseSyncFilename, int nvideos)
 
 	return 0;
 }
-int AssignOffsetFromMST(char *Path, char *PairwiseSyncFilename, int nvideos)
+int AssignOffsetFromMST(char *Path, char *PairwiseSyncFilename, int nvideos, double *OrderedOffset)
 {
+	bool createdMem = false;
+	if (OrderedOffset == NULL)
+		OrderedOffset = new double[nvideos], createdMem = true;
+
 	char Fname[200];
 	vector<Point2i> ParentChild;
 
@@ -413,7 +418,6 @@ int AssignOffsetFromMST(char *Path, char *PairwiseSyncFilename, int nvideos)
 		Offset[parent + child*nvideos] = t, Offset[child + parent*nvideos] = t;
 	fclose(fp);
 
-	double *OrderedOffset = new double[nvideos];
 	OrderedOffset[ParentChild[0].x] = 0;
 
 	int ncollected = 1;
@@ -455,10 +459,10 @@ int AssignOffsetFromMST(char *Path, char *PairwiseSyncFilename, int nvideos)
 		currentChild.clear();
 	}
 
-	//Find the video started earliest and that it as reference
-	double earliest = 999.9;
+	//Find the video started earliest (has largest offset value) and that it as reference
+	double earliest = -999.9;
 	for (int ii = 0; ii < nvideos; ii++)
-		if (OrderedOffset[ii] < earliest)
+		if (OrderedOffset[ii] > earliest)
 			earliest = OrderedOffset[ii];
 
 	for (int ii = 0; ii < nvideos; ii++)
@@ -471,7 +475,9 @@ int AssignOffsetFromMST(char *Path, char *PairwiseSyncFilename, int nvideos)
 		fprintf(fp, "%d %.3f\n", ii, OrderedOffset[ii]);
 	fclose(fp);
 
-	delete[]Offset, delete[]OrderedOffset;
+	delete[]Offset;
+	if (createdMem)
+		delete[]OrderedOffset;
 
 	return 0;
 }

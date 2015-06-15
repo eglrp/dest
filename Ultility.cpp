@@ -497,6 +497,14 @@ double Distance3D(double *X, double * Y)
 	Point3d Dif(X[0] - Y[0], X[1] - Y[1], X[2] - Y[2]);
 	return sqrt(Dif.x*Dif.x + Dif.y * Dif.y + Dif.z *Dif.z);
 }
+Point3d ProductPoint3d(Point3d X, Point3d Y)
+{
+	return Point3d(X.x*Y.x, X.y*Y.y, X.z*Y.z);
+}
+Point3d DividePoint3d(Point3d X, Point3d Y)
+{
+	return Point3d(X.x/Y.x, X.y/Y.y, X.z/Y.z);
+}
 double L1norm(vector<double>A)
 {
 	double res = 0.0;
@@ -7259,6 +7267,8 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 		{
 			if (abs(C[0]) + abs(C[1]) + abs(C[2]) > 0.001)
 				VideoInfo.VideoInfo[frameID].valid = true;
+			else
+				VideoInfo.VideoInfo[frameID].valid = false;
 
 			for (int jj = 0; jj < 9; jj++)
 				VideoInfo.VideoInfo[frameID].R[jj] = R[jj];
@@ -12275,7 +12285,7 @@ double computeReprojectionErrors(const vector<vector<Point3f> >& objectPoints, c
 
 	return std::sqrt(totalErr / totalPoints);
 }
-int SingleCameraCalibration(char *Path, int camID, int nimages, int bw, int bh, bool hasPoint, int step, float squareSize, int calibrationPattern, int width, int height, bool showUndistorsed)
+int SingleCameraCalibration(char *Path, int camID, int startFrame, int stopFrame, int bw, int bh, bool hasPoint, int step, float squareSize, int calibrationPattern, int width, int height, bool showUndistorsed)
 {
 	int calibFlag = 0;
 	calibFlag |= CV_CALIB_FIX_K4 | CV_CALIB_FIX_K5; //CV_CALIB_FIX_PRINCIPAL_POINT
@@ -12296,9 +12306,9 @@ int SingleCameraCalibration(char *Path, int camID, int nimages, int bw, int bh, 
 	if (!hasPoint)
 	{
 		Mat view, viewGray;
-		for (int ii = 0; ii < nimages; ii++)
+		for (int ii = startFrame; ii <= stopFrame; ii+=step)
 		{
-			sprintf(Fname, "%s/%d/%d.png", Path, camID, ii*step);
+			sprintf(Fname, "%s/%d/%d.png", Path, camID, ii);
 			view = imread(Fname);
 			if (view.empty())
 				continue;
@@ -12331,14 +12341,14 @@ int SingleCameraCalibration(char *Path, int camID, int nimages, int bw, int bh, 
 				imagePoints.push_back(pointBuf);
 				drawChessboardCorners(view, boardSize, Mat(pointBuf), found);
 
-				sprintf(Fname, "%s/%d/Corner/CV2_%d.txt", Path, camID, ii*step); FILE *fp = fopen(Fname, "w+");
+				sprintf(Fname, "%s/%d/Corner/CV2_%d.txt", Path, camID, ii); FILE *fp = fopen(Fname, "w+");
 				for (int jj = 0; jj < bw*bh; jj++)
 					fprintf(fp, "%f %f ", pointBuf[jj].x, pointBuf[jj].y);
 				fclose(fp);
 			}
 
 			int baseLine = 0;
-			sprintf(Fname, "Frame: %d/%d", ii*step + 1, nimages / step);
+			sprintf(Fname, "Frame: %d/%d", ii/step + 1, (stopFrame-startFrame) / step);
 			Size textSize = getTextSize(Fname, 1, 1, 1, &baseLine);
 			Point textOrigin(view.cols - 2 * textSize.width - 10, view.rows - 2 * baseLine - 10);
 			putText(view, Fname, textOrigin, 1, 1, RED);
@@ -12347,16 +12357,16 @@ int SingleCameraCalibration(char *Path, int camID, int nimages, int bw, int bh, 
 			if (waitKey(10) == 27)
 				break;
 
-			ValidFrame.push_back(ii*step);
+			ValidFrame.push_back(ii);
 			pointBuf.clear();
 		}
 	}
 	else
 	{
 		float u, v;
-		for (int ii = 0; ii < nimages; ii++)
+		for (int ii = startFrame; ii <= stopFrame; ii += step)
 		{
-			sprintf(Fname, "%s/%d/Corner/CV2_%d.txt", Path, camID, ii*step); FILE *fp = fopen(Fname, "r");
+			sprintf(Fname, "%s/%d/Corner/CV2_%d.txt", Path, camID, ii); FILE *fp = fopen(Fname, "r");
 			if (fp == NULL)
 				continue;
 			for (int jj = 0; jj < bw*bh; jj++)
@@ -12368,7 +12378,7 @@ int SingleCameraCalibration(char *Path, int camID, int nimages, int bw, int bh, 
 
 			imagePoints.push_back(pointBuf);
 
-			ValidFrame.push_back(ii*step);
+			ValidFrame.push_back(ii);
 			pointBuf.clear();
 		}
 
@@ -12421,7 +12431,7 @@ int SingleCameraCalibration(char *Path, int camID, int nimages, int bw, int bh, 
 		sprintf(Fname, "%s/Intrinsic_%d.txt", Path, camID);	FILE *fp = fopen(Fname, "w+");
 		for (int ii = 0; ii < (int)ValidFrame.size(); ii++)
 			fprintf(fp, "%d 0 %d %d %.6f %.6f 0.0 %.6f %.6f  %.6f %.6f  %.6f %.6f %.6f 0.0 0.0\n", ValidFrame[ii], imageSize.width, imageSize.height, cameraMatrix.at<double>(0, 0), cameraMatrix.at<double>(1, 1), cameraMatrix.at<double>(0, 2), cameraMatrix.at<double>(1, 2),
-			distCoeffs.at<double>(0), distCoeffs.at<double>(1), distCoeffs.at<double>(4), distCoeffs.at<double>(2), distCoeffs.at<double>(3));
+			distCoeffs.at<double>(0), distCoeffs.at<double>(1), distCoeffs.at<double>(4), distCoeffs.at<double>(3), distCoeffs.at<double>(2)); //OpenCV tangential distortion is a bit different from mine.
 		fclose(fp);
 
 		double  Rvec[3], RTmat[9], Rmat[9], T[3], Rgl[16], C[3];
@@ -12447,7 +12457,7 @@ int SingleCameraCalibration(char *Path, int camID, int nimages, int bw, int bh, 
 		Mat view, rview, map1, map2;
 		initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat(), getOptimalNewCameraMatrix(cameraMatrix, distCoeffs, imageSize, 1, imageSize, 0), imageSize, CV_16SC2, map1, map2);
 
-		for (int ii = 0; ii < nimages; ii++)
+		for (int ii = startFrame; ii <= stopFrame; ii+=step)
 		{
 			sprintf(Fname, "%s/%d/%d.png", Path, camID, ii);
 			view = imread(Fname);

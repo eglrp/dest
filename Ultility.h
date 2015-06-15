@@ -157,6 +157,8 @@ double gaussian_noise(double mean, double std);
 double Distance2D(Point2d X, Point2d Y);
 double Distance3D(Point3d X, Point3d Y);
 double Distance3D(double *X, double * Y);
+Point3d ProductPoint3d(Point3d X, Point3d Y);
+Point3d DividePoint3d(Point3d X, Point3d Y);
 double L1norm(vector<double>A);
 double L2norm(double *A, int dim);
 float MeanArray(float *data, int length);
@@ -673,5 +675,5 @@ int CleanUp2DTrackingByGradientConsistency(char *Path, int nviews, int ntrajects
 int DownSampleTracking(char *Path, int nviews, int ntrajects, int HighFrameRateFactor);
 int DeletePointsOf2DTracks(char *Path, int nCams, int npts);
 
-int SingleCameraCalibration(char *Path, int camID, int nimages, int bw, int bh, bool hasPoint, int step, float squareSize, int calibrationPattern, int width = 1920, int height = 1080, bool showUndistorsed = false);
+int SingleCameraCalibration(char *Path, int camID, int startFrame, int stopFrame, int bw, int bh, bool hasPoint, int step, float squareSize, int calibrationPattern, int width = 1920, int height = 1080, bool showUndistorsed = false);
 #endif

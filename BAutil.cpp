@@ -32,7 +32,7 @@ namespace BA
 			cerr << "# of cameras must be more than 1." << endl;
 			return false;
 		}
-		nvmdata.nCamera = nCameras;
+		nvmdata.nCameras = nCameras;
 		nvmdata.filenames.reserve(nCameras);
 		nvmdata.focallength.reserve(nCameras);
 		nvmdata.quaternion.reserve(4*nCameras);
@@ -167,7 +167,7 @@ namespace BA
 			stringstream ss(str);
 			ss >> w >> h >> option1 >> option2 >> option3 >> avail;
 
-			for (int ii = 0; ii < nvmdata.nCamera; ii++)
+			for (int ii = 0; ii < nvmdata.nCameras; ii++)
 			{
 				sprintf(tfile, "%d.ppm", ii + 1);
 				std::string ifile = tfile;
@@ -236,7 +236,7 @@ namespace BA
 			}
 		}
 
-		int nCameras = nvmdata.nCamera;
+		int nCameras = nvmdata.nCameras;
 		if (filenames.size() > nCameras)
 			cerr << "\n" << "Warning: " << "The number of cameras in the ini file is more than that in the NVM file." << "The ini file may not be valid." << endl;
 		else if (filenames.size() < nCameras)

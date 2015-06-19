@@ -12,6 +12,7 @@
 #include <math.h>
 #include <omp.h>
 #include <stdint.h>
+#include <stdarg.h>
 
 #include "ceres/ceres.h"
 #include "ceres/rotation.h"
@@ -39,6 +40,7 @@ using namespace cv;
 using namespace std;
 
 void makeDir(char *Fname);
+void printfLog(const char *strLog, char *Path = NULL);
 
 //Phase shifting:
 void Average_Filtering_All(char *lpD, int width, int height, int ni, int HSize, int VSize);
@@ -46,6 +48,7 @@ void MConventional_PhaseShifting(char *lpD, char *lpPBM, double* lpFO, int nipf,
 void DecodePhaseShift2(char *Image, char *PBM, double *PhaseUW, int width, int height, int *frequency, int nfrequency, int sstep, int LFstep, int half_filter_size, int m_mask);
 
 //Bspline basis resampling
+void GenerateResamplingSplineWithBreakPts(double *Basis, double *DBasis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder, int DerivativeOrder);
 void GenerateResamplingSplineBasisWithBreakPts(double *Basis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder);
 void GenerateResamplingSplineBasisWithBreakPts(double *Basis, vector<double> ResampledPts, vector<double>BreakPts, int SplineOrder);
 
@@ -198,6 +201,8 @@ void QR_Solution_Double(double *lpA, double *lpB, int m, int n);
 void Quick_Sort_Double(double * A, int *B, int low, int high);
 void Quick_Sort_Float(float * A, int *B, int low, int high);
 void Quick_Sort_Int(int * A, int *B, int low, int high);
+
+double SimpsonThreeEightIntegration(double *y, double step, int npts);
 
 bool in_polygon(double u, double v, Point2d *vertex, int num_vertex);
 
@@ -609,9 +614,9 @@ bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics,
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool saveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor = 1.0);
-bool ReSaveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData, double ScaleFactor);
+bool ReSaveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData, double ScaleFactor = 1.0);
 
-int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool outputtext = false);
+int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool outputtext = false, bool saveDescriptor = true);
 int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool inputtext = false, bool notReadDescriptor = false);
 bool loadIndividualNVMforpose(char *Path, CameraData *CameraInfo, vector<int>availViews, int timeIDstart, int timeIDstop, int nviews, bool sharedIntrinsics);
 int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel = RADIAL_TANGENTIAL_PRISM, int distortionCorrected = 1);

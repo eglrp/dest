@@ -100,7 +100,7 @@ namespace BA
 
 	struct NVM
 	{
-		int nCamera;
+		int nCameras;
 		vector<string> filenames;
 		vector<double> focallength;
 		vector< vector<double> > quaternion;

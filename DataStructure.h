@@ -50,7 +50,7 @@ struct LKParameters
 
 struct CameraData
 {
-	double K[9], distortion[7], R[9], Quat[4], T[3], rt[6], P[12], intrinsic[5], invK[9], invR[9];
+	double K[9], distortion[7], R[9], Quat[4], T[3], rt[6],wt[6], P[12], intrinsic[5], invK[9], invR[9];
 	double Rgl[16], camCenter[3];
 	int LensModel;
 	double threshold, ninlierThresh;
@@ -61,7 +61,7 @@ struct CameraData
 
 struct Corpus
 {
-	int nCamera, n3dPoints;
+	int nCameras, n3dPoints;
 	vector<int> IDCumView;
 	vector<string> filenames;
 	CameraData *camera;
@@ -71,7 +71,9 @@ struct Corpus
 	vector <vector<int> > viewIdAll3D; //3D -> visiable views index
 	vector <vector<int> > pointIdAll3D; //3D -> 2D index in those visible views
 	vector<vector<Point2d> > uvAll3D; //3D -> uv of that point in those visible views
+	vector<vector<double> > scaleAll3D; //3D -> uv of that point in those visible views
 	vector<vector<Point2d> > uvAllViews; //all views valid 2D points
+	vector<vector<double> > scaleAllViews; //all views valid 2D points
 	vector <vector<int> >threeDIdAllViews; //2D point in visible view -> 3D index
 	Mat SiftDesc, SurfDesc;
 };

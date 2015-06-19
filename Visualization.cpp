@@ -1359,7 +1359,7 @@ void ReadCurrentSfmGL(char *path, bool drawPointColor, bool drawPatchNormal)
 		sprintf(Fname, "%s/BA_Camera_AllParams_after.txt", path);
 		if (loadBundleAdjustedNVMResults(Fname, CorpusData))
 		{
-			for (int ii = 0; ii < CorpusData.nCamera; ii++)
+			for (int ii = 0; ii < CorpusData.nCameras; ii++)
 			{
 				for (int jj = 0; jj < 16; jj++)
 					temp.Rgl[jj] = CorpusData.camera[ii].Rgl[jj];

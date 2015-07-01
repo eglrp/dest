@@ -1,8 +1,5 @@
 #include <cstdlib>
 #include <opencv2/opencv.hpp>
-//#ifdef _WIN32
-#include "GL/glut.h"
-//#endif
 
 using namespace cv;
 using namespace std;

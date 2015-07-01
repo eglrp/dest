@@ -3,8 +3,9 @@
 #include "Geometry.h"
 #include "BAutil.h"
 
-using namespace cv;
 using namespace std;
+using namespace cv;
+using namespace Eigen;
 
 //SiftGPU 
 #define SIFTGPU_DLL_RUNTIME// Load at runtime if the above macro defined comment the macro above to use static linking
@@ -267,7 +268,7 @@ int siftgpu(char *Fname1, char *Fname2, const float nndrRatio, const double frac
 	return 0;
 }
 
-void GenerateResamplingSplineWithBreakPts(double *Basis, double *DBasis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder, int DerivativeOrder)
+void GenerateSplineBasisWithBreakPts(double *Basis, double *DBasis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder, int DerivativeOrder)
 {
 	if (ResampledPts[nResamples - 1] > BreakPts[nbreaks - 1])
 	{
@@ -280,7 +281,7 @@ void GenerateResamplingSplineWithBreakPts(double *Basis, double *DBasis, double 
 	gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
 
 	gsl_bspline_deriv_workspace *dw = dw = gsl_bspline_deriv_alloc(SplineOrder);
-	gsl_matrix  *dBi = dBi = gsl_matrix_alloc(ncoeffs, DerivativeOrder + 1);
+	gsl_matrix  *dBi = gsl_matrix_alloc(ncoeffs, DerivativeOrder + 1);
 
 	//copy data to gsl format
 	for (int ii = 0; ii < nbreaks; ii++)
@@ -339,7 +340,7 @@ void GenerateResamplingSplineBasisWithBreakPts(double *Basis, double *ResampledP
 
 	gsl_vector *Bi = gsl_vector_alloc(nbreaks + SplineOrder - 2);
 	gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
-	gsl_matrix *gsl_Basis = gsl_matrix_alloc(nResamples, nbreaks + SplineOrder - 2);
+	//gsl_matrix *gsl_Basis = gsl_matrix_alloc(nResamples, nbreaks + SplineOrder - 2);
 
 	//copy data to gsl format
 	for (int ii = 0; ii < nbreaks; ii++)
@@ -349,17 +350,17 @@ void GenerateResamplingSplineBasisWithBreakPts(double *Basis, double *ResampledP
 	gsl_bspline_knots(gsl_BreakPts, bw);
 
 	//construct basis matrix
+	int ncoeffs = nbreaks + 2;
 	for (int ii = 0; ii < nResamples; ii++)
 	{
 		gsl_bspline_eval(ResampledPts[ii], Bi, bw); //compute basis vector for point i
 
-		for (int jj = 0; jj < nbreaks + 2; jj++)
-			gsl_matrix_set(gsl_Basis, ii, jj, gsl_vector_get(Bi, jj));
-	}
+		//for (int jj = 0; jj < ncoeffs; jj++)
+		//	gsl_matrix_set(gsl_Basis, ii, jj, gsl_vector_get(Bi, jj));
 
-	for (int jj = 0; jj < nResamples; jj++)
-		for (int ii = 0; ii < nbreaks + 2; ii++)
-			Basis[ii + jj*(nbreaks + 2)] = gsl_matrix_get(gsl_Basis, jj, ii);
+		for (int jj = 0; jj < ncoeffs; jj++)
+			Basis[jj + ii*ncoeffs] = gsl_vector_get(Bi, jj);
+	}
 
 	/*FILE *fp = fopen("C:/temp/gsl_breakpts.txt", "w + ");
 	for (int ii = 0; ii < nbreaks; ii++)
@@ -384,9 +385,10 @@ void GenerateResamplingSplineBasisWithBreakPts(double *Basis, double *ResampledP
 	fprintf(fp, "\n");
 	}
 	fclose(fp);*/
+
 	gsl_bspline_free(bw);
 	gsl_vector_free(Bi);
-	gsl_matrix_free(gsl_Basis);
+	//gsl_matrix_free(gsl_Basis);
 
 	return;
 }
@@ -634,7 +636,7 @@ float MeanArray(float *data, int length)
 	double mean = 0.0;
 	for (int ii = 0; ii < length; ii++)
 		mean += data[ii];
-	return mean / length;
+	return (float)(mean / length);
 }
 double MeanArray(double *data, int length)
 {
@@ -2037,7 +2039,7 @@ int GetImagePatchIntensityColorVar(char *Path, TrajectoryData infoTraj, int nTra
 				for (int jj = 0; jj < nvis; jj++)
 				{
 					camID = infoTraj.trajectoryUnit[ii].at(kk).viewIDs.at(jj);
-					u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y;
+					u = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y;
 					panelID = camID / nCamsPerPanel,
 						camIDInPanel = camID%nCamsPerPanel;
 
@@ -2330,7 +2332,7 @@ int Compute3DTrajectoryErrorZNCC(char *Path, TrajectoryData infoTraj, int nTraj,
 								continue;
 						}
 
-						u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y;
+						u = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y;
 						if (camID >= nHDs && (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset))
 							continue;
 						if (camID < nHDs && (u<hsubset || v<hsubset || u>HDwidth - hsubset || v>HDheight - hsubset))
@@ -2344,7 +2346,7 @@ int Compute3DTrajectoryErrorZNCC(char *Path, TrajectoryData infoTraj, int nTraj,
 							{
 								for (int mm = -0; mm < height; mm++)
 									for (int nn = -0; nn < width; nn++)
-										Get_Value_Spline(Para, width, height, nn, mm, S, -1, 1), tImg[nn + mm*width] = S[0];
+										Get_Value_Spline(Para, width, height, nn, mm, S, -1, 1), tImg[nn + mm*width] = (float)S[0];
 
 								cvSaveImage("C:/temp/img1.png", Img);
 								SaveDataToImage("C:/temp/img2.png", tImg, width, height);
@@ -2353,7 +2355,7 @@ int Compute3DTrajectoryErrorZNCC(char *Path, TrajectoryData infoTraj, int nTraj,
 							{
 								for (int mm = -0; mm < HDheight; mm++)
 									for (int nn = -0; nn < HDwidth; nn++)
-										Get_Value_Spline(Para, HDwidth, HDheight, nn, mm, S, -1, 1), HDtImg[nn + mm*HDwidth] = S[0];
+										Get_Value_Spline(Para, HDwidth, HDheight, nn, mm, S, -1, 1), HDtImg[nn + mm*HDwidth] = (float)S[0];
 								cvSaveImage("C:/temp/img1.png", HDImg);
 								SaveDataToImage("C:/temp/img2.png", HDtImg, HDwidth, HDheight);
 							}
@@ -2572,7 +2574,7 @@ int Compute3DTrajectoryErrorZNCC2(char *Path, TrajectoryData infoTraj, int nTraj
 				for (int jj = 0; jj < nvis; jj++)
 				{
 					camID = infoTraj.trajectoryUnit[ii].at(kk).viewIDs.at(jj);
-					u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y, angle = infoTraj.trajectoryUnit[ii].at(kk).angle.at(jj);
+					u = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y, angle = infoTraj.trajectoryUnit[ii].at(kk).angle.at(jj);
 					if (camID >= nHDs && (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset))
 						break;
 					if (camID < nHDs && (u<hsubset || v<hsubset || u>HDwidth - hsubset || v>HDheight - hsubset))
@@ -2600,7 +2602,7 @@ int Compute3DTrajectoryErrorZNCC2(char *Path, TrajectoryData infoTraj, int nTraj
 								continue;
 						}
 
-						u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y;
+						u = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y;
 						if (camID >= nHDs && (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset))
 							continue;
 						if (camID < nHDs && (u<hsubset || v<hsubset || u>HDwidth - hsubset || v>HDheight - hsubset))
@@ -2614,7 +2616,7 @@ int Compute3DTrajectoryErrorZNCC2(char *Path, TrajectoryData infoTraj, int nTraj
 							{
 								for (int mm = -0; mm < height; mm++)
 									for (int nn = -0; nn < width; nn++)
-										Get_Value_Spline(Para, width, height, nn, mm, S, -1, 1), tImg[nn + mm*width] = S[0];
+										Get_Value_Spline(Para, width, height, nn, mm, S, -1, 1), tImg[nn + mm*width] = (float)S[0];
 
 								cvSaveImage("C:/temp/img1.png", Img);
 								SaveDataToImage("C:/temp/img2.png", tImg, width, height);
@@ -2623,7 +2625,7 @@ int Compute3DTrajectoryErrorZNCC2(char *Path, TrajectoryData infoTraj, int nTraj
 							{
 								for (int mm = -0; mm < HDheight; mm++)
 									for (int nn = -0; nn < HDwidth; nn++)
-										Get_Value_Spline(Para, HDwidth, HDheight, nn, mm, S, -1, 1), HDtImg[nn + mm*HDwidth] = S[0];
+										Get_Value_Spline(Para, HDwidth, HDheight, nn, mm, S, -1, 1), HDtImg[nn + mm*HDwidth] = (float)S[0];
 								cvSaveImage("C:/temp/img1.png", HDImg);
 								SaveDataToImage("C:/temp/img2.png", HDtImg, HDwidth, HDheight);
 							}
@@ -4052,8 +4054,8 @@ void GenereteKeyPointsRGB(char *ImgName, char *KName, char *KeyRGBName)
 	vector<Point3i>Argb; Argb.reserve(kpts.size());
 	for (int kk = 0; kk < kpts.size(); kk++)
 	{
-		int x = kpts[kk].pt.x;
-		int y = kpts[kk].pt.y;
+		int x = (int)kpts[kk].pt.x;
+		int y = (int)kpts[kk].pt.y;
 		int id = x + y*width;
 
 		rgb.z = Img[id];//b
@@ -5385,16 +5387,161 @@ void DisplayMatrix(char *Fname, Mat m)
 	printf("%s: ", Fname), cout << m << endl;
 }
 
-void convertRvectoRmat(double *r, double *R)
+void convertRTToTwist(double *R, double *T, double *twist)
 {
-	Mat Rmat(3, 3, CV_64F), rvec(3, 1, CV_64F);
+	//OpenCV code to handle log map for SO(3)
+	Map < Matrix < double, 3, 3, RowMajor >> matR(R); //matR is referenced to R;
+	JacobiSVD<MatrixXd> svd(matR, ComputeFullU | ComputeFullV);
+	//Matrix3d S = svd.singularValues().asDiagonal();
+	matR = svd.matrixU()*svd.matrixV().transpose();//Project R to SO(3)
+	
+	double rx = R[7] - R[5], ry = R[2] - R[6], rz = R[3] - R[1]; 
+	double s = sqrt((rx*rx + ry*ry + rz*rz)*0.25);
+	double c = (R[0] + R[4] + R[8] - 1)*0.5;
+	c = c > 1. ? 1. : c < -1. ? -1. : c;
+	double theta = acos(c);
+
+	if (s < 1e-5)
+	{
+		double t;
+		if (c > 0)
+			rx = ry = rz = 0.0;
+		else
+		{
+			t = (R[0] + 1)*0.5, rx = sqrt(MAX(t, 0.));
+			t = (R[4] + 1)*0.5, ry = sqrt(MAX(t, 0.))*(R[1] < 0 ? -1. : 1.);
+			t = (R[8] + 1)*0.5, rz = sqrt(MAX(t, 0.))*(R[2] < 0 ? -1. : 1.);
+			if (fabs(rx) < fabs(ry) && fabs(rx) < fabs(rz) && (R[5] > 0) != (ry*rz > 0))
+				rz = -rz;
+			theta /= sqrt(rx*rx + ry*ry + rz*rz);
+			rx *= theta, ry *= theta, rz *= theta;
+		}
+	}
+	else
+	{
+		double vth = 1.0 / (2.0 * s);
+		vth *= theta;
+		rx *= vth; ry *= vth; rz *= vth;
+	}
+	twist[3] = rx, twist[4] = ry, twist[5] = rz;
+
+	//Compute V
+	double theta2 = theta* theta;
+	double wx[9] = { 0.0, -rz, ry, rz, 0.0, -rx, -ry, rx, 0.0 };
+	double wx2[9]; mat_mul(wx, wx, wx2, 3, 3, 3);
+
+	double V[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+	if (theta < 1.0e-9)
+		twist[0] = T[0], twist[1] = T[1], twist[2] = T[2];
+	else
+	{
+		double A = sin(theta) / theta, B = (1.0 - cos(theta)) / theta2, C = (1.0 - A) / theta2;
+		for (int ii = 0; ii < 9; ii++)
+			V[ii] += B*wx[ii] + C*wx2[ii];
+	}
+
+	//solve Vt = T;
+	Map < Matrix < double, 3, 3, RowMajor >> matV(V); 
+	Map<Vector3d> matT(T), matt(twist);
+	matt = matV.lu().solve(matT);
+
+	return;
+}
+void convertTwistToRT(double *twist, double *R, double *T)
+{
+	double t[3] = { twist[0], twist[1], twist[2] };
+	double w[3] = { twist[3], twist[4], twist[5] };
+
+	double theta = sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]), theta2 = theta* theta;
+	double wx[9] = { 0.0, -w[2], w[1], w[2], 0.0, -w[0], -w[1], w[0], 0.0 };
+	double wx2[9]; mat_mul(wx, wx, wx2, 3, 3, 3);
+
+	R[0] = 1.0, R[1] = 0.0, R[2] = 0.0;
+	R[3] = 0.0, R[4] = 1.0, R[5] = 0.0;
+	R[6] = 0.0, R[7] = 0.0, R[8] = 1.0;
+
+	double V[9] = { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 };
+	if (theta < 1.0e-9)
+		T[0] = t[0], T[1] = t[1], T[2] = t[2]; //Rotation is idenity
+	else
+	{
+		double A = sin(theta) / theta, B = (1.0 - cos(theta)) / theta2, C = (1.0 - A) / theta2;
+		for (int ii = 0; ii < 9; ii++)
+			R[ii] += A*wx[ii] + B*wx2[ii];
+
+		for (int ii = 0; ii < 9; ii++)
+			V[ii] += B*wx[ii] + C*wx2[ii];
+		mat_mul(V, t, T, 3, 3, 1);
+	}
+
+	return;
+}
+void convertRmatToRvec(double *R, double *r)
+{
+	//Project R to SO(3)
+	Map < Matrix < double, 3, 3, RowMajor >> matR(R); //matR is referenced to R;
+	JacobiSVD<MatrixXd> svd(matR, ComputeFullU | ComputeFullV);
+	matR = svd.matrixU()*svd.matrixV().transpose();
+
+	double rx = R[7] - R[5], ry = R[2] - R[6], rz = R[3] - R[1];
+	double s = sqrt((rx*rx + ry*ry + rz*rz)*0.25);
+	double c = (R[0] + R[4] + R[8] - 1)*0.5;
+	c = c > 1. ? 1. : c < -1. ? -1. : c;
+	double theta = acos(c);
+
+	if (s < 1e-5)
+	{
+		double t;
+		if (c > 0)
+			rx = ry = rz = 0.0;
+		else
+		{
+			t = (R[0] + 1)*0.5, rx = sqrt(MAX(t, 0.));
+			t = (R[4] + 1)*0.5, ry = sqrt(MAX(t, 0.))*(R[1] < 0 ? -1. : 1.);
+			t = (R[8] + 1)*0.5, rz = sqrt(MAX(t, 0.))*(R[2] < 0 ? -1. : 1.);
+			if (fabs(rx) < fabs(ry) && fabs(rx) < fabs(rz) && (R[5] > 0) != (ry*rz > 0))
+				rz = -rz;
+			theta /= sqrt(rx*rx + ry*ry + rz*rz);
+			rx *= theta, ry *= theta, rz *= theta;
+		}
+	}
+	else
+	{
+		double vth = 1.0 / (2.0 * s);
+		vth *= theta;
+		rx *= vth; ry *= vth; rz *= vth;
+	}
+	r[0] = rx, r[1] = ry, r[2] = rz;
+
+	return;
+}
+void convertRvecToRmat(double *r, double *R)
+{
+	/*Mat Rmat(3, 3, CV_64F), rvec(3, 1, CV_64F);
 	for (int jj = 0; jj < 3; jj++)
 		rvec.at<double>(jj) = r[jj];
 
 	Rodrigues(rvec, Rmat);
 
 	for (int jj = 0; jj < 9; jj++)
-		R[jj] = Rmat.at<double>(jj);
+		R[jj] = Rmat.at<double>(jj);*/
+
+	double theta = sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]), theta2 = theta* theta;
+	double rx[9] = { 0.0, -r[2], r[1], r[2], 0.0, -r[0], -r[1], r[0], 0.0 };
+	double rx2[9]; mat_mul(rx, rx, rx2, 3, 3, 3);
+
+	R[0] = 1.0, R[1] = 0.0, R[2] = 0.0;
+	R[3] = 0.0, R[4] = 1.0, R[5] = 0.0;
+	R[6] = 0.0, R[7] = 0.0, R[8] = 1.0;
+
+	if (theta < 1.0e-9)
+		return;
+	else
+	{
+		double A = sin(theta) / theta, B = (1.0 - cos(theta)) / theta2, C = (1.0 - A) / theta2;
+		for (int ii = 0; ii < 9; ii++)
+			R[ii] += A*rx[ii] + B*rx2[ii];
+	}
 
 	return;
 }
@@ -6506,7 +6653,7 @@ bool ReSaveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData, double
 
 	FILE *fp = fopen(BAfileName, "w+");
 	fprintf(fp, "%d \n", CorpusData.nCameras);
-	
+
 	for (int viewID = 0; viewID < CorpusData.nCameras; viewID++)
 	{
 		fprintf(fp, "%d.png %d %d %d ", viewID, CorpusData.camera[viewID].LensModel, CorpusData.camera[viewID].width, CorpusData.camera[viewID].height);
@@ -6819,9 +6966,9 @@ int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool notReadD
 		sprintf(Fname, "%s/CorpusK_%d.txt", Path, ii);
 		FILE *fp = fopen(Fname, "r");
 		while (fscanf(fp, "%lf %lf %lf", &uv.x, &uv.y, &scale) != EOF)
-		uvVector.push_back(uv), scaleVector.push_back(scale);
+			uvVector.push_back(uv), scaleVector.push_back(scale);
 		//while (fscanf(fp, "%lf %lf ", &uv.x, &uv.y) != EOF)
-			//uvVector.push_back(uv), scaleVector.push_back(1.0);
+		//uvVector.push_back(uv), scaleVector.push_back(1.0);
 		fclose(fp);
 		CorpusData.uvAllViews.push_back(uvVector);
 		CorpusData.scaleAllViews.push_back(scaleVector);

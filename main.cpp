@@ -1,8 +1,13 @@
-#include <iostream>
+﻿#include <iostream>
 #include <fstream>
 #include <omp.h>
 #include <vector>
 #include <cstdlib>
+#include <stdio.h>
+#include <limits>
+#include <algorithm>
+#include <math.h>
+#include <stdint.h>
 
 #include <opencv2/opencv.hpp>
 #include <Eigen/Sparse>
@@ -11,11 +16,13 @@
 #include <boost/graph/prim_minimum_spanning_tree.hpp>
 #include <boost/graph/kruskal_min_spanning_tree.hpp>
 
+#include "DataStructure.h"
 #include "ImagePro.h"
 #include "VideoSequence.h"
 #include "Ultility.h"
 #include "Geometry.h"
 #include "Visualization.h"
+
 
 #ifdef _WIN32
 #include <direct.h>
@@ -29,7 +36,7 @@
 
 using namespace std;
 using namespace cv;
-
+using namespace Eigen;
 
 bool autoplay = false, saveFrame = false;
 int MousePosX, MousePosY;
@@ -844,7 +851,7 @@ int VisualizePnPMatches(char *Path, int cameraID, int timeID)
 
 	int npts, threeDid, ptsCount = 0;
 	double u, v, scale;
-	sprintf(Fname, "%s/%d/Inliers_3D2D_%d.txt", Path, cameraID, timeID); FILE *fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/%d/3D2D_%d.txt", Path, cameraID, timeID); FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
 		printf("Cannot load %s\n", Fname);
@@ -854,7 +861,8 @@ int VisualizePnPMatches(char *Path, int cameraID, int timeID)
 	vector<int> threeDidVec;
 	Point2d *pts = new Point2d[npts];
 	Point3d *t3D = new Point3d[npts];
-	while (fscanf(fp, "%d %lf %lf ", &threeDid, &u, &v, &scale) != EOF)
+	//while (fscanf(fp, "%d %lf %lf %lf", &threeDid, &u, &v, &scale) != EOF)
+	while (fscanf(fp, "%d %lf %lf ", &threeDid, &u, &v) != EOF)
 	{
 		threeDidVec.push_back(threeDid);
 		pts[ptsCount].x = u, pts[ptsCount].y = v;
@@ -2230,8 +2238,20 @@ int GeometricConstraintSyncDriver(char *Path, int nCams, int npts, int startFram
 
 	return 0;
 }
-int TriangulateFrameSync2DTrajectories(char *Path, int *SelectedCams, int nCams, int startFrame, int stopFrame, int npts, int *FrameOffset)
+int TriangulateFrameSync2DTrajectories(char *Path, vector<int> SelectedCams, vector<int> FrameOffset, int startFrame, int stopFrame, int npts, bool CleanCorrespondencesByTriangulationTest = false, double *GTFrameOffset = 0, double *ialpha = 0, double*Tscale = 0)
 {
+	int nCams = (int)SelectedCams.size();
+	bool createdMem = false;
+	if (GTFrameOffset == NULL)
+	{
+		createdMem = true;
+		GTFrameOffset = new double[nCams];
+		ialpha = new double[1], Tscale = new double[1];
+		ialpha[0] = 1.0, Tscale[0] = 1.0;
+		for (int ii = 0; ii < nCams; ii++)
+			GTFrameOffset[ii] = 0.0;
+	}
+
 	char Fname[512];
 	VideoData *VideoInfo = new VideoData[nCams];
 	for (int camID = 0; camID < nCams; camID++)
@@ -2240,25 +2260,23 @@ int TriangulateFrameSync2DTrajectories(char *Path, int *SelectedCams, int nCams,
 			return 1;
 	}
 
-	const int maxnFrames = 1000;
-	vector<int> *frameID = new vector<int>[maxnFrames*npts];
-	vector<int> *CamID = new vector<int>[maxnFrames*npts];
-	vector<Point2d> *FrameSyncedPoints = new vector<Point2d>[maxnFrames*npts];
-	vector<Pmat> *Pmatrix = new vector<Pmat>[maxnFrames*npts];
+	vector<int> *RealframeID = new vector<int>[MaxnFrames*npts];
+	vector<int> *CamID = new vector<int>[MaxnFrames*npts];
+	vector<Point2d> *FrameSyncedPoints = new vector<Point2d>[MaxnFrames*npts];
+	vector<Pmat> *Pmatrix = new vector<Pmat>[MaxnFrames*npts];
 
 	Pmat Pm;
 	Point2d uv;
 	int pid, cid, fid, nf;
-	const int nframes = 5000;
 	for (int ii = 0; ii < nCams; ii++)
 	{
-		sprintf(Fname, "%s/Track2D/CL_%d.txt", Path, ii);	FILE *fp = fopen(Fname, "r");
+		sprintf(Fname, "%s/Track2D/%d.txt", Path, SelectedCams[ii]);	FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 		{
 			printf("Cannot load %s\n", Fname);
 			return 1;
 		}
-		for (int jj = 0; jj < npts; jj++)
+		for (pid = 0; pid < npts; pid++)
 		{
 			fscanf(fp, "%d %d ", &pid, &nf);
 			for (int kk = 0; kk < nf; kk++)
@@ -2266,20 +2284,19 @@ int TriangulateFrameSync2DTrajectories(char *Path, int *SelectedCams, int nCams,
 				fscanf(fp, "%d %lf %lf ", &fid, &uv.x, &uv.y);
 				if (fid<0 || fid>MaxnFrames || !VideoInfo[ii].VideoInfo[fid].valid)
 					continue;
+				LensCorrectionPoint(&uv, VideoInfo[ii].VideoInfo[fid].K, VideoInfo[ii].VideoInfo[fid].distortion);
 
 				for (int ll = 0; ll < 12; ll++)
 					Pm.P[ll] = VideoInfo[ii].VideoInfo[fid].P[ll];
 
-				//LensCorrectionPoint(&uv, VideoInfo[ii].VideoInfo[fid].K, VideoInfo[ii].VideoInfo[fid].distortion);
-
-				fid = fid - FrameOffset[ii]; //fake the order
-				if (fid<0 || fid>MaxnFrames)
+				int fake_fid = fid - FrameOffset[ii]; //fake the order
+				if (fake_fid<0 || fake_fid>MaxnFrames)
 					continue;
 
-				CamID[fid - startFrame + jj*maxnFrames].push_back(ii);
-				frameID[fid - startFrame + jj*maxnFrames].push_back(fid + FrameOffset[ii]);
-				FrameSyncedPoints[fid - startFrame + jj*maxnFrames].push_back(uv);
-				Pmatrix[fid - startFrame + jj*maxnFrames].push_back(Pm);
+				CamID[fake_fid + pid*MaxnFrames].push_back(ii);
+				RealframeID[fake_fid + pid*MaxnFrames].push_back(fid);
+				FrameSyncedPoints[fake_fid + pid*MaxnFrames].push_back(uv);
+				Pmatrix[fake_fid + pid*MaxnFrames].push_back(Pm);
 			}
 		}
 		fclose(fp);
@@ -2294,29 +2311,30 @@ int TriangulateFrameSync2DTrajectories(char *Path, int *SelectedCams, int nCams,
 	bool *passed = new bool[nCams * 2];
 	vector<int>Inliers[1];  Inliers[0].reserve(nCams * 2);
 
-	vector<int> *CleanFrameSynID = new vector<int>[nCams*npts];
-	vector<Point2d> *CleanedFrameSyncedPoints = new vector<Point2d>[nCams*npts];
+	vector<int> *CleanFrameSynID;
+	vector<Point2d> *CleanedFrameSyncedPoints;
+	if (CleanCorrespondencesByTriangulationTest)
+		CleanFrameSynID = new vector<int>[nCams*npts], CleanedFrameSyncedPoints = new vector<Point2d>[nCams*npts];
 
-	sprintf(Fname, "%s/Track3D", Path), makeDir(Fname);
-	double finalerror;
-	for (int jj = 0; jj < npts; jj++)
+	for (pid = 0; pid < npts; pid++)
 	{
-		sprintf(Fname, "%s/Track3D/lfs_%d.txt", Path, jj);  FILE *fp = fopen(Fname, "w+");
+		sprintf(Fname, "%s/frameSynced_Track_%d.txt", Path, pid);  FILE *fp = fopen(Fname, "w+");
 		for (int kk = 0; kk <= stopFrame - startFrame; kk++)
 		{
-			int nvis = FrameSyncedPoints[kk + jj*maxnFrames].size();
+			int nvis = FrameSyncedPoints[kk + pid*MaxnFrames].size();
 			if (nvis < 2)
 				continue;
 
+			vector<int> cameraID, frameID;
 			for (int ii = 0; ii < nvis; ii++)
 			{
-				cid = CamID[kk + jj*maxnFrames][ii], fid = frameID[kk + jj*maxnFrames][ii];
-				uv = FrameSyncedPoints[kk + jj*maxnFrames][ii];
-				LensCorrectionPoint(&uv, VideoInfo[cid].VideoInfo[fid].K, VideoInfo[cid].VideoInfo[fid].distortion);
-				pts[ii] = FrameSyncedPoints[kk + jj*maxnFrames][ii];
+				cameraID.push_back(CamID[kk + pid*MaxnFrames][ii]);
+				frameID.push_back(RealframeID[kk + pid*MaxnFrames][ii]);
+				uv = FrameSyncedPoints[kk + pid*MaxnFrames][ii];
+				pts[ii] = FrameSyncedPoints[kk + pid*MaxnFrames][ii];
 
 				for (int ll = 0; ll < 12; ll++)
-					P[12 * ii + ll] = Pmatrix[kk + jj*maxnFrames][ii].P[ll];
+					P[12 * ii + ll] = Pmatrix[kk + pid*MaxnFrames][ii].P[ll];
 			}
 
 			/*finalerror = NviewTriangulationRANSAC(pts, P, &P3d, passed, Inliers, nvis, 1, 10, 0.5, 10, A, B, tP);
@@ -2328,38 +2346,48 @@ int TriangulateFrameSync2DTrajectories(char *Path, int *SelectedCams, int nCams,
 			if (ninlier>=5)*/
 			NviewTriangulation(pts, P, &P3d, nvis, 1, NULL, A, B);
 			ProjectandDistort(P3d, ppts, P, NULL, NULL, nvis);
-			finalerror = 0.0;
+
+			int nvalid = 0;
+			double finalerror = 0.0;
 			for (int ll = 0; ll < nvis; ll++)
-				finalerror += pow(ppts[ll].x - pts[ll].x, 2) + pow(ppts[ll].y - pts[ll].y, 2);
+				finalerror += pow(ppts[ll].x - pts[ll].x, 2) + pow(ppts[ll].y - pts[ll].y, 2), nvalid++;
 			finalerror = sqrt(finalerror / nvis);
 
-			if (finalerror < 10 && nvis >= nCams)
+			if (finalerror < 1000 && nvalid >= 2)
 			{
 				for (int ii = 0; ii < nvis; ii++)
 				{
-					cid = CamID[kk + jj*maxnFrames][ii], fid = frameID[kk + jj*maxnFrames][ii];
-					CleanFrameSynID[cid*npts + jj].push_back(fid);
-					CleanedFrameSyncedPoints[cid*npts + jj].push_back(FrameSyncedPoints[kk + jj*maxnFrames][ii]);
+					cid = CamID[kk + pid*MaxnFrames][ii], fid = RealframeID[kk + pid*MaxnFrames][ii];
+					fprintf(fp, "%.4f %.4f %.4f %.2f %d %d\n", P3d.x, P3d.y, P3d.z, (GTFrameOffset[cid] + fid)*ialpha[0] * Tscale[0], SelectedCams[cid], fid);
 				}
 
-				fprintf(fp, "%d %.4f %.4f %.4f %.2f\n", frameID[kk + jj*maxnFrames][0], P3d.x, P3d.y, P3d.z, finalerror);
+				for (int ii = 0; ii < nvis && CleanCorrespondencesByTriangulationTest; ii++)
+				{
+					cid = CamID[kk + pid*MaxnFrames][ii], fid = RealframeID[kk + pid*MaxnFrames][ii];
+					CleanFrameSynID[cid*npts + pid].push_back(fid);
+					CleanedFrameSyncedPoints[cid*npts + pid].push_back(FrameSyncedPoints[kk + pid*MaxnFrames][ii]);
+				}
 			}
 		}
 		fclose(fp);
 	}
 
-	/*for (int ii = 0; ii < nCams; ii++)
+	for (int ii = 0; ii < nCams &&CleanCorrespondencesByTriangulationTest; ii++)
 	{
-	sprintf(Fname, "%s/Track2D/C_%d.txt", Path, ii);	FILE *fp = fopen(Fname, "w+");
-	for (int jj = 0; jj < npts; jj++)
-	{
-	fprintf(fp, "%d %d ", jj, CleanedFrameSyncedPoints[ii*npts + jj].size());
-	for (int kk = 0; kk < CleanedFrameSyncedPoints[ii*npts + jj].size(); kk++)
-	fprintf(fp, "%d %.4f %.4f ", CleanFrameSynID[ii*npts + jj][kk], CleanedFrameSyncedPoints[ii*npts + jj][kk].x, CleanedFrameSyncedPoints[ii*npts + jj][kk].y);
-	fprintf(fp, "\n");
+		sprintf(Fname, "%s/Track2D/C_%d.txt", Path, SelectedCams[ii]);	FILE *fp = fopen(Fname, "w+");
+		for (int jj = 0; jj < npts; jj++)
+		{
+			fprintf(fp, "%d %d ", jj, CleanedFrameSyncedPoints[ii*npts + jj].size());
+			for (int kk = 0; kk < CleanedFrameSyncedPoints[ii*npts + jj].size(); kk++)
+				fprintf(fp, "%d %.4f %.4f ", CleanFrameSynID[ii*npts + jj][kk], CleanedFrameSyncedPoints[ii*npts + jj][kk].x, CleanedFrameSyncedPoints[ii*npts + jj][kk].y);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
 	}
-	fclose(fp);
-	}*/
+
+	delete[]A, delete[]B, delete[]P, delete[]tP, delete[]passed;
+	if (createdMem)
+		delete[]CleanFrameSynID, delete[]CleanedFrameSyncedPoints;
 
 	return 0;
 }
@@ -2755,7 +2783,7 @@ int CheckerBoardMultiviewSpatialTemporalCalibration2(char *Path, int nCams, int 
 			GetrtFromRT(StationaryCamInfo[addingCamID]);
 
 			fixedIntrinsc = true, fixedDistortion = true, distortionCorrected = false;
-			if (PoseBA(Path, StationaryCamInfo[addingCamID], p3d, pts1, featureScale, GoodPoints, fixedIntrinsc, fixedDistortion, distortionCorrected, false) == 1)
+			if (CameraPose_GSBA(Path, StationaryCamInfo[addingCamID], p3d, pts1, featureScale, GoodPoints, fixedIntrinsc, fixedDistortion, distortionCorrected, false) == 1)
 				printf("Something seriously wrong happend when adding new cameras\n"), abort();
 
 			CheckerBoardAllViewsTriangulate(StationaryCamInfo, AvailableViews, viewIdAll3D, uvAll3D, P3D);
@@ -3417,17 +3445,18 @@ int TemporalOptimInterpNew(char *Path, double *Offset)
 }
 int TestFrameSyncTriangulation(char *Path)
 {
-	int nCams = 3, npts = 1, width = 1920, height = 1080;
+	int nCams = 3, npts = 1, width = 1920, height = 1080, rate = 10;
 	double Intrinsic[5] = { 1500, 1500, 0, 960, 540 }, distortion[7] = { 0, 0, 0, 0, 0, 0, 0 }, radius = 3000;
-	int SelectedCams[] = { 0, 1, 2 }, UnSyncFrameOffset[] = { 2, 14, 26 }, SyncFrameOffset[] = { 0, 0, 0 }, rate = 10;
-	//SimulateCamerasAnd2DPointsForMoCap(Path, nCams, npts, Intrinsic, distortion, width, height, radius, true, false, true, rate, UnSyncFrameOffset, SyncFrameOffset);
+	vector<int> SelectedCams{ 0, 1, 2 }, UnSyncFrameTimeStamp{ 2, 14, 26 };
+	//SimulateCamerasAnd2DPointsForMoCap(Path, nCams, npts, Intrinsic, distortion, width, height, radius, true, false, true, rate, UnSyncFrameTimeStamp, SyncFrameOffset);
 
-	for (int ii = 0; ii < 3; ii++)
-		SyncFrameOffset[ii] = -SyncFrameOffset[ii];
+	vector<int> SyncFrameOffset;
+	for (int ii = 0; ii < (int)SelectedCams.size(); ii++)
+		SyncFrameOffset.push_back(-UnSyncFrameTimeStamp[ii] / 10);
 
 	//double OffsetInfo[3];
 	//LeastActionSyncBruteForce2DTriplet(Path, SelectedCams, 0, 53, 1, OffsetInfo);
-	TriangulateFrameSync2DTrajectories(Path, SelectedCams, nCams, 0, 54, npts, SyncFrameOffset);
+	TriangulateFrameSync2DTrajectories(Path, SelectedCams, SyncFrameOffset, 0, 54, npts);
 	visualizationDriver(Path, 3, 0, 400, true, false, true, false, true, 0);
 	return 0;
 }
@@ -3565,7 +3594,7 @@ struct LeastActionCostSplineCeres {
 			int camID = VectorCamID[ii], frameID = VectorFrameID[ii];
 			TimeStampData[ii] = (Parameters[1][camID] + frameID)* ialpha*Tscale;
 		}
-		GenerateResamplingSplineWithBreakPts(PhiData, NULL, TimeStampData, BreakPts, nDataSamples, nBreakPts, SplineOrder, 0);
+		GenerateSplineBasisWithBreakPts(PhiData, NULL, TimeStampData, BreakPts, nDataSamples, nBreakPts, SplineOrder, 0);
 
 		int nCoeffs = nBreakPts + 2;
 		for (int jj = 0; jj < 3; jj++)
@@ -3581,7 +3610,7 @@ struct LeastActionCostSplineCeres {
 		double PriorStep = (TimeStampData[nDataSamples - 1] - TimeStampData[0]) / nPriorSamples;
 		for (int ii = 0; ii < nPriorSamples; ii++)
 			TimeStampPrior[ii] = TimeStampData[0] + PriorStep*ii;
-		GenerateResamplingSplineWithBreakPts(NULL, PhiPrior, TimeStampPrior, BreakPts, nPriorSamples, nBreakPts, SplineOrder, 1);
+		GenerateSplineBasisWithBreakPts(NULL, PhiPrior, TimeStampPrior, BreakPts, nPriorSamples, nBreakPts, SplineOrder, 1);
 
 		double dx, dy, dz;
 		for (int ii = 0; ii < nPriorSamples; ii++)
@@ -4812,7 +4841,7 @@ double LeastActionOptimXYZT_3D_Algebraic(char *Path, vector<double*> &Allpt3D, v
 		{
 			CeresCost += summary.final_cost;
 			if (!silent)
-				cout << "Point: " << trackID << " " << summary.BriefReport() << "\n";;// cout << "Point: " << trackID << " " << summary.FullReport() << "\n";
+				cout << "Point: " << trackID << " " << summary.BriefReport() << "\n";// cout << "Point: " << trackID << " " << summary.FullReport() << "\n";
 		}
 
 		//copy simultaneous triggered points
@@ -5475,16 +5504,16 @@ double LeastActionOptimXYZT_JointGeometric(char *Path, vector<double*> &Allpt3D,
 	options.num_linear_solver_threads = omp_get_max_threads();
 	options.max_num_iterations = 3000;
 	options.linear_solver_type = ceres::SPARSE_SCHUR;//SPARSE_NORMAL_CHOLESKY
-	options.minimizer_progress_to_stdout = true;
+	options.minimizer_progress_to_stdout = !silent;
 	options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;
 	options.use_nonmonotonic_steps = non_monotonicDescent;
 
 	ceres::Solver::Summary summary;
 	ceres::Solve(options, &problem, &summary);
-	//if (!silent)
-	std::cout << summary.FullReport() << "\n";
-	//else
-	//std::cout << summary.BriefReport() << "\n";
+	if (!silent)
+		std::cout << summary.FullReport() << "\n";
+	else
+		std::cout << summary.BriefReport() << "\n";
 
 	double CeresCost = summary.final_cost;
 	//Save data
@@ -6177,6 +6206,7 @@ double LeastActionOptimXYZT_JointGeometricSpline(char *Path, vector<double*> &Al
 
 double LeastActionSyncBruteForce2DStereo(char *Path, vector<int>SelectedCams, int startFrame, int stopFrame, int ntracks, vector<double> &OffsetInfo, int LowBound, int UpBound, double frameSize, double lamda, int motionPriorPower, int &totalPoints, bool silient = true)
 {
+	//Offset is in timestamp format
 	const double Tscale = 1000.0, fps = 60, ialpha = 1.0 / fps, eps = 1.0e-6;
 	char Fname[200]; FILE *fp = 0;
 	const int nCams = 2;
@@ -6350,6 +6380,7 @@ double LeastActionSyncBruteForce2DStereo(char *Path, vector<int>SelectedCams, in
 }
 int LeastActionSyncBruteForce2DTriplet(char *Path, vector<int> SelectedCams, int startFrame, int stopFrame, int ntracks, vector<double> &OffsetInfo, int LowBound, int UpBound, double frameSize, double lamda, int motionPriorPower)
 {
+	//Offset is in timestamp format
 	const double Tscale = 1000.0, fps = 60, ialpha = 1.0 / fps, eps = 1.0e-6;
 
 	char Fname[200]; FILE *fp = 0;
@@ -6561,6 +6592,7 @@ int LeastActionSyncBruteForce2DTriplet(char *Path, vector<int> SelectedCams, int
 }
 int IncrementalLeastActionSyncDiscreteContinous2D(char *Path, vector<int> SelectedCams, int startFrame, int stopFrame, int npts, vector<double> &OffsetInfo, int LowBound, int UpBound, double frameSize, double lamda, int motionPriorPower, bool RefineConsiderOrdering = true)
 {
+	//Offset is in timestamp format
 	char Fname[200]; FILE *fp = 0;
 	const double Tscale = 1000.0, fps = 60, ialpha = 1.0 / fps, eps = 1.0e-9;
 
@@ -6846,10 +6878,11 @@ int IncrementalLeastActionSyncDiscreteContinous2D(char *Path, vector<int> Select
 
 	return NotSuccess;
 }
-int TrajectoryTriangulation(char *Path, vector<int> SelectedCams, vector<double> OffsetInfoVector, int npts, int startFrame, int stopFrame, double lamda, int motionPriorPower)
+int TrajectoryTriangulation(char *Path, vector<int> SelectedCams, vector<double> TimeStampInfoVector, int npts, int startFrame, int stopFrame, double lamda, int motionPriorPower)
 {
 	char Fname[200]; FILE *fp = 0;
 	const double Tscale = 1000.0, fps = 60.0, ialpha = 1.0 / fps, eps = 1.0e-6;
+	//const double Tscale = 10.0, fps = 1.0, ialpha = 1.0 / fps, eps = 1.0e-6;
 
 	//Read calib info
 	int nCams = (int)SelectedCams.size();
@@ -6964,26 +6997,28 @@ int TrajectoryTriangulation(char *Path, vector<int> SelectedCams, vector<double>
 		All3D[pid] = new double[3 * ntimeinstances];
 	}
 
-	printf("Trajectory triangulation:\n");
 	double APLDCost[4];
 	vector<double> VTimeStamp; VTimeStamp.reserve(maxntimeinstances);
 	vector<Point3d> VTrajectory3D; VTrajectory3D.reserve(maxntimeinstances);
 
 	double *OffsetInfo = new double[nCams];
 	for (int ii = 0; ii < nCams; ii++)
-		OffsetInfo[ii] = OffsetInfoVector[ii];
+		OffsetInfo[ii] = TimeStampInfoVector[ii];
 
 	//LeastActionOptimXYZT_3D_NoSimulatenousPoints(Path, All3D, PerCam_UV, PointsPerTrack, OffsetInfo, npts, false, nCams, Tscale, ialpha, eps, lamda, APLDCost, false, false);
+	printf("Algrebraic triangulation:\n");
 	LeastActionOptimXYZT_3D_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, OffsetInfo, npts, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, false);
+
+	printf("\nGeometric triangulation:\n");
 	LeastActionOptimXYZT_3D_Geometric(Path, All3D, PerCam_UV, PointsPerTrack, OffsetInfo, npts, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, false);
 
 	for (int pid = 0; pid < npts; pid++)
 	{
-		sprintf(Fname, "%s/ATrack_%d.txt", Path, pid);  FILE *fp = fopen(Fname, "w+");
+		sprintf(Fname, "%s/OptimizedRaw_Track_%d.txt", Path, pid);  FILE *fp = fopen(Fname, "w+");
 		for (int camID = 0; camID < nCams; camID++)
 			for (int fid = 0; fid < PerCam_UV[camID*npts + pid].size(); fid++)
-				fprintf(fp, "%.8f %.8f %.8f %.4f %d %d\n", PerCam_UV[camID*npts + pid][fid].pt3D.x, PerCam_UV[camID*npts + pid][fid].pt3D.y,
-				PerCam_UV[camID*npts + pid][fid].pt3D.z, 1.0*OffsetInfo[camID] * ialpha*Tscale + 1.0*PerCam_UV[camID*npts + pid][fid].frameID * ialpha*Tscale, camID, PerCam_UV[camID*npts + pid][fid].frameID);
+				fprintf(fp, "%.8f %.8f %.8f %.4f %d %d\n", PerCam_UV[camID*npts + pid][fid].pt3D.x, PerCam_UV[camID*npts + pid][fid].pt3D.y, PerCam_UV[camID*npts + pid][fid].pt3D.z,
+				1.0*OffsetInfo[camID] * ialpha*Tscale + 1.0*PerCam_UV[camID*npts + pid][fid].frameID * ialpha*Tscale, SelectedCams[camID], PerCam_UV[camID*npts + pid][fid].frameID);
 		fclose(fp);
 	}
 
@@ -7267,12 +7302,13 @@ int Combine3DStatisticFromRandomSampling(char *Path, int nCams, int ntracks)
 
 	return 0;
 }
-int Generate3DUncertaintyFromRandomSampling(char *Path, int *SelectedCams, int nCams, double *OffsetInfo, int startFrame, int stopFrame, int ntracks, int startSample, int nSamples, int motionPriorPower)
+int Generate3DUncertaintyFromRandomSampling(char *Path, vector<int> SelectedCams, vector<double> OffsetInfo, int startFrame, int stopFrame, int ntracks, int startSample = 0, int nSamples = 100, int motionPriorPower = 2)
 {
 	char Fname[200]; FILE *fp = 0;
 	const double Tscale = 1000.0, fps = 60, ialpha = 1.0 / fps, eps = 1.0e-6, rate = 1.0, lamda = .3;
 
 	//Read calib info
+	int nCams = (int)SelectedCams.size();
 	VideoData *VideoInfo = new VideoData[nCams];
 	for (int camID = 0; camID < nCams; camID++)
 		if (ReadVideoDataI(Path, VideoInfo[camID], SelectedCams[camID], startFrame, stopFrame) == 1)
@@ -7547,7 +7583,7 @@ void ResamplingOf3DTrajectorySpline(vector<ImgPtEle> &Traj3D, bool non_monotonic
 	for (int ii = 0; ii < nptsPrior; ii++)
 		TimeStampPrior[ii] = floor(earliest) + Resample_Step*ii;
 
-	//Find and delete breakpts with no data in between, which causes the basis matrix to has high condition value
+	//Find and delete breakpts with no data in between (this makes the basis matrix to be ill-condition)
 	vector<int>IdToDel;
 	for (int ii = 0; ii < nBreaks - 1; ii++)
 	{
@@ -7660,7 +7696,7 @@ void ResamplingOf3DTrajectorySpline(vector<ImgPtEle> &Traj3D, bool non_monotonic
 
 	vector<double*> parameter_blocks;
 	parameter_blocks.push_back(C);
-	ceres::DynamicAutoDiffCostFunction<CeresResamplingSpline, 10> *cost_function = new ceres::DynamicAutoDiffCostFunction<CeresResamplingSpline, 10>(new CeresResamplingSpline(X, PmatCat, PhiData, PhiPrior, TimeStampData, TimeStampPrior, pt2dCat, lamda, nptsData, nptsPrior, nCoeffs, eps));
+	ceres::DynamicAutoDiffCostFunction<CeresResamplingSpline, 4> *cost_function = new ceres::DynamicAutoDiffCostFunction<CeresResamplingSpline, 4>(new CeresResamplingSpline(X, PmatCat, PhiData, PhiPrior, TimeStampData, TimeStampPrior, pt2dCat, lamda, nptsData, nptsPrior, nCoeffs, eps));
 	//ceres::DynamicNumericDiffCostFunction<CeresResamplingSpline, ceres::CENTRAL> *cost_function = new ceres::DynamicNumericDiffCostFunction<CeresResamplingSpline, ceres::CENTRAL>(new CeresResamplingSpline(X, PmatCat, PhiData, PhiPrior, TimeStampData, TimeStampPrior, pt2dCat, lamda, nptsData, nptsPrior, nCoeffs, eps));
 	cost_function->AddParameterBlock(3 * nCoeffs);
 	cost_function->SetNumResiduals(2 * nptsData + nptsPrior - 1);
@@ -7668,6 +7704,7 @@ void ResamplingOf3DTrajectorySpline(vector<ImgPtEle> &Traj3D, bool non_monotonic
 	problem.AddResidualBlock(cost_function, NULL, parameter_blocks);
 
 	ceres::Solver::Options options;
+	options.max_num_iterations = 100;
 	options.linear_solver_type = ceres::DENSE_QR;
 	options.minimizer_progress_to_stdout = silent ? false : true;
 
@@ -7741,6 +7778,7 @@ int ResamplingOf3DTrajectorySplineDriver(char *Path, vector<int> SelectedCams, v
 {
 	char Fname[200]; FILE *fp = 0;
 	const double Tscale = 1000.0, fps = 60.0, ialpha = 1.0 / fps, eps = 1.0e-6;
+	//const double Tscale = 10.0, fps = 1.0, ialpha = 1.0 / fps, eps = 1.0e-6;
 
 	//Read calib info
 	int nCams = (int)SelectedCams.size();
@@ -7870,7 +7908,7 @@ int ResamplingOf3DTrajectorySplineDriver(char *Path, vector<int> SelectedCams, v
 	{
 		TimeStamp.clear(), T3D.clear(), VisCamID.clear(), VisLocalFrameID.clear();
 
-		sprintf(Fname, "%s/ATrack_%d.txt", Path, trackID); FILE *fp = fopen(Fname, "r");
+		sprintf(Fname, "%s/OptimizedRaw_Track_%d.txt", Path, trackID); FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 		{
 			printf("Cannot load %s\n", Fname);
@@ -7920,7 +7958,7 @@ int ResamplingOf3DTrajectorySplineDriver(char *Path, vector<int> SelectedCams, v
 
 #pragma omp critical
 		{
-			sprintf(Fname, "%s/ATrack_%d_.txt", Path, trackID); remove(Fname);
+			sprintf(Fname, "%s/Resampled_Track_%d.txt", Path, trackID); remove(Fname);
 			fp = fopen(Fname, "w+");
 			for (int ii = 0; ii < (int)Traj3D[trackID].size(); ii++)
 				fprintf(fp, "%.4f %.4f %.4f %.4f %d %d\n", Traj3D[trackID][ii].pt3D.x, Traj3D[trackID][ii].pt3D.y, Traj3D[trackID][ii].pt3D.z, Traj3D[trackID][ii].timeStamp, Traj3D[trackID][ii].viewID, Traj3D[trackID][ii].frameID);
@@ -8059,35 +8097,35 @@ int CheckerBoardMultiviewSpatialTemporalCalibration(char *Path, int nCams, int s
 		EvaluateAllPairCost(Path, nCams, npts, startFrame, stopFrame, SearchRange, SearchStep, lamdaData, motionPriorPower, FrameLevelOffsetInfo);
 
 		vector<int>cameraOrdering;
-		vector<double> InitOffsetInfoVector;
-		DetermineCameraOrderingForGreedySTBA(Path, "PairwiseCost", nCams, cameraOrdering, InitOffsetInfoVector);
+		vector<double> InitTimeStampInfoVector;
+		DetermineCameraOrderingForGreedySTBA(Path, "PairwiseCost", nCams, cameraOrdering, InitTimeStampInfoVector);
 
 		vector<int> SelectedCamera;
-		vector<double>OffsetInfoVector;
+		vector<double>TimeStampInfoVector;
 		for (int ii = 0; ii < 3; ii++)
-			SelectedCamera.push_back(cameraOrdering[ii]), OffsetInfoVector.push_back(InitOffsetInfoVector[ii]);
+			SelectedCamera.push_back(cameraOrdering[ii]), TimeStampInfoVector.push_back(InitTimeStampInfoVector[ii]);
 
 		printf("\nCoarse ST estimation for 3 cameras (%d, %d, %d):\n", SelectedCamera[0], SelectedCamera[1], SelectedCamera[2]);
-		LeastActionSyncBruteForce2DTriplet(Path, SelectedCamera, 0, stopFrame, npts, OffsetInfoVector, -SearchRange / 2, SearchRange / 2, SearchStep, lamdaData, motionPriorPower);
-		printf("Coarse ST estimation for 3 cameras (%d, %d, %d): %.4f %.4f %.4f \n\n", SelectedCamera[0], SelectedCamera[1], SelectedCamera[2], OffsetInfoVector[0], OffsetInfoVector[1], OffsetInfoVector[2]);
+		LeastActionSyncBruteForce2DTriplet(Path, SelectedCamera, 0, stopFrame, npts, TimeStampInfoVector, -SearchRange / 2, SearchRange / 2, SearchStep, lamdaData, motionPriorPower);
+		printf("Coarse ST estimation for 3 cameras (%d, %d, %d): %.4f %.4f %.4f \n\n", SelectedCamera[0], SelectedCamera[1], SelectedCamera[2], TimeStampInfoVector[0], TimeStampInfoVector[1], TimeStampInfoVector[2]);
 
-		IncrementalLeastActionSyncDiscreteContinous2D(Path, SelectedCamera, startFrame, stopFrame, npts, OffsetInfoVector, 0, 0, 0, lamdaData, motionPriorPower, false);
+		IncrementalLeastActionSyncDiscreteContinous2D(Path, SelectedCamera, startFrame, stopFrame, npts, TimeStampInfoVector, 0, 0, 0, lamdaData, motionPriorPower, false);
 
 		char Fname[200]; sprintf(Fname, "%s/MotionPriorSyncProgress.txt", Path);	FILE *fp = fopen(Fname, "w+");
-		fprintf(fp, "%d %d %d %d %.4f %.4f %.4f \n", 3, SelectedCamera[0], SelectedCamera[1], SelectedCamera[2], OffsetInfoVector[0], OffsetInfoVector[1], OffsetInfoVector[2]);
+		fprintf(fp, "%d %d %d %d %.4f %.4f %.4f \n", 3, SelectedCamera[0], SelectedCamera[1], SelectedCamera[2], TimeStampInfoVector[0], TimeStampInfoVector[1], TimeStampInfoVector[2]);
 
 		int orderingChangeTrials = 0;
 		for (int currentCamID = 3; currentCamID < nCams; currentCamID++)
 		{
 			SelectedCamera.push_back(cameraOrdering[currentCamID]);
-			OffsetInfoVector.push_back(InitOffsetInfoVector[currentCamID]);
-			int NotSuccess = IncrementalLeastActionSyncDiscreteContinous2D(Path, SelectedCamera, startFrame, stopFrame, npts, OffsetInfoVector, -(int)(SearchStep* SearchRange), (int)(SearchStep* SearchRange), 0.0, lamdaData, motionPriorPower);
+			TimeStampInfoVector.push_back(InitTimeStampInfoVector[currentCamID]);
+			int NotSuccess = IncrementalLeastActionSyncDiscreteContinous2D(Path, SelectedCamera, startFrame, stopFrame, npts, TimeStampInfoVector, -(int)(SearchStep* SearchRange), (int)(SearchStep* SearchRange), 0.0, lamdaData, motionPriorPower);
 
 			//Push the current ordering ID to the end of the stack
 			if (NotSuccess == 1)
 			{
 				SelectedCamera.erase(SelectedCamera.end() - 1);
-				OffsetInfoVector.erase(OffsetInfoVector.end() - 1);
+				TimeStampInfoVector.erase(TimeStampInfoVector.end() - 1);
 
 				//Nothing can be done with this last camera
 				if (currentCamID == nCams - 1)
@@ -8099,9 +8137,9 @@ int CheckerBoardMultiviewSpatialTemporalCalibration(char *Path, int nCams, int s
 				cameraOrdering.erase(cameraOrdering.begin() + currentCamID);
 
 				std::vector<double>::iterator it2;
-				it2 = InitOffsetInfoVector.end();
-				InitOffsetInfoVector.insert(it2, InitOffsetInfoVector[currentCamID]);
-				InitOffsetInfoVector.erase(InitOffsetInfoVector.begin() + currentCamID);
+				it2 = InitTimeStampInfoVector.end();
+				InitTimeStampInfoVector.insert(it2, InitTimeStampInfoVector[currentCamID]);
+				InitTimeStampInfoVector.erase(InitTimeStampInfoVector.begin() + currentCamID);
 
 				currentCamID--;
 
@@ -8115,27 +8153,51 @@ int CheckerBoardMultiviewSpatialTemporalCalibration(char *Path, int nCams, int s
 				for (int ii = 0; ii < (int)SelectedCamera.size(); ii++)
 					fprintf(fp, "%d ", SelectedCamera[ii]);
 				for (int ii = 0; ii < (int)SelectedCamera.size(); ii++)
-					fprintf(fp, "%.4f ", OffsetInfoVector[ii]);
+					fprintf(fp, "%.4f ", TimeStampInfoVector[ii]);
 				fprintf(fp, "\n");
 			}
 		}
 		fclose(fp);
 
-		TrajectoryTriangulation(Path, SelectedCamera, OffsetInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
+		//Resort the time with the earliest camera placed first
+		vector<int> SortedSelectedCamera;
+		vector<double> SortedTimeStampInfoVector = TimeStampInfoVector;
+		sort(SortedTimeStampInfoVector.begin(), SortedTimeStampInfoVector.end());
+		for (int ii = 0; ii < (int)SelectedCamera.size(); ii++)
+		{
+			for (int jj = 0; jj < (int)SelectedCamera.size(); jj++)
+			{
+				if (TimeStampInfoVector[jj] == SortedTimeStampInfoVector[ii])
+				{
+					SortedSelectedCamera.push_back(SelectedCamera[jj]);
+					break;
+				}
+			}
+		}
+		for (int ii = (int)SortedSelectedCamera.size() - 1; ii >= 0; ii--)
+			SortedTimeStampInfoVector[ii] -= SortedTimeStampInfoVector[0];
+
+		//Triangulate trajectories
+		TrajectoryTriangulation(Path, SortedSelectedCamera, SortedTimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
+		ResamplingOf3DTrajectorySplineDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, startFrame, stopFrame, npts, lamdaData, motionPriorPower);
 
 		sprintf(Fname, "%s/FMotionPriorSync.txt", Path);	fp = fopen(Fname, "w+");
+		for (int ii = 0; ii < (int)SortedSelectedCamera.size(); ii++)
+			fprintf(fp, "%d %.4f\n", SortedSelectedCamera[ii], SortedTimeStampInfoVector[ii]);
+		fclose(fp);
+		sprintf(Fname, "%s/FMotionPriorSync.txt", Path);	fp = fopen(Fname, "w+");
 		for (int ii = 0; ii < (int)SelectedCamera.size(); ii++)
-			fprintf(fp, "%d %.4f\n", SelectedCamera[ii], OffsetInfoVector[ii]);
+			fprintf(fp, "%d %.4f\n", SelectedCamera[ii], TimeStampInfoVector[ii]);
 		fclose(fp);
 
 		printf("Total time: %.2fs\n\n", omp_get_wtime() - startTime);
 	}
-	else if (STCalibration == 2)
+	else if (STCalibration > 1)
 	{
 		double startTime = omp_get_wtime();
 
 		vector<int> SelectedCamera;
-		vector<double> OffsetInfoVector;
+		vector<double> TimeStampInfoVector;
 
 		char Fname[200]; sprintf(Fname, "%s/FMotionPriorSync.txt", Path);	FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
@@ -8145,13 +8207,28 @@ int CheckerBoardMultiviewSpatialTemporalCalibration(char *Path, int nCams, int s
 		}
 		int selected; double offsetValue;
 		while (fscanf(fp, "%d %lf ", &selected, &offsetValue) != EOF)
-			SelectedCamera.push_back(selected), OffsetInfoVector.push_back(offsetValue);
+			SelectedCamera.push_back(selected), TimeStampInfoVector.push_back(offsetValue);
 		fclose(fp);
 
-		//Generate3DUncertaintyFromRandomSampling(Path, SelectedCams, nCams, OffsetInfo, 0, stopFrame, npts);
-		TrajectoryTriangulation(Path, SelectedCamera, OffsetInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
-		ResamplingOf3DTrajectorySplineDriver(Path, SelectedCamera, OffsetInfoVector, startFrame, stopFrame, npts, lamdaData, motionPriorPower);
+		if (STCalibration == 2)
+			TrajectoryTriangulation(Path, SelectedCamera, TimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
+		else if (STCalibration == 3)
+			ResamplingOf3DTrajectorySplineDriver(Path, SelectedCamera, TimeStampInfoVector, startFrame, stopFrame, npts, lamdaData, motionPriorPower);
+		else if (STCalibration == 4)
+			Generate3DUncertaintyFromRandomSampling(Path, SelectedCamera, TimeStampInfoVector, startFrame, stopFrame, npts, 0, 100, motionPriorPower);
+		else if (STCalibration == 5)
+		{
+			vector<int>DelayInfoVector;
+			for (int ii = 0; ii < nCams; ii++)
+				DelayInfoVector.push_back((int)(-(1.0*TimeStampInfoVector[ii] + 0.5)));
 
+			double Rate = 1000.0, ialpha = 1.0 / 60.0;
+			double GTFrameTimeStamp[10];
+			for (int ii = 0; ii < nCams; ii++)
+				GTFrameTimeStamp[ii] = TimeStampInfoVector[ii];
+
+			TriangulateFrameSync2DTrajectories(Path, SelectedCamera, DelayInfoVector, startFrame, stopFrame, npts, false, GTFrameTimeStamp, &ialpha, &Rate);
+		}
 		printf("Total time: %.2fs\n\n", omp_get_wtime() - startTime);
 	}
 
@@ -8342,7 +8419,7 @@ int RenderSuperCameraFromMultipleUnSyncedCamerasA(char *Path, int startFrame, in
 	const double fps = 1.0;
 
 	vector<int> SelectedCamera;
-	vector<double> OffsetInfoVector;
+	vector<double> TimeStampInfoVector;
 
 	sprintf(Fname, "%s/FMotionPriorSync.txt", Path);	FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
@@ -8352,7 +8429,7 @@ int RenderSuperCameraFromMultipleUnSyncedCamerasA(char *Path, int startFrame, in
 	}
 	int selected; double offsetValue;
 	while (fscanf(fp, "%d %lf ", &selected, &offsetValue) != EOF)
-		SelectedCamera.push_back(selected), OffsetInfoVector.push_back(offsetValue);
+		SelectedCamera.push_back(selected), TimeStampInfoVector.push_back(offsetValue);
 	fclose(fp);
 
 
@@ -8382,7 +8459,7 @@ int RenderSuperCameraFromMultipleUnSyncedCamerasA(char *Path, int startFrame, in
 
 			//Time:
 			int cframeID = CurrentCameraIFrameID[ii];
-			double currentTime = (OffsetInfoVector[ii] + cframeID) / fps;
+			double currentTime = (TimeStampInfoVector[ii] + cframeID) / fps;
 
 			if (currentTime < earliestTime)
 			{
@@ -8461,7 +8538,7 @@ int RenderSuperCameraFromMultipleUnSyncedCamerasA(char *Path, int startFrame, in
 //Test Least action on still images
 int GenerateHynSooData(char *Path, int nCams, int ntracks)
 {
-	bool save3D = true, fixed3D = false, fixedTime = false, non_monotonicDescent = true;
+	bool save3D = false, fixed3D = false, fixedTime = false, non_monotonicDescent = true;
 	int gtOff[] = { 0, 1, 4, 8, 9 };
 
 	const double Tscale = 1000.0, ialpha = 1.0 / 120, rate = 10, eps = 1.0e-6, lamda = .8;
@@ -8688,7 +8765,7 @@ int ReadHyunSooData(char *Fname, VideoData &VData, PerCamNonRigidTrajectory &Tra
 int SimultaneousSyncReconcHyunSooData(char *Path)
 {
 	const double fps = 1.0, ialpha = 1.0 / fps, Tscale = 1.0, eps = 1.0e-6, lamda = .8;
-	bool save3D = true, fixed3D = false, fixedTime = false, non_monotonicDescent = true;
+	bool save3D = false, fixed3D = false, fixedTime = false, non_monotonicDescent = true;
 
 	char Fname[200];
 
@@ -8879,19 +8956,13 @@ void GenerateCamerasExtrinsicOnCircle(CameraData &CameraInfo, double theta, doub
 	CameraInfo.camCenter[0] = CameraPosition[0], CameraInfo.camCenter[1] = CameraPosition[1], CameraInfo.camCenter[2] = CameraPosition[2];
 	return;
 }
-int SimulateCamerasAnd2DPointsForMoCap(char *Path, int nCams, int n3DTracks, double *Intrinsic, double *distortion, int width, int height, double radius = 5e3, bool save3D = true, bool show2DImage = false, bool save2D = false, int Rate = 1, double PMissingData = 0.0, double Noise2D = 2.0, int *UnSyncFrameOffset = NULL, int *SyncFrameOffset = NULL)
+int SimulateCamerasAnd2DPointsForMoCap(char *Path, int nCams, int n3DTracks, double *Intrinsic, double *distortion, int width, int height, double radius = 5e3, bool saveGT3D = true, bool show2DImage = false, int Rate = 1, double PMissingData = 0.0, double Noise2D = 2.0, int *UnSyncFrameTimeStamp = NULL)
 {
-	if (UnSyncFrameOffset == NULL)
+	if (UnSyncFrameTimeStamp == NULL)
 	{
-		UnSyncFrameOffset = new int[nCams];
+		UnSyncFrameTimeStamp = new int[nCams];
 		for (int ii = 0; ii < nCams; ii++)
-			UnSyncFrameOffset[ii] = 0;
-	}
-	if (SyncFrameOffset == NULL)
-	{
-		SyncFrameOffset = new int[nCams];
-		for (int ii = 0; ii < nCams; ii++)
-			SyncFrameOffset[ii] = 0;
+			UnSyncFrameTimeStamp[ii] = 0;
 	}
 
 	char Fname[200];
@@ -8963,31 +9034,30 @@ int SimulateCamerasAnd2DPointsForMoCap(char *Path, int nCams, int n3DTracks, dou
 
 	Point2d pt;
 	Point3d p3d;
-	vector<Point3d> *aXYZ = new vector<Point3d>[n3DTracks];
+	vector<Point3d> *allXYZ = new vector<Point3d>[n3DTracks];
 	for (int trackID = 0; trackID < n3DTracks; trackID++)
 	{
 		sprintf(Fname, "%s/Track3D/%d.txt", Path, trackID); fp = fopen(Fname, "r");
 		if (fp == NULL)
 			printf("Cannot load %s\n", Fname);
 		while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
-			aXYZ[trackID].push_back(Point3d(x, y, z));
+			allXYZ[trackID].push_back(Point3d(x, y, z));
 		fclose(fp);
 	}
 
 	vector<int> UsedFrames;
 	for (int camID = 0; camID < nCams; camID++)
 	{
-		int count = SyncFrameOffset[camID];
 		sprintf(Fname, "%s/Intrinsic_%d.txt", Path, camID); fp = fopen(Fname, "w+");
 		for (int frameID = 0; frameID < nframes; frameID += Rate)
 		{
-			if (frameID + UnSyncFrameOffset[camID] > nframes || !Camera[frameID + UnSyncFrameOffset[camID] + nframes*camID].valid)
+			if (frameID + UnSyncFrameTimeStamp[camID] > nframes || !Camera[frameID + UnSyncFrameTimeStamp[camID] + nframes*camID].valid)
 				continue;
 
-			UsedFrames.push_back(frameID + UnSyncFrameOffset[camID]);
-			fprintf(fp, "%d 0 %d %d ", count, width, height);  count++;
+			UsedFrames.push_back(frameID + UnSyncFrameTimeStamp[camID]);
+			fprintf(fp, "%d 0 %d %d ", frameID / Rate, width, height);
 			for (int ii = 0; ii < 5; ii++)
-				fprintf(fp, "%.2f ", Camera[frameID + UnSyncFrameOffset[camID] + nframes*camID].intrinsic[ii]);
+				fprintf(fp, "%.2f ", Camera[frameID + UnSyncFrameTimeStamp[camID] + nframes*camID].intrinsic[ii]);
 			for (int ii = 0; ii < 7; ii++)
 				fprintf(fp, "%.6f ", distortion[ii]);
 			fprintf(fp, "\n");
@@ -9000,97 +9070,179 @@ int SimulateCamerasAnd2DPointsForMoCap(char *Path, int nCams, int n3DTracks, dou
 		sprintf(Fname, "%s/CamPose_%d.txt", Path, camID); fp = fopen(Fname, "w+");
 		for (int frameID = 0; frameID < nframes; frameID += Rate)
 		{
-			if (frameID + UnSyncFrameOffset[camID] > nframes || !Camera[frameID + UnSyncFrameOffset[camID] + nframes*camID].valid)
+			if (frameID + UnSyncFrameTimeStamp[camID] > nframes || !Camera[frameID + UnSyncFrameTimeStamp[camID] + nframes*camID].valid)
 				continue;
 
-			GetRCGL(Camera[frameID + UnSyncFrameOffset[camID] + nframes*camID]);
+			GetRCGL(Camera[frameID + UnSyncFrameTimeStamp[camID] + nframes*camID]);
 
-			fprintf(fp, "%d ", frameID / Rate + SyncFrameOffset[camID]);
+			fprintf(fp, "%d ", frameID / Rate);
 			for (int jj = 0; jj < 16; jj++)
-				fprintf(fp, "%.16f ", Camera[frameID + UnSyncFrameOffset[camID] + nframes*camID].Rgl[jj]);
+				fprintf(fp, "%.16f ", Camera[frameID + UnSyncFrameTimeStamp[camID] + nframes*camID].Rgl[jj]);
 			for (int jj = 0; jj < 3; jj++)
-				fprintf(fp, "%.16f ", Camera[frameID + UnSyncFrameOffset[camID] + nframes*camID].camCenter[jj]);
+				fprintf(fp, "%.16f ", Camera[frameID + UnSyncFrameTimeStamp[camID] + nframes*camID].camCenter[jj]);
 			fprintf(fp, "\n");
 		}
 		fclose(fp);
 	}
 
-	if (save2D)//Mocap test frameSync offset
+	vector<ImgPtEle> *PerCam_UV = new vector<ImgPtEle>[nCams*n3DTracks];
+	for (int camID = 0; camID < nCams; camID++)
 	{
-		sprintf(Fname, "%s/Track2D", Path), makeDir(Fname);
-		for (int camID = 0; camID < nCams; camID++)
+		for (int trackID = 0; trackID < n3DTracks; trackID++)
 		{
-			sprintf(Fname, "%s/Track2D/%d.txt", Path, camID); fp = fopen(Fname, "w+");
-			for (int trackID = 0; trackID < n3DTracks; trackID++)
+			int nf = 0;
+			for (int frameID = 0; frameID < nframes; frameID += Rate)
 			{
-				int nf = 0;
-				for (int frameID = 0; frameID < nframes; frameID += Rate)
+				if (frameID + UnSyncFrameTimeStamp[camID] > allXYZ[trackID].size() - 1)
+					continue;
+				if (frameID + UnSyncFrameTimeStamp[camID] > nframes)
+					continue;
+				nf++;
+			}
+
+			//Simulate random missing data
+			vector<int> randomNumber;
+			for (int ii = 0; ii < nf; ii++)
+				randomNumber.push_back(ii);
+			random_shuffle(randomNumber.begin(), randomNumber.end());
+
+			int nMissingData = (int)(PMissingData*nf);
+			sort(randomNumber.begin(), randomNumber.begin() + nMissingData);
+
+			fprintf(fp, "%d %d ", trackID, nf - nMissingData);
+			for (int frameID = 0; frameID < nframes; frameID += Rate)
+			{
+				if (frameID + UnSyncFrameTimeStamp[camID] > allXYZ[trackID].size() - 1)
+					continue;
+				if (frameID + UnSyncFrameTimeStamp[camID] > nframes)
+					continue;
+
+				bool missed = false;
+				for (int ii = 0; ii < nMissingData; ii++)
 				{
-					if (frameID + UnSyncFrameOffset[camID] > aXYZ[trackID].size() - 1)
-						continue;
-					if (frameID + UnSyncFrameOffset[camID] > nframes)
-						continue;
-					nf++;
-				}
-
-				//Simulate random missing data
-				vector<int> randomNumber;
-				for (int ii = 0; ii < nf; ii++)
-					randomNumber.push_back(ii);
-				random_shuffle(randomNumber.begin(), randomNumber.end());
-
-				int nMissingData = (int)(PMissingData*nf);
-				sort(randomNumber.begin(), randomNumber.begin() + nMissingData);
-
-				fprintf(fp, "%d %d ", trackID, nf - nMissingData);
-				for (int frameID = 0; frameID < nframes; frameID += Rate)
-				{
-					if (frameID + UnSyncFrameOffset[camID] > aXYZ[trackID].size() - 1)
-						continue;
-					if (frameID + UnSyncFrameOffset[camID] > nframes)
-						continue;
-
-					bool missed = false;
-					for (int ii = 0; ii < nMissingData; ii++)
+					if (randomNumber[ii] == frameID / Rate)
 					{
-						if (randomNumber[ii] == frameID / Rate)
-						{
-							missed = true; break;
-						}
+						missed = true; break;
 					}
-					if (missed)
-						continue;
-
-					ProjectandDistort(aXYZ[trackID][frameID + UnSyncFrameOffset[camID]], &pt, Camera[frameID + UnSyncFrameOffset[camID] + camID*nframes].P, Camera[frameID + UnSyncFrameOffset[camID] + camID*nframes].K, Camera[frameID + UnSyncFrameOffset[camID] + camID*nframes].distortion);
-					Point2d Noise(gaussian_noise(0.0, Noise2D), gaussian_noise(0.0, Noise2D));
-					if (Noise.x > 3.0*Noise2D)
-						Noise.x = 3.0*Noise2D;
-					else if (Noise.x < -3.0 *Noise2D)
-						Noise.x = -3.0*Noise2D;
-					if (Noise.y > 3.0*Noise2D)
-						Noise.y = 3.0*Noise2D;
-					else if (Noise.y < -3.0 *Noise2D)
-						Noise.y = -3.0*Noise2D;
-					pt.x += Noise.x, pt.y += Noise.y;
-					fprintf(fp, "%d %.16f %.16f ", frameID / Rate + SyncFrameOffset[camID], pt.x, pt.y);
 				}
-				fprintf(fp, "\n");
+				if (missed)
+					continue;
+
+				ProjectandDistort(allXYZ[trackID][frameID + UnSyncFrameTimeStamp[camID]], &pt, Camera[frameID + UnSyncFrameTimeStamp[camID] + camID*nframes].P, Camera[frameID + UnSyncFrameTimeStamp[camID] + camID*nframes].K, Camera[frameID + UnSyncFrameTimeStamp[camID] + camID*nframes].distortion);
+				Point2d Noise(gaussian_noise(0.0, Noise2D), gaussian_noise(0.0, Noise2D));
+				if (Noise.x > 3.0*Noise2D)
+					Noise.x = 3.0*Noise2D;
+				else if (Noise.x < -3.0 *Noise2D)
+					Noise.x = -3.0*Noise2D;
+				if (Noise.y > 3.0*Noise2D)
+					Noise.y = 3.0*Noise2D;
+				else if (Noise.y < -3.0 *Noise2D)
+					Noise.y = -3.0*Noise2D;
+				pt.x += Noise.x, pt.y += Noise.y;
+
+				ImgPtEle ptEle;
+				ptEle.pt2D = pt, ptEle.viewID = camID, ptEle.frameID = frameID / Rate,
+					ptEle.imWidth = width, ptEle.imHeight = height;
+				ptEle.pt3D = allXYZ[trackID][frameID + UnSyncFrameTimeStamp[camID]];
+				ptEle.timeStamp = frameID + UnSyncFrameTimeStamp[camID];
+				PerCam_UV[camID*n3DTracks + trackID].push_back(ptEle);
+			}
+		}
+	}
+
+	sprintf(Fname, "%s/Track2D", Path), makeDir(Fname);
+	for (int camID = 0; camID < nCams; camID++)
+	{
+		sprintf(Fname, "%s/Track2D/%d.txt", Path, camID); fp = fopen(Fname, "w+");
+		for (int trackID = 0; trackID < n3DTracks; trackID++)
+		{
+			fprintf(fp, "%d %d ", trackID, (int)PerCam_UV[camID*n3DTracks + trackID].size());
+			for (int fid = 0; fid < (int)PerCam_UV[camID*n3DTracks + trackID].size(); fid++)
+				fprintf(fp, "%d %.16f %.16f ", PerCam_UV[camID*n3DTracks + trackID][fid].frameID, PerCam_UV[camID*n3DTracks + trackID][fid].pt2D.x, PerCam_UV[camID*n3DTracks + trackID][fid].pt2D.y);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+
+	if (saveGT3D)
+	{
+		for (int trackID = 0; trackID < n3DTracks; trackID++)
+		{
+			sprintf(Fname, "%s/GTTrack_%d.txt", Path, trackID); remove(Fname);	fp = fopen(Fname, "w+");
+			for (int camID = 0; camID < nCams; camID++)
+			{
+				for (int ii = 0; ii < (int)PerCam_UV[camID*n3DTracks + trackID].size(); ii++)
+				{
+					ImgPtEle &x = PerCam_UV[camID*n3DTracks + trackID][ii];
+					fprintf(fp, "%.4f %.4f %.4f %.4f %d %d\n", PerCam_UV[camID*n3DTracks + trackID][ii].pt3D.x, PerCam_UV[camID*n3DTracks + trackID][ii].pt3D.y, PerCam_UV[camID*n3DTracks + trackID][ii].pt3D.z,
+						PerCam_UV[camID*n3DTracks + trackID][ii].timeStamp, PerCam_UV[camID*n3DTracks + trackID][ii].viewID, PerCam_UV[camID*n3DTracks + trackID][ii].frameID);
+				}
 			}
 			fclose(fp);
 		}
 	}
 
-	if (save3D)
+	/*sprintf(Fname, "%s/Track2D", Path), makeDir(Fname);
+	for (int camID = 0; camID < nCams; camID++)
 	{
-		int nf = UsedFrames.size();
-		for (int frameID = 0; frameID < nf; frameID++)
-		{
-			sprintf(Fname, "%s/Dynamic/3dGL_%d.xyz", Path, frameID); fp = fopen(Fname, "w+");
-			for (int trackID = 0; trackID < n3DTracks; trackID++)
-				fprintf(fp, "%.4f %.4f %.4f \n", aXYZ[trackID][UsedFrames[frameID]].x, aXYZ[trackID][UsedFrames[frameID]].y, aXYZ[trackID][UsedFrames[frameID]].z);
-			fclose(fp);
-		}
+	sprintf(Fname, "%s/Track2D/%d.txt", Path, camID); fp = fopen(Fname, "w+");
+	for (int trackID = 0; trackID < n3DTracks; trackID++)
+	{
+	int nf = 0;
+	for (int frameID = 0; frameID < nframes; frameID += Rate)
+	{
+	if (frameID + UnSyncFrameTimeStamp[camID] > allXYZ[trackID].size() - 1)
+	continue;
+	if (frameID + UnSyncFrameTimeStamp[camID] > nframes)
+	continue;
+	nf++;
 	}
+
+	//Simulate random missing data
+	vector<int> randomNumber;
+	for (int ii = 0; ii < nf; ii++)
+	randomNumber.push_back(ii);
+	random_shuffle(randomNumber.begin(), randomNumber.end());
+
+	int nMissingData = (int)(PMissingData*nf);
+	sort(randomNumber.begin(), randomNumber.begin() + nMissingData);
+
+	fprintf(fp, "%d %d ", trackID, nf - nMissingData);
+	for (int frameID = 0; frameID < nframes; frameID += Rate)
+	{
+	if (frameID + UnSyncFrameTimeStamp[camID] > allXYZ[trackID].size() - 1)
+	continue;
+	if (frameID + UnSyncFrameTimeStamp[camID] > nframes)
+	continue;
+
+	bool missed = false;
+	for (int ii = 0; ii < nMissingData; ii++)
+	{
+	if (randomNumber[ii] == frameID / Rate)
+	{
+	missed = true; break;
+	}
+	}
+	if (missed)
+	continue;
+
+	ProjectandDistort(allXYZ[trackID][frameID + UnSyncFrameTimeStamp[camID]], &pt, Camera[frameID + UnSyncFrameTimeStamp[camID] + camID*nframes].P, Camera[frameID + UnSyncFrameTimeStamp[camID] + camID*nframes].K, Camera[frameID + UnSyncFrameTimeStamp[camID] + camID*nframes].distortion);
+	Point2d Noise(gaussian_noise(0.0, Noise2D), gaussian_noise(0.0, Noise2D));
+	if (Noise.x > 3.0*Noise2D)
+	Noise.x = 3.0*Noise2D;
+	else if (Noise.x < -3.0 *Noise2D)
+	Noise.x = -3.0*Noise2D;
+	if (Noise.y > 3.0*Noise2D)
+	Noise.y = 3.0*Noise2D;
+	else if (Noise.y < -3.0 *Noise2D)
+	Noise.y = -3.0*Noise2D;
+	pt.x += Noise.x, pt.y += Noise.y;
+	fprintf(fp, "%d %.16f %.16f ", frameID / Rate, pt.x, pt.y);
+	}
+	fprintf(fp, "\n");
+	}
+	fclose(fp);
+	}*/
 
 	if (show2DImage)
 	{
@@ -9116,7 +9268,7 @@ int SimulateCamerasAnd2DPointsForMoCap(char *Path, int nCams, int n3DTracks, dou
 				displayImg = Img.clone();
 				for (int trackID = 0; trackID < n3DTracks; trackID++)
 				{
-					ProjectandDistort(aXYZ[trackID][frameID + UnSyncFrameOffset[camID]], &pt, Camera[frameID + nframes*camID].P, Camera[frameID + UnSyncFrameOffset[camID] + camID*nframes].K, Camera[frameID + UnSyncFrameOffset[camID] + camID*nframes].distortion);
+					ProjectandDistort(allXYZ[trackID][frameID + UnSyncFrameTimeStamp[camID]], &pt, Camera[frameID + nframes*camID].P, Camera[frameID + UnSyncFrameTimeStamp[camID] + camID*nframes].K, Camera[frameID + UnSyncFrameTimeStamp[camID] + camID*nframes].distortion);
 					circle(displayImg, pt, 4, colors[trackID % 9], 1, 8, 0);
 				}
 
@@ -9133,23 +9285,23 @@ int SimulateCamerasAnd2DPointsForMoCap(char *Path, int nCams, int n3DTracks, dou
 int TestLeastActionOnSyntheticData(char *Path)
 {
 	//General setup
-	const int nCams = 10, npts = 31, width = 1920, height = 1080, startFrame = 0, stopFrame = 60;
-	double Intrinsic[5] = { 1500, 1500, 0, 960, 540 }, distortion[7] = { 0, 0, 0, 0, 0, 0, 0 }, radius = 3000, PMissingData = 0.2, noise2D = 2.0;
-	int UnSyncFrameOffset[] = { 0, 11, 29, 5, 16, 23, 17, 2, 18, 4 }, SyncFrameOffset[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, rate = 10;
-	//SimulateCamerasAnd2DPointsForMoCap(Path, nCams, npts, Intrinsic, distortion, width, height, radius, false, false, true, rate, PMissingData, noise2D, UnSyncFrameOffset, SyncFrameOffset);
+	const int nCams = 10, npts = 31, width = 1920, height = 1080, startFrame = 0, stopFrame = 55, rate = 10;
+	double Intrinsic[5] = { 1500, 1500, 0, 960, 540 }, distortion[7] = { 0, 0, 0, 0, 0, 0, 0 }, radius = 3000, PMissingData = 0.0, noise2D = 2.0;
+	int UnSyncFrameTimeStamp[] = { 0, 1, 29, 5, 16, 3, 27, 2, 18, 4 };
+	SimulateCamerasAnd2DPointsForMoCap(Path, nCams, npts, Intrinsic, distortion, width, height, radius, true, false, rate, PMissingData, noise2D, UnSyncFrameTimeStamp);
 
 	//Input Parameters
 	const int motionPriorPower = 2, SearchRange = 10;
-	double lamdaData = 0.8, SearchStep = 0.1;
+	double lamdaData = 0.80, SearchStep = 0.1;
 
-	int STCalibration = 2;
+	int STCalibration = 1;
 	if (STCalibration == 1)
 	{
 		double startTime = omp_get_wtime();
 		double FrameLevelOffsetInfo[nCams];
 		GeometricConstraintSyncDriver(Path, nCams, npts, startFrame, stopFrame, SearchRange, true, FrameLevelOffsetInfo, false);
 
-		//Convert between time-delay format and time-stamp format
+		//Convert from time-delay format to  time-stamp format
 		for (int ii = 0; ii < nCams; ii++)
 			FrameLevelOffsetInfo[ii] = -FrameLevelOffsetInfo[ii];
 
@@ -9157,35 +9309,35 @@ int TestLeastActionOnSyntheticData(char *Path)
 		EvaluateAllPairCost(Path, nCams, npts, startFrame, stopFrame, SearchRange, SearchStep, lamdaData, motionPriorPower, FrameLevelOffsetInfo);
 
 		vector<int>cameraOrdering;
-		vector<double> InitOffsetInfoVector;
-		DetermineCameraOrderingForGreedySTBA(Path, "PairwiseCost", nCams, cameraOrdering, InitOffsetInfoVector);
+		vector<double> InitTimeStampInfoVector;
+		DetermineCameraOrderingForGreedySTBA(Path, "PairwiseCost", nCams, cameraOrdering, InitTimeStampInfoVector);
 
 		vector<int> SelectedCamera;
-		vector<double>OffsetInfoVector;
+		vector<double>TimeStampInfoVector;
 		for (int ii = 0; ii < 3; ii++)
-			SelectedCamera.push_back(cameraOrdering[ii]), OffsetInfoVector.push_back(InitOffsetInfoVector[ii]);
+			SelectedCamera.push_back(cameraOrdering[ii]), TimeStampInfoVector.push_back(InitTimeStampInfoVector[ii]);
 
 		printf("\nCoarse ST estimation for 3 cameras (%d, %d, %d):\n", SelectedCamera[0], SelectedCamera[1], SelectedCamera[2]);
-		LeastActionSyncBruteForce2DTriplet(Path, SelectedCamera, 0, stopFrame, npts, OffsetInfoVector, -SearchRange / 2, SearchRange / 2, SearchStep, lamdaData, motionPriorPower);
-		printf("Coarse ST estimation for 3 cameras (%d, %d, %d): %.4f %.4f %.4f \n\n", SelectedCamera[0], SelectedCamera[1], SelectedCamera[2], OffsetInfoVector[0], OffsetInfoVector[1], OffsetInfoVector[2]);
+		LeastActionSyncBruteForce2DTriplet(Path, SelectedCamera, 0, stopFrame, npts, TimeStampInfoVector, -SearchRange / 2, SearchRange / 2, SearchStep, lamdaData, motionPriorPower);
+		printf("Coarse ST estimation for 3 cameras (%d, %d, %d): %.4f %.4f %.4f \n\n", SelectedCamera[0], SelectedCamera[1], SelectedCamera[2], TimeStampInfoVector[0], TimeStampInfoVector[1], TimeStampInfoVector[2]);
 
-		IncrementalLeastActionSyncDiscreteContinous2D(Path, SelectedCamera, startFrame, stopFrame, npts, OffsetInfoVector, 0, 0, 0, lamdaData, motionPriorPower, false);
+		IncrementalLeastActionSyncDiscreteContinous2D(Path, SelectedCamera, startFrame, stopFrame, npts, TimeStampInfoVector, 0, 0, 0, lamdaData, motionPriorPower, false);
 
 		char Fname[200]; sprintf(Fname, "%s/MotionPriorSyncProgress.txt", Path);	FILE *fp = fopen(Fname, "w+");
-		fprintf(fp, "%d %d %d %d %.4f %.4f %.4f \n", 3, SelectedCamera[0], SelectedCamera[1], SelectedCamera[2], OffsetInfoVector[0], OffsetInfoVector[1], OffsetInfoVector[2]);
+		fprintf(fp, "%d %d %d %d %.4f %.4f %.4f \n", 3, SelectedCamera[0], SelectedCamera[1], SelectedCamera[2], TimeStampInfoVector[0], TimeStampInfoVector[1], TimeStampInfoVector[2]);
 
 		int orderingChangeTrials = 0;
 		for (int currentCamID = 3; currentCamID < nCams; currentCamID++)
 		{
 			SelectedCamera.push_back(cameraOrdering[currentCamID]);
-			OffsetInfoVector.push_back(InitOffsetInfoVector[currentCamID]);
-			int NotSuccess = IncrementalLeastActionSyncDiscreteContinous2D(Path, SelectedCamera, startFrame, stopFrame, npts, OffsetInfoVector, -(int)(SearchStep* SearchRange), (int)(SearchStep* SearchRange), 0.0, lamdaData, motionPriorPower);
+			TimeStampInfoVector.push_back(InitTimeStampInfoVector[currentCamID]);
+			int NotSuccess = IncrementalLeastActionSyncDiscreteContinous2D(Path, SelectedCamera, startFrame, stopFrame, npts, TimeStampInfoVector, -(int)(SearchStep* SearchRange), (int)(SearchStep* SearchRange), 0.0, lamdaData, motionPriorPower);
 
 			//Push the current ordering ID to the end of the stack
 			if (NotSuccess == 1)
 			{
 				SelectedCamera.erase(SelectedCamera.end() - 1);
-				OffsetInfoVector.erase(OffsetInfoVector.end() - 1);
+				TimeStampInfoVector.erase(TimeStampInfoVector.end() - 1);
 
 				//Nothing can be done with this last camera
 				if (currentCamID == nCams - 1)
@@ -9197,9 +9349,9 @@ int TestLeastActionOnSyntheticData(char *Path)
 				cameraOrdering.erase(cameraOrdering.begin() + currentCamID);
 
 				std::vector<double>::iterator it2;
-				it2 = InitOffsetInfoVector.end();
-				InitOffsetInfoVector.insert(it2, InitOffsetInfoVector[currentCamID]);
-				InitOffsetInfoVector.erase(InitOffsetInfoVector.begin() + currentCamID);
+				it2 = InitTimeStampInfoVector.end();
+				InitTimeStampInfoVector.insert(it2, InitTimeStampInfoVector[currentCamID]);
+				InitTimeStampInfoVector.erase(InitTimeStampInfoVector.begin() + currentCamID);
 
 				currentCamID--;
 
@@ -9213,27 +9365,47 @@ int TestLeastActionOnSyntheticData(char *Path)
 				for (int ii = 0; ii < (int)SelectedCamera.size(); ii++)
 					fprintf(fp, "%d ", SelectedCamera[ii]);
 				for (int ii = 0; ii < (int)SelectedCamera.size(); ii++)
-					fprintf(fp, "%.4f ", OffsetInfoVector[ii]);
+					fprintf(fp, "%.4f ", TimeStampInfoVector[ii]);
 				fprintf(fp, "\n");
 			}
 		}
 		fclose(fp);
 
-		TrajectoryTriangulation(Path, SelectedCamera, OffsetInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
+		//Resort the time with the earliest camera placed first
+		vector<int> SortedSelectedCamera;
+		vector<double> SortedTimeStampInfoVector = TimeStampInfoVector;
+		sort(SortedTimeStampInfoVector.begin(), SortedTimeStampInfoVector.end());
+		for (int ii = 0; ii < (int)SelectedCamera.size(); ii++)
+		{
+			for (int jj = 0; jj < (int)SelectedCamera.size(); jj++)
+			{
+				if (TimeStampInfoVector[jj] == SortedTimeStampInfoVector[ii])
+				{
+					SortedSelectedCamera.push_back(SelectedCamera[jj]);
+					break;
+				}
+			}
+		}
+		for (int ii = (int)SortedSelectedCamera.size() - 1; ii >= 0; ii--)
+			SortedTimeStampInfoVector[ii] -= SortedTimeStampInfoVector[0];
+
+		//Triangulate trajectories
+		TrajectoryTriangulation(Path, SortedSelectedCamera, SortedTimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
+		ResamplingOf3DTrajectorySplineDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, startFrame, stopFrame, npts, lamdaData, motionPriorPower);
 
 		sprintf(Fname, "%s/FMotionPriorSync.txt", Path);	fp = fopen(Fname, "w+");
-		for (int ii = 0; ii < (int)SelectedCamera.size(); ii++)
-			fprintf(fp, "%d %.4f\n", SelectedCamera[ii], OffsetInfoVector[ii]);
+		for (int ii = 0; ii < (int)SortedSelectedCamera.size(); ii++)
+			fprintf(fp, "%d %.4f\n", SortedSelectedCamera[ii], SortedTimeStampInfoVector[ii]);
 		fclose(fp);
 
 		printf("Total time: %.2fs\n\n", omp_get_wtime() - startTime);
 	}
-	else if (STCalibration == 2)
+	else if (STCalibration > 1)
 	{
 		double startTime = omp_get_wtime();
 
 		vector<int> SelectedCamera;
-		vector<double> OffsetInfoVector;
+		vector<double> TimeStampInfoVector;
 
 		char Fname[200]; sprintf(Fname, "%s/FMotionPriorSync.txt", Path);	FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
@@ -9243,21 +9415,28 @@ int TestLeastActionOnSyntheticData(char *Path)
 		}
 		int selected; double offsetValue;
 		while (fscanf(fp, "%d %lf ", &selected, &offsetValue) != EOF)
-			SelectedCamera.push_back(selected), OffsetInfoVector.push_back(offsetValue);
+			SelectedCamera.push_back(selected), TimeStampInfoVector.push_back(offsetValue);
 		fclose(fp);
 
-		SelectedCamera.erase(SelectedCamera.begin() + 5, SelectedCamera.begin() + 10);
-		OffsetInfoVector.erase(OffsetInfoVector.begin() + 5, OffsetInfoVector.begin() + 10);
+		if (STCalibration == 2)
+			TrajectoryTriangulation(Path, SelectedCamera, TimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
+		else if (STCalibration == 3)
+			ResamplingOf3DTrajectorySplineDriver(Path, SelectedCamera, TimeStampInfoVector, startFrame, stopFrame, npts, lamdaData, motionPriorPower);
+		else if (STCalibration == 4)
+			Generate3DUncertaintyFromRandomSampling(Path, SelectedCamera, TimeStampInfoVector, startFrame, stopFrame, npts, 0, 100, motionPriorPower);
+		else if (STCalibration == 5)
+		{
+			vector<int>DelayInfoVector;
+			for (int ii = 0; ii < nCams; ii++)
+				DelayInfoVector.push_back((int)(-(1.0*TimeStampInfoVector[ii] + 0.5)));
 
-		IncrementalLeastActionSyncDiscreteContinous2D(Path, SelectedCamera, startFrame, stopFrame, npts, OffsetInfoVector, 0, 0, 0.0, lamdaData, motionPriorPower, false);
+			double Rate = 10.0, ialpha = 1.0;
+			double GTFrameTimeStamp[10];
+			for (int ii = 0; ii < (int)TimeStampInfoVector.size(); ii++)
+				GTFrameTimeStamp[ii] = TimeStampInfoVector[ii];
 
-		printf("Total time: %.2fs\n\n", omp_get_wtime() - startTime);
-		return 0;
-
-		//Generate3DUncertaintyFromRandomSampling(Path, SelectedCams, nCams, OffsetInfo, 0, stopFrame, npts);
-		TrajectoryTriangulation(Path, SelectedCamera, OffsetInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
-		ResamplingOf3DTrajectorySplineDriver(Path, SelectedCamera, OffsetInfoVector, startFrame, stopFrame, npts, lamdaData, motionPriorPower);
-
+			TriangulateFrameSync2DTrajectories(Path, SelectedCamera, DelayInfoVector, startFrame, stopFrame, npts, false, GTFrameTimeStamp, &ialpha, &Rate);
+		}
 		printf("Total time: %.2fs\n\n", omp_get_wtime() - startTime);
 	}
 
@@ -10010,16 +10189,14 @@ int main(int argc, char** argv)
 	srand(0);//srand(time(NULL));
 	char Path[] = "E:/RollingShutter", Fname[200], Fname2[200];
 
-	//vector<int> SharedIntrinsicCamID;
-	//CayleyRollingShutterBundleAdjustmentDriver(Path, 62, 0, SharedIntrinsicCamID);
-	//ShowSyncLoad(Path, "FMotionPriorSync", Path, 7);
-	//CheckerBoardMultiviewSpatialTemporalCalibration(Path, 7, 0, 300, 1);
-	//RenderSuperCameraFromMultipleUnSyncedCamerasA(Path, 0, 1200, 1, false);
+	//visualizationDriver(Path, 1, 1, 600, true, false, true, false, false, 1);
+	//CheckerBoardMultiviewSpatialTemporalCalibration(Path, 7, 0, 300, 0);
 	//TestLeastActionOnSyntheticData(Path);
-	//visualizationDriver(Path, 7, 0, 300, true, false, true, false, false, 0);
+	//ShowSyncLoad(Path, "FMotionPriorSync", Path, 7);
+	//RenderSuperCameraFromMultipleUnSyncedCamerasA(Path, 0, 1200, 1, false);
 	//return 0;
 
-	int mode =  atoi(argv[1]);
+	int mode = atoi(argv[1]);
 	if (mode == 0) //Step 1: sync all sequences with audio
 	{
 #ifdef _WINDOWS
@@ -10082,12 +10259,12 @@ int main(int argc, char** argv)
 			//int writeSyncedImages = atoi(argv[3]);
 			int nvideos = atoi(argv[2]);
 			ShowSyncLoad(Path, "FaudioSync", Path, nvideos);
-		}
+	}
 #else
 		printf("This mode is not supported in Linux\n");
 #endif
 		return 0;
-		}
+}
 	else if (mode == 1) //step 2: calibrate camera individually if needed
 	{
 		char *Path = argv[2],
@@ -10206,7 +10383,7 @@ int main(int argc, char** argv)
 		if (module == 0 || module == 1)
 			LocalizeCameraFromCorpusDriver(Path, StartTime, StopTime, module, nCams, seletectedCam, distortionCorrected, sharedIntriniscOptim, LensType);
 		if (module == 2)
-			OptimizeVideoCameraData(Path, StartTime, StopTime, nCams, seletectedCam, distortionCorrected, LensType, false, false, 3.0);
+			VideoPose_GSBA(Path, StartTime, StopTime, nCams, seletectedCam, distortionCorrected, LensType, false, false, 3.0);
 		if (module < 0)
 			visualizationDriver(Path, nCams, StartTime, StopTime, true, false, true, false, false, StartTime);
 		return 0;
@@ -10284,16 +10461,6 @@ int main(int argc, char** argv)
 	{
 		//siftgpu("D:/1_0.png", "D:/2_0.png", 0.5, 0.5);
 		//VisualizeCleanMatches(Path, 1, 2, 0, 0.01);
-
-		/*int submode = atoi(argv[2]);
-		if (submode == -1)
-		ShowSyncLoad2("C:/Data/GoPro", 0);
-		else if (submode == 0)
-		ShowSyncLoad(Path, 0);
-		else if (submode == 1)
-		visualizationDriver(Path, 5, 0, 199, true, true, false);
-		else if (submode == 2)
-		visualizationDriver(Path, 1, 0, 198, true, false, true);*/
 
 		/*char ImgName[200], Kname[200], RGBName[200];
 		for (int ii = 0; ii < 10; ii++)
@@ -10380,7 +10547,7 @@ int main(int argc, char** argv)
 
 
 	return 0;
-	}
+}
 
 /*// f(x,y) = (1-x)^2 + 100(y - x^2)^2;
 struct MyScalarCostFunctor {
@@ -10503,19 +10670,125 @@ printf("%.3f ", y[ii]);
 
 return 0;
 }*/
-
 /*int main(int argc, char **argv)
 {
-const int SplineOrder = 3, nbreaks = 5, nresamples = 5, ncoeffs = nbreaks + SplineOrder - 2;
+gsl_bspline_workspace *bw = gsl_bspline_alloc(SplineOrder, nknots);
+gsl_vector *Bi = gsl_vector_alloc(nknots + SplineOrder - 2);
+gsl_vector *gsl_BreakPts = gsl_vector_alloc(nknots);
 
-double BreakPts[nbreaks] = { -3.0, 2.0, 9.0, 12.0, 21.0 },
-ResamplePts[nresamples] = { 0.0, 5.0, 9.0, 12.0, 15.0 },
-Basis[nresamples*ncoeffs],
-DBasis[nresamples*ncoeffs];
+//copy data to gsl format
+for (int ii = 0; ii < nknots; ii++)
+gsl_vector_set(gsl_BreakPts, ii, BreakPts[ii]);
 
-GenerateResamplingSplineWithBreakPts(Basis, DBasis, ResamplePts, BreakPts, nresamples, nbreaks, SplineOrder, true);
+//contruct knots
+gsl_bspline_knots(gsl_BreakPts, bw);
+
+//construct basis matrix
+for (int ii = 0; ii < nsamples; ii++)
+{
+gsl_bspline_eval(ControlPts[ii], Bi, bw); //compute basis vector for point i
+for (int jj = 0; jj < ncoeffs; jj++)
+Basis[jj + ii*ncoeffs] = gsl_vector_get(Bi, jj);
+}
+return 0;
+}*/
+/*//Calculate the blending value, this is done recursively.
+double SplineBlend(int k, int t, int *u, double v)
+{
+double value;
+
+if (t == 1)
+{
+if ((u[k] <= v) && (v < u[k + 1]))
+value = 1;
+else
+value = 0;
+}
+else
+{
+if ((u[k + t - 1] == u[k]) && (u[k + t] == u[k + 1]))
+value = 0;
+else if (u[k + t - 1] == u[k])
+value = (u[k + t] - v) / (u[k + t] - u[k + 1]) * SplineBlend(k + 1, t - 1, u, v);
+else if (u[k + t] == u[k + 1])
+value = (v - u[k]) / (u[k + t - 1] - u[k]) * SplineBlend(k, t - 1, u, v);
+else
+value = (v - u[k]) / (u[k + t - 1] - u[k]) * SplineBlend(k, t - 1, u, v) + (u[k + t] - v) / (u[k + t] - u[k + 1]) * SplineBlend(k + 1, t - 1, u, v);
+}
+return(value);
+}
+
+//This returns the point "output" on the spline curve.The parameter "v" indicates the position, it ranges from 0 to n-t+2
+void SplinePoint(int *u, int n, int t, double v, Point3d *control, Point3d *output)
+{
+int k;
+double b;
+
+output[0].x = 0;
+output[0].y = 0;
+output[0].z = 0;
+
+for (k = 0; k <= n; k++)
+{
+b = SplineBlend(k, t, u, v);
+if (b == 1.0)
+int a = 0;
+output[0].x += control[k].x * b;
+output[0].y += control[k].y * b;
+output[0].z += control[k].z * b;
+}
+return;
+}
+
+void SplineKnots(int *u, int n, int t)
+{
+int j;
+
+for (j = 0; j <= n + t; j++)
+{
+if (j < t)
+u[j] = 0;
+else if (j <= n)
+u[j] = j - t + 1;
+else if (j > n)
+u[j] = n - t + 2;
+}
+}
+void SplineCurve(Point3d *inp, int n, int *knots, int t, Point3d *outp, int res)
+{
+int i;
+double interval, increment;
+
+interval = 0;
+increment = (n - t + 2) / (double)(res - 1);
+for (i = 0; i < res - 1; i++) {
+SplinePoint(knots, n, t, interval, inp, &(outp[i]));
+interval += increment;
+}
+outp[res - 1] = inp[n];
+}
+
+#define N 3
+Point3d inp[(N + 1)] = { Point3d(0.0, 0.0, 0.0), Point3d(1.0, 0.0, 3.0), Point3d(2.0, 0.0, 1.0), Point3d(4.0, 0.0, 4.0) };
+#define T 3
+int knots[N + T + 1];
+#define RESOLUTION 200
+Point3d outp[RESOLUTION];
+
+int main(int argc, char **argv)
+{
+SplineKnots(knots, N, T);
+
+double interval = 0;
+double increment = (N - T + 2) / (double)(RESOLUTION - 1);
+for (int i = 0; i < RESOLUTION - 1; i++)
+{
+SplinePoint(knots, N, T, interval, inp, &(outp[i]));
+interval += increment;
+}
+outp[RESOLUTION - 1] = inp[N];
+
+//SplineCurve(inp, N, knots, T, outp, RESOLUTION);
 
 return 0;
 }*/
-
-

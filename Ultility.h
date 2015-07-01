@@ -22,6 +22,8 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
+#include <Eigen/Dense>
+#include "Eigen/Sparse"
 
 #include "DataStructure.h"
 #include "ImagePro.h"
@@ -48,7 +50,7 @@ void MConventional_PhaseShifting(char *lpD, char *lpPBM, double* lpFO, int nipf,
 void DecodePhaseShift2(char *Image, char *PBM, double *PhaseUW, int width, int height, int *frequency, int nfrequency, int sstep, int LFstep, int half_filter_size, int m_mask);
 
 //Bspline basis resampling
-void GenerateResamplingSplineWithBreakPts(double *Basis, double *DBasis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder, int DerivativeOrder);
+void GenerateSplineBasisWithBreakPts(double *Basis, double *DBasis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder, int DerivativeOrder);
 void GenerateResamplingSplineBasisWithBreakPts(double *Basis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder);
 void GenerateResamplingSplineBasisWithBreakPts(double *Basis, vector<double> ResampledPts, vector<double>BreakPts, int SplineOrder);
 
@@ -568,7 +570,10 @@ void GenerateViewandPointCorrespondences(vector<int> *ViewCorres, vector<int> *P
 void Save3DPoints(char *Path, Point3d *All3D, vector<int>Selected3DIndex);
 void DisplayMatrix(char *Fname, Mat m);
 
-void convertRvectoRmat(double *r, double *R);
+void convertRTToTwist(double *R, double *T, double *twist);
+void convertTwistToRT(double *twist, double *R, double *T);
+void convertRmatToRvec(double *R, double *r);
+void convertRvecToRmat(double *r, double *R);
 void SetIntrinisc(CameraData &CamInfo, double *Intrinsic);
 void GetIntrinsicFromK(CameraData *AllViewsParas, vector<int> AvailViews);
 void GetIntrinsicFromK(CameraData *AllViewsParas, int nviews);

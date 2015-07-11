@@ -12,7 +12,7 @@ char *Path;
 GLfloat UnitScale = 1.0f; //1 unit corresponds to 1 mm
 static GLfloat g_ratio, g_coordAxisLength = 200.f*UnitScale, g_fViewDistance = 5000 * UnitScale* VIEWING_DISTANCE_MIN;
 static GLfloat g_nearPlane = 1.0*UnitScale, g_farPlane = 30000 * UnitScale;
-GLfloat CameraSize = 500.0f*UnitScale, pointSize = 25.0f*UnitScale, normalSize = 20.f*UnitScale, arrowThickness = .1f*UnitScale;
+GLfloat CameraSize = 100.0f*UnitScale, pointSize = 5.0f*UnitScale, normalSize = 20.f*UnitScale, arrowThickness = .1f*UnitScale;
 static int g_Width = 1200, g_Height = 900, g_xClick = 0, g_yClick = 0, g_mouseYRotate = 0, g_mouseXRotate = 0;
 
 enum cam_mode { CAM_DEFAULT, CAM_ROTATE, CAM_ZOOM, CAM_PAN };
@@ -30,7 +30,7 @@ bool SaveScreen = false, SaveStaticViewingParameters = false, SetStaticViewingPa
 bool drawCorpusPoints = false, drawCorpusCameras = true, drawTimeVaryingCorpusPoints = false;
 bool drawTimeVaryingCameraPose = false, drawCameraTraject = false;
 bool drawTimeVarying3DPoints = false, drawTimeVarying3DPointTrajectory = false;
-bool drawNative3DTrajectory = true, drawNative3DTrajectoryOneInstance = false, IndiviualTrajectory = false, Trajectory_Time = true, EndTime = false;
+bool drawNative3DTrajectory = true, drawNative3DTrajectoryOneInstance = false, IndiviualTrajectory = false, Trajectory_Time = false, EndTime = false;
 bool TimeVaryingPointsOne = true, TimeVaryingPointsTwo = true, Native3DTrajectoryOne = true;
 bool AutomaticUpdate = false;
 double DisplayStartTime = 0.0, DisplayTimeStep = 0.016; //60fps
@@ -230,9 +230,9 @@ void Keyboard(unsigned char key, int x, int y)
 		{
 			drawNative3DTrajectoryOneInstance = !drawNative3DTrajectoryOneInstance;
 			if (drawNative3DTrajectoryOneInstance)
-				printf("1 Time instance in Trajectory: ON\n");
+				printf("Show only 1 time instance: ON\n");
 			else
-				printf("1 Time instance in Trajectory:  OFF\n");
+				printf("Show only 1 time instance:  OFF\n");
 		}
 
 		break;
@@ -1157,6 +1157,24 @@ void RenderObjects()
 					}
 					glEnd();
 
+					//drawPoints on the trajectory
+					for (unsigned int i = 0; i <= maxtime; ++i)
+					{
+						if (g_vis.glCameraPoseInfo[j][i].frameID < 0)
+							continue;
+						float* centerPt = g_vis.glCameraPoseInfo[j][i].camCenter;
+						if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
+							continue;
+						glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+
+						glPushMatrix();
+						glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+						glColor3fv(White);
+						glutSolidSphere(pointSize/2.5, 10, 10);
+						glPopMatrix();
+					}
+
+					//Draw camera at the end of the trajectory
 					float* centerPt = g_vis.glCameraPoseInfo[j][maxtime].camCenter;
 					GLfloat* R = g_vis.glCameraPoseInfo[j][maxtime].Rgl;
 
@@ -1331,9 +1349,10 @@ int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, b
 	ReadCurrentSfmGL(Path, drawPointColor, drawPatchNormal);
 	//ReadCurrent3DGL(Path, drawPointColor, drawPatchNormal, timeID, true);
 	//ReadCurrent3DGL2(Path, drawPointColor, drawPatchNormal, timeID, false);
-	//Read3DTrajectory(Path);
+	Read3DTrajectory(Path);
 	//Read3DTrajectoryWithCovariance(Path);
 
+	//PointsCentroid[0] = 919, PointsCentroid[1] = 154, PointsCentroid[2] = 894;
 	//PointsCentroid[0] = -108, PointsCentroid[1] = -1356, PointsCentroid[2] = 5228;
 
 	if (drawTimeVaryingCameraPose)
@@ -1465,6 +1484,7 @@ void ReadCurrentSfmGL(char *path, bool drawPointColor, bool drawPatchNormal)
 
 	CamInfo temp;
 	sprintf(Fname, "%s/Corpus/DinfoGL.txt", path);
+	//sprintf(Fname, "%s/CamPose_0.txt", path);
 	FILE *fp = fopen(Fname, "r");
 	if (fp != NULL)
 	{
@@ -1723,11 +1743,10 @@ int Read3DTrajectory(char *path, int trialID)
 		if (trialID == 0)
 			sprintf(Fname, "%s/OptimizedRaw_Track_%d.txt", path, npts);
 		else if (trialID == 1)
-			sprintf(Fname, "%s/frameSynced_Track_%d.txt", path, npts);
+			sprintf(Fname, "%s/Resampled2_Track_%d.txt", path, npts);
 		else if (trialID == 2)
 			sprintf(Fname, "%s/Resampled_Track_%d.txt", path, npts);
 		//sprintf(Fname, "%s/OptimizedRaw_Track_%d_%d.txt", path, npts, trialID);
-
 
 		FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)

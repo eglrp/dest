@@ -482,7 +482,48 @@ void GenerateResamplingSplineBasisWithBreakPtsExample()
 
 	return;
 }
+void FindActingControlPts(double t, int *ActingID, int ncontrols, gsl_bspline_workspace *bw, gsl_vector *Bi, int splineOrder)
+{
+	gsl_bspline_eval(t, Bi, bw);
 
+	//pick the top splineOrder biggest coeffs
+	int count = 0, startID = -1;
+	double TopCoeff[10];
+
+	for (int ii = 0; ii < ncontrols; ii++)
+	{
+		if (gsl_vector_get(Bi, ii) > 1.0e-6)
+		{
+			if (startID < 0)
+				startID = ii;
+			TopCoeff[count] = -gsl_vector_get(Bi, ii);
+			count++;
+		}
+
+		if (count > splineOrder)
+		{
+			if (TopCoeff[0] < TopCoeff[count - 1])
+				startID++;//over estimate the first coeff
+
+			for (int jj = 0; jj < splineOrder; jj++)
+				ActingID[jj] = startID;
+			break;
+		}
+	}
+
+	if (count <= splineOrder) //happen at the begining and end
+	{
+		if (count == 1 && startID != 0)
+			startID = startID - splineOrder + 1;
+		else if (startID + splineOrder > ncontrols)
+			startID--;
+
+		for (int jj = 0; jj < splineOrder; jj++)
+			ActingID[jj] = startID + jj;
+	}
+
+	return;
+}
 void dec2bin(int dec, int*bin, int num_bin)
 {
 	bool stop = false;
@@ -5134,12 +5175,12 @@ int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams)
 			r0 = AllViewsParas[id].distortion[0], r1 = AllViewsParas[id].distortion[1], r2 = AllViewsParas[id].distortion[2];
 			t0 = AllViewsParas[id].distortion[3], t1 = AllViewsParas[id].distortion[4];
 			p0 = AllViewsParas[id].distortion[5], p1 = AllViewsParas[id].distortion[6];
-			fprintf(fp, "%d %d %d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf \n", LensType, AllViewsParas[id].width, AllViewsParas[id].height, fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1);
+			fprintf(fp, "%d.png %d %d %d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf \n", ii, LensType, AllViewsParas[id].width, AllViewsParas[id].height, fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1);
 		}
 		else
 		{
 			omega = AllViewsParas[id].distortion[0], DistCtrX = AllViewsParas[id].distortion[1], DistCtrY = AllViewsParas[id].distortion[2];
-			fprintf(fp, "%d %d %d %lf %lf %lf %lf %lf %lf %lf %lf \n", LensType, AllViewsParas[id].width, AllViewsParas[id].height, fx, fy, skew, u0, v0, omega, DistCtrX, DistCtrY);
+			fprintf(fp, "%d.png %d %d %d %lf %lf %lf %lf %lf %lf %lf %lf \n", ii, LensType, AllViewsParas[id].width, AllViewsParas[id].height, fx, fy, skew, u0, v0, omega, DistCtrX, DistCtrY);
 		}
 	}
 	fclose(fp);
@@ -5394,8 +5435,8 @@ void convertRTToTwist(double *R, double *T, double *twist)
 	JacobiSVD<MatrixXd> svd(matR, ComputeFullU | ComputeFullV);
 	//Matrix3d S = svd.singularValues().asDiagonal();
 	matR = svd.matrixU()*svd.matrixV().transpose();//Project R to SO(3)
-	
-	double rx = R[7] - R[5], ry = R[2] - R[6], rz = R[3] - R[1]; 
+
+	double rx = R[7] - R[5], ry = R[2] - R[6], rz = R[3] - R[1];
 	double s = sqrt((rx*rx + ry*ry + rz*rz)*0.25);
 	double c = (R[0] + R[4] + R[8] - 1)*0.5;
 	c = c > 1. ? 1. : c < -1. ? -1. : c;
@@ -5441,7 +5482,7 @@ void convertRTToTwist(double *R, double *T, double *twist)
 	}
 
 	//solve Vt = T;
-	Map < Matrix < double, 3, 3, RowMajor >> matV(V); 
+	Map < Matrix < double, 3, 3, RowMajor >> matV(V);
 	Map<Vector3d> matT(T), matt(twist);
 	matt = matV.lu().solve(matT);
 
@@ -5519,12 +5560,12 @@ void convertRvecToRmat(double *r, double *R)
 {
 	/*Mat Rmat(3, 3, CV_64F), rvec(3, 1, CV_64F);
 	for (int jj = 0; jj < 3; jj++)
-		rvec.at<double>(jj) = r[jj];
+	rvec.at<double>(jj) = r[jj];
 
 	Rodrigues(rvec, Rmat);
 
 	for (int jj = 0; jj < 9; jj++)
-		R[jj] = Rmat.at<double>(jj);*/
+	R[jj] = Rmat.at<double>(jj);*/
 
 	double theta = sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]), theta2 = theta* theta;
 	double rx[9] = { 0.0, -r[2], r[1], r[2], 0.0, -r[0], -r[1], r[0], 0.0 };
@@ -5705,6 +5746,21 @@ void GetRCGL(double *R, double *T, double *Rgl, double *C)
 	C[0] = -center[0], C[1] = -center[1], C[2] = -center[2];
 	return;
 }
+void GetPosesGL(double *R, double *T, double *poseGL)
+{
+	poseGL[0] = R[0], poseGL[1] = R[1], poseGL[2] = R[2], poseGL[3] = 0.0;
+	poseGL[4] = R[3], poseGL[5] = R[4], poseGL[6] = R[5], poseGL[7] = 0.0;
+	poseGL[8] = R[6], poseGL[9] = R[7], poseGL[10] = R[8], poseGL[11] = 0.0;
+	poseGL[12] = 0, poseGL[13] = 0, poseGL[14] = 0, poseGL[15] = 1.0;
+
+	//Center = -iR*T 
+	double iR[9], center[3];
+	mat_invert(R, iR);
+	mat_mul(iR, T, center, 3, 3, 1);
+	poseGL[16] = -center[0], poseGL[17] = -center[1], poseGL[18] = -center[2];
+
+	return;
+}
 void GetTfromC(CameraData &camInfo)
 {
 	double T[3];
@@ -5878,30 +5934,6 @@ void AssembleP(double *K, double *RT, double *P)
 	return;
 }
 
-void ComputeInterCamerasPose(double *R1, double *T1, double *R2, double *T2, double *R21, double *T21)
-{
-	//C1 = RT21*C1
-	double RT1[16] = { R1[0], R1[1], R1[2], T1[0],
-		R1[3], R1[4], R1[5], T1[1],
-		R1[6], R1[7], R1[8], T1[2],
-		0, 0, 0, 1 };
-	double RT2[16] = { R2[0], R2[1], R2[2], T2[0],
-		R2[3], R2[4], R2[5], T2[1],
-		R2[6], R2[7], R2[8], T2[2],
-		0, 0, 0, 1 };
-
-	double iRT2[16], RT21[16];
-	mat_invert(RT2, iRT2, 4);
-
-	mat_mul(RT1, iRT2, RT21, 4, 4, 4);
-
-	R21[0] = RT21[0], R21[1] = RT21[1], R21[2] = RT21[2], T21[0] = RT21[3];
-	R21[3] = RT21[4], R21[4] = RT21[5], R21[5] = RT21[6], T21[1] = RT21[7];
-	R21[6] = RT21[8], R21[7] = RT21[9], R21[8] = RT21[10], T21[2] = RT21[11];
-
-	return;
-}
-
 #define QW_ZERO 1e-6
 void Rotation2Quaternion(double *R, double *q)
 {
@@ -5969,6 +6001,112 @@ void QuaternionLinearInterp(double *quad1, double *quad2, double *quadi, double 
 	return;
 }
 
+int Get_Pose_from_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsamples, char *Fname3)
+{
+	int nControls, nbreaks, SplineOrder;
+
+	//Read data
+	FILE *fp = fopen(Fname1, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname1);
+		return 1;
+	}
+	fscanf(fp, "%d %d %d\n", &nControls, &nbreaks, &SplineOrder);
+
+	double *BreakLoc = new double[nbreaks];
+	double *ControlLoc = new double[nControls];
+	double *ControlPose = new double[nControls * 6];
+	for (int ii = 0; ii < nControls; ii++)
+	{
+		fscanf(fp, "%lf ", &ControlLoc[ii]);
+		for (int jj = 0; jj < 6; jj++)
+			fscanf(fp, "%lf ", &ControlPose[ii * 6 + jj]);
+	}
+	for (int ii = 0; ii < nbreaks; ii++)
+		fscanf(fp, "%lf", &BreakLoc[ii]);
+	fclose(fp);
+
+	//Bspline generator
+	gsl_bspline_workspace *bw = gsl_bspline_alloc(SplineOrder, nbreaks);
+	gsl_vector *Bi = gsl_vector_alloc(nControls);
+	gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
+
+	for (int ii = 0; ii < nbreaks; ii++)
+		gsl_vector_set(gsl_BreakPts, ii, BreakLoc[ii]);
+	gsl_bspline_knots(gsl_BreakPts, bw);
+
+	//Start interpolation pose
+	double *SampleLoc = new double[nsamples];
+	double step = (BreakLoc[nbreaks - 1] - BreakLoc[0]) / (nsamples - 1);
+	for (int ii = 0; ii < nsamples; ii++)
+		SampleLoc[ii] = BreakLoc[0] + step*ii;
+
+	int ActingID[4];
+	double twist[6], R[9], T[3], poseGL[19];
+
+	fp = fopen(Fname2, "w+");
+	for (int ii = 0; ii < nsamples; ii++)
+	{
+		FindActingControlPts(SampleLoc[ii], ActingID, nControls, bw, Bi, SplineOrder);
+
+		gsl_bspline_eval(SampleLoc[ii], Bi, bw);
+		for (int jj = 0; jj < 6; jj++)
+		{
+			twist[jj] = 0.0;
+			for (int ii = 0; ii < 4; ii++)
+				twist[jj] += ControlPose[jj + 6 * ActingID[ii]] * gsl_vector_get(Bi, ActingID[ii]);
+		}
+
+		convertTwistToRT(twist, R, T);
+		GetPosesGL(R, T, poseGL);
+
+		fprintf(fp, "%d ", ii);
+		for (int jj = 0; jj < 19; jj++)
+			fprintf(fp, "%.16e ", poseGL[jj]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+
+	fp = fopen(Fname3, "w+");
+	for (int ii = 0; ii < nControls; ii++)
+	{
+		convertTwistToRT(&ControlPose[6 * ii], R, T);
+		GetPosesGL(R, T, poseGL);
+
+		fprintf(fp, "%d ", ii);
+		for (int jj = 0; jj < 19; jj++)
+			fprintf(fp, "%.16e ", poseGL[jj]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	return 0;
+}
+void ComputeInterCamerasPose(double *R1, double *T1, double *R2, double *T2, double *R21, double *T21)
+{
+	//C2 = RT21*C1
+	double RT1[16] = { R1[0], R1[1], R1[2], T1[0],
+		R1[3], R1[4], R1[5], T1[1],
+		R1[6], R1[7], R1[8], T1[2],
+		0, 0, 0, 1 };
+	double RT2[16] = { R2[0], R2[1], R2[2], T2[0],
+		R2[3], R2[4], R2[5], T2[1],
+		R2[6], R2[7], R2[8], T2[2],
+		0, 0, 0, 1 };
+
+	double iRT2[16], RT21[16];
+	mat_invert(RT2, iRT2, 4);
+
+	mat_mul(RT1, iRT2, RT21, 4, 4, 4);
+
+	R21[0] = RT21[0], R21[1] = RT21[1], R21[2] = RT21[2], T21[0] = RT21[3];
+	R21[3] = RT21[4], R21[4] = RT21[5], R21[5] = RT21[6], T21[1] = RT21[7];
+	R21[6] = RT21[8], R21[7] = RT21[9], R21[8] = RT21[10], T21[2] = RT21[11];
+
+	return;
+}
 // Author: Xiaotao Duan
 //
 // This library contains image processing method to detect
@@ -6299,6 +6437,76 @@ void BlurDetectionDriver(char *Path, int nimages, int width, int height, float b
 	return;
 }
 
+int GenerateVisualSFMinput(char *path, int startFrame, int stopFrame, int npts)
+{
+	//This function will write down points with upper left coor.
+	int ii, jj, mm, kk;
+	char Fname[200], Fname1[200], Fname2[200];
+
+	//nptsxnviews
+	int  nframes = stopFrame - startFrame + 1;
+	Point2d *Correspondences = new Point2d[npts*nframes];
+
+	for (ii = startFrame; ii <= stopFrame; ii++)
+	{
+		sprintf(Fname, "%s/CV_%d.txt", path, ii); FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+		{
+			printf("Cannot open %s", Fname);
+			return 0;
+		}
+		for (jj = 0; jj < npts; jj++)
+			fscanf(fp, "%lf %lf ", &Correspondences[ii + jj*nframes].x, &Correspondences[ii + jj*nframes].y);
+		fclose(fp);
+	}
+
+	//Write out sift format
+	for (jj = startFrame; jj <= stopFrame; jj++)
+	{
+		sprintf(Fname, "%s/%d.sift", path, jj);	FILE *fp = fopen(Fname, "w+");
+		fprintf(fp, "%d 128\n", npts);
+		for (ii = 0; ii < npts; ii++)
+		{
+			fprintf(fp, "%.6f %.6f 0.0 0.0\n", Correspondences[jj + ii*nframes].x, Correspondences[jj + ii*nframes].y);
+			for (kk = 0; kk < 128; kk++)
+				fprintf(fp, "%d ", 0);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+
+	//Write out pair of correspondences
+	vector<int> matchID;
+	sprintf(Fname, "%s/FeatureMatches.txt", path); FILE *fp = fopen(Fname, "w+");
+	for (jj = startFrame; jj < stopFrame; jj++)
+	{
+		for (ii = jj + 1; ii <= stopFrame; ii++)
+		{
+			sprintf(Fname1, "%s/%d.jpg", path, jj);
+			sprintf(Fname2, "%s/%d.jpg", path, ii);
+
+			fprintf(fp, "%s\n", Fname1);
+			fprintf(fp, "%s\n", Fname2);
+			matchID.clear();
+			for (mm = 0; mm < npts; mm++)
+				if (Correspondences[mm*nframes + jj].x > 0.0 && Correspondences[mm*nframes + jj].y > 0.0 && Correspondences[mm*nframes + ii].x > 0.0 && Correspondences[mm*nframes + ii].y > 0.0)
+					matchID.push_back(mm);
+
+			fprintf(fp, "%d\n", matchID.size());
+			for (mm = 0; mm < matchID.size(); mm++)
+				fprintf(fp, "%d ", matchID.at(mm));
+			fprintf(fp, "\n");
+			for (mm = 0; mm < matchID.size(); mm++)
+				fprintf(fp, "%d ", matchID.at(mm));
+			fprintf(fp, "\n\n");
+		}
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	delete[]Correspondences;
+	return 0;
+}
 bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics, int nHDs, int nVGAs, int nPanels)
 {
 	ifstream ifs(filepath);
@@ -6345,9 +6553,27 @@ bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics,
 		if (posDot < 5)
 		{
 			std::size_t pos = filename.find(".ppm");
-			filename.erase(pos, 4);
-			const char * str = filename.c_str();
-			int viewID = atoi(str);
+			if (pos != string::npos)
+			{
+				filename.erase(pos, 4);
+				const char * str = filename.c_str();
+				viewID = atoi(str);
+			}
+			else
+			{
+				pos = filename.find(".jpg");
+				if (pos != string::npos)
+				{
+					filename.erase(pos, 4);
+					const char * str = filename.c_str();
+					viewID = atoi(str);
+				}
+				else
+				{
+					printf("cannot find %s\n", filename);
+					abort();
+				}
+			}
 		}
 		else
 		{
@@ -6383,6 +6609,145 @@ bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics,
 
 	return true;
 }
+bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize, int sharedIntrinsics)
+{
+	ifstream ifs(filepath);
+	if (ifs.fail())
+	{
+		cerr << "Cannot load " << filepath << endl;
+		return false;
+	}
+
+	string token;
+	ifs >> token; //NVM_V3
+	if (token != "NVM_V3")
+	{
+		cerr << "Can only load NVM_V3" << endl;
+		return false;
+	}
+
+	if (sharedIntrinsics == 1)
+	{
+		double fx, fy, u0, v0, radial1;
+		ifs >> token >> fx >> u0 >> fy >> v0 >> radial1;
+	}
+
+	//loading camera parameters
+	cout << "Loading nvm cameras" << endl;
+	int nviews;
+	ifs >> nviews;
+	if (nviews <= 1)
+	{
+		cerr << "# of cameras must be more than 1." << endl;
+		return false;
+	}
+	CorpusData.nCameras = nviews;
+	CorpusData.camera = new CameraData[nviews+1];//1 is just in case camera start at 1
+	double Quaterunion[4], CamCenter[3], T[3];
+	vector<int> CameraOrder;
+
+	for (int ii = 0; ii < nviews; ii++)
+		CorpusData.camera[ii].valid = false;
+
+	for (int ii = 0; ii < nviews; ii++)
+	{
+		string filename;
+		double f;
+		vector<double> q(4), c(3), d(2);
+		ifs >> filename >> f >> Quaterunion[0] >> Quaterunion[1] >> Quaterunion[2] >> Quaterunion[3] >> CamCenter[0] >> CamCenter[1] >> CamCenter[2] >> d[0] >> d[1];
+
+		int viewID;
+		std::size_t posDot = filename.find(".");
+		if (posDot < 5)
+		{
+			std::size_t pos = filename.find(".ppm");
+			if (pos != string::npos)
+			{
+				filename.erase(pos, 4);
+				const char * str = filename.c_str();
+				viewID = atoi(str);
+			}
+			else
+			{
+				pos = filename.find(".jpg");
+				if (pos != string::npos)
+				{
+					filename.erase(pos, 4);
+					const char * str = filename.c_str();
+					viewID = atoi(str);
+				}
+				else
+				{
+					printf("cannot find %s\n", filename);
+					abort();
+				}
+			}
+		}
+		CameraOrder.push_back(viewID);
+
+		CorpusData.camera[viewID].valid = true;
+		CorpusData.camera[viewID].intrinsic[0] = f, CorpusData.camera[viewID].intrinsic[1] = f,
+			CorpusData.camera[viewID].intrinsic[2] = 0, CorpusData.camera[viewID].intrinsic[3] = 1.0*ImgSize[viewID].x / 2-0.5, CorpusData.camera[viewID].intrinsic[4] = 1.0*ImgSize[viewID].y / 2-0.5;
+		CorpusData.camera[viewID].width = ImgSize[viewID].x, CorpusData.camera[viewID].height = ImgSize[viewID].y;
+
+		ceres::QuaternionToRotation(Quaterunion, CorpusData.camera[viewID].R);
+		mat_mul(CorpusData.camera[viewID].R, CamCenter, T, 3, 3, 1); //t = -RC
+		CorpusData.camera[viewID].T[0] = -T[0], CorpusData.camera[viewID].T[1] = -T[1], CorpusData.camera[viewID].T[2] = -T[2];
+
+		CorpusData.camera[viewID].LensModel = 0;
+		CorpusData.camera[viewID].distortion[0] = -d[0];
+		for (int jj = 1; jj < 7; jj++)
+			CorpusData.camera[viewID].distortion[jj] = 0.0;
+
+		GetrtFromRT(CorpusData.camera[viewID]);
+		GetKFromIntrinsic(CorpusData.camera[viewID]);
+		AssembleP(CorpusData.camera[viewID]);
+	}
+
+	cout << "Loading nvm points" << endl;
+	//loading 2D and 3D points
+	int nPoints, viewID, pid;
+	ifs >> nPoints;
+	CorpusData.n3dPoints = nPoints;
+	CorpusData.xyz.reserve(nPoints);
+	CorpusData.viewIdAll3D.reserve(nPoints);
+	CorpusData.uvAll3D.reserve(nPoints);
+	CorpusData.scaleAll3D.reserve(nPoints);
+
+	Point2d uv;
+	Point3d xyz;
+	Point3i rgb;
+	vector<int>viewID3D;
+	vector<Point2d> uv3D;
+	vector<double> scale3D;
+	for (int i = 0; i < nPoints; i++)
+	{
+		viewID3D.clear(), uv3D.clear(), scale3D.clear();
+		ifs >> xyz.x >> xyz.y >> xyz.z>> rgb.x >> rgb.y>> rgb.z;
+
+		CorpusData.xyz.push_back(xyz);
+		CorpusData.rgb.push_back(rgb);
+
+		ifs >> nviews;
+		for (int ii = 0; ii < nviews; ii++)
+		{
+			ifs >> viewID >> pid >> uv.x >> uv.y;
+			uv.x += 0.5*(CorpusData.camera[CameraOrder[viewID]].width - 1.0);
+			uv.y += 0.5*(CorpusData.camera[CameraOrder[viewID]].height - 1.0);
+
+			viewID3D.push_back(CameraOrder[viewID]);
+			uv3D.push_back(uv);
+			scale3D.push_back(1.0);
+		}
+		CorpusData.viewIdAll3D.push_back(viewID3D);
+		CorpusData.uvAll3D.push_back(uv3D);
+		CorpusData.scaleAll3D.push_back(scale3D);
+	}
+
+	printf("Done with nvm\n");
+
+	return true;
+}
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 {
 	const int nHDs = 30, nVGAs = 24, nPanels = 20;
@@ -6394,15 +6759,18 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 	}
 
 	char Fname[200];
-	int lensType, width, height;
-	double fx, fy, skew, u0, v0, r1, r2, r3, t1, t2, p1, p2, omega, DistCtrX, DistCtrY, rv[3], T[3];
+	int lensType, shutterModel, width, height;
+	double fx, fy, skew, u0, v0, r1, r2, r3, t1, t2, p1, p2, omega, DistCtrX, DistCtrY, rv[3], T[3], wt[6];
 
 	fscanf(fp, "%d ", &CorpusData.nCameras);
 	CorpusData.camera = new CameraData[CorpusData.nCameras + 20];
 
 	for (int ii = 0; ii < CorpusData.nCameras; ii++)
+		CorpusData.camera[ii].valid = false;
+
+	for (int ii = 0; ii < CorpusData.nCameras; ii++)
 	{
-		if (fscanf(fp, "%s %d %d %d", &Fname, &lensType, &width, &height) == EOF)
+		if (fscanf(fp, "%s %d %d %d %d", &Fname, &lensType, &shutterModel, &width, &height) == EOF)
 			break;
 		string filename = Fname;
 		size_t dotpos = filename.find(".");
@@ -6418,9 +6786,8 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 					pos = filename.find(".jpg");
 					if (pos > 1000)
 					{
-						{ printf("Something wrong with the image name in the BA file!\n");
+						printf("Something wrong with the image name in the BA file!\n");
 						abort();
-						}
 					}
 				}
 			}
@@ -6442,8 +6809,8 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 			viewID = panelID == 0 ? camID : nHDs + nVGAs*(panelID - 1) + camID - 1;
 		}
 
-
-		CorpusData.camera[viewID].LensModel = lensType;
+		CorpusData.camera[viewID].valid = true;
+		CorpusData.camera[viewID].LensModel = lensType, CorpusData.camera[viewID].ShutterModel = shutterModel;
 		CorpusData.camera[viewID].width = width, CorpusData.camera[viewID].height = height;
 		if (lensType == RADIAL_TANGENTIAL_PRISM)
 		{
@@ -6471,6 +6838,11 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 			for (int jj = 3; jj < 7; jj++)
 				CorpusData.camera[viewID].distortion[jj] = 0;
 		}
+		if (CorpusData.camera[viewID].ShutterModel == 1)
+			fscanf(fp, "%lf %lf %lf %lf %lf %lf ", &CorpusData.camera[viewID].wt[0], &CorpusData.camera[viewID].wt[1], &CorpusData.camera[viewID].wt[2], &CorpusData.camera[viewID].wt[3], &CorpusData.camera[viewID].wt[4], &CorpusData.camera[viewID].wt[5]);
+		else
+			for (int jj = 0; jj < 6; jj++)
+				CorpusData.camera[viewID].wt[jj] = 0.0;
 
 		CorpusData.camera[viewID].intrinsic[0] = fx,
 			CorpusData.camera[viewID].intrinsic[1] = fy,
@@ -6502,7 +6874,7 @@ bool saveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 
 	for (int viewID = 0; viewID < CorpusData.nCameras; viewID++)
 	{
-		fprintf(fp, "%d.png %d %d %d ", viewID, CorpusData.camera[viewID].LensModel, CorpusData.camera[viewID].width, CorpusData.camera[viewID].height);
+		fprintf(fp, "%d.png %d %d %d %d ", viewID, CorpusData.camera[viewID].LensModel, CorpusData.camera[viewID].ShutterModel, CorpusData.camera[viewID].width, CorpusData.camera[viewID].height);
 
 		fx = CorpusData.camera[viewID].intrinsic[0], fy = CorpusData.camera[viewID].intrinsic[1],
 			skew = CorpusData.camera[viewID].intrinsic[2],
@@ -6517,16 +6889,26 @@ bool saveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 			r1 = CorpusData.camera[viewID].distortion[0], r2 = CorpusData.camera[viewID].distortion[1], r3 = CorpusData.camera[viewID].distortion[2],
 				t1 = CorpusData.camera[viewID].distortion[3], t2 = CorpusData.camera[viewID].distortion[4],
 				p1 = CorpusData.camera[viewID].distortion[5], p2 = CorpusData.camera[viewID].distortion[6];
-			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f \n", fx, fy, skew, u0, v0,
+			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f ", fx, fy, skew, u0, v0,
 				r1, r2, r3, t1, t2, p1, p2,
 				rv[0], rv[1], rv[2], T[0], T[1], T[2]);
+			if (CorpusData.camera[viewID].ShutterModel == 1)
+				fprintf(fp, "%.16f %.16f  %.16f %.16f %.16f %.16f \n", CorpusData.camera[viewID].wt[0], CorpusData.camera[viewID].wt[1], CorpusData.camera[viewID].wt[2],
+				CorpusData.camera[viewID].wt[3], CorpusData.camera[viewID].wt[4], CorpusData.camera[viewID].wt[5]);
+			else
+				fprintf(fp, "\n");
 		}
 		else
 		{
 			omega = CorpusData.camera[viewID].distortion[0], DistCtrX = CorpusData.camera[viewID].distortion[1], DistCtrY = CorpusData.camera[viewID].distortion[2];
-			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f  \n", fx, fy, skew, u0, v0,
+			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f ", fx, fy, skew, u0, v0,
 				omega, DistCtrX, DistCtrY,
 				rv[0], rv[1], rv[2], T[0], T[1], T[2]);
+			if (CorpusData.camera[viewID].ShutterModel == 1)
+				fprintf(fp, "%.16f %.16f  %.16f %.16f %.16f %.16f \n", CorpusData.camera[viewID].wt[0], CorpusData.camera[viewID].wt[1], CorpusData.camera[viewID].wt[2],
+				CorpusData.camera[viewID].wt[3], CorpusData.camera[viewID].wt[4], CorpusData.camera[viewID].wt[5]);
+			else
+				fprintf(fp, "\n");
 		}
 	}
 	return true;
@@ -6541,7 +6923,7 @@ bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor)
 	}
 
 	char Fname[200];
-	int lensType, width, height;
+	int lensType, shutterModel, width, height;
 	double fx, fy, skew, u0, v0, r1, r2, r3, t1, t2, p1, p2, omega, DistCtrX, DistCtrY, rv[3], T[3];
 
 	Corpus CorpusData;
@@ -6550,7 +6932,7 @@ bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor)
 
 	for (int ii = 0; ii < CorpusData.nCameras; ii++)
 	{
-		if (fscanf(fp, "%s %d %d %d", &Fname, &lensType, &width, &height) == EOF)
+		if (fscanf(fp, "%s %d %d %d %d", &Fname, &lensType, &shutterModel, &width, &height) == EOF)
 			break;
 		string filename = Fname;
 		std::size_t pos = filename.find(".ppm");
@@ -6559,15 +6941,19 @@ bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor)
 			pos = filename.find(".png");
 			if (pos > 1000)
 			{
-				printf("Something wrong with the image name in the BA file!\n");
-				abort();
+				pos = filename.find(".jpg");
+				if (pos > 100)
+				{
+					printf("Something wrong with the image name in the BA file!\n");
+					abort();
+				}
 			}
 		}
 		filename.erase(pos, 4);
 		const char * str = filename.c_str();
 		int viewID = atoi(str);
 
-		CorpusData.camera[viewID].LensModel = lensType;
+		CorpusData.camera[viewID].LensModel = lensType, CorpusData.camera[viewID].ShutterModel = shutterModel;
 		CorpusData.camera[viewID].width = width, CorpusData.camera[viewID].height = height;
 		if (lensType == RADIAL_TANGENTIAL_PRISM)
 		{
@@ -6615,10 +7001,9 @@ bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor)
 
 	fp = fopen(BAfileName, "w+");
 	fprintf(fp, "%d \n", CorpusData.nCameras);
-
 	for (int viewID = 0; viewID < CorpusData.nCameras; viewID++)
 	{
-		fprintf(fp, "%d.png %d %d %d ", viewID, CorpusData.camera[viewID].LensModel, CorpusData.camera[viewID].width, CorpusData.camera[viewID].height);
+		fprintf(fp, "%d.png %d %d %d %d ", viewID, CorpusData.camera[viewID].LensModel, CorpusData.camera[viewID].ShutterModel, CorpusData.camera[viewID].width, CorpusData.camera[viewID].height);
 
 		fx = CorpusData.camera[viewID].intrinsic[0], fy = CorpusData.camera[viewID].intrinsic[1],
 			skew = CorpusData.camera[viewID].intrinsic[2],
@@ -6633,18 +7018,30 @@ bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor)
 			r1 = CorpusData.camera[viewID].distortion[0], r2 = CorpusData.camera[viewID].distortion[1], r3 = CorpusData.camera[viewID].distortion[2],
 				t1 = CorpusData.camera[viewID].distortion[3], t2 = CorpusData.camera[viewID].distortion[4],
 				p1 = CorpusData.camera[viewID].distortion[5], p2 = CorpusData.camera[viewID].distortion[6];
-			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f \n", fx, fy, skew, u0, v0,
+			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f ", fx, fy, skew, u0, v0,
 				r1, r2, r3, t1, t2, p1, p2,
 				rv[0], rv[1], rv[2], T[0], T[1], T[2]);
+			if (CorpusData.camera[viewID].ShutterModel == 1)
+				fprintf(fp, "%.16f %.16f  %.16f %.16f %.16f %.16f \n", CorpusData.camera[viewID].wt[0], CorpusData.camera[viewID].wt[1], CorpusData.camera[viewID].wt[2],
+				CorpusData.camera[viewID].wt[3], CorpusData.camera[viewID].wt[4], CorpusData.camera[viewID].wt[5]);
+			else
+				fprintf(fp, "\n");
 		}
 		else
 		{
 			omega = CorpusData.camera[viewID].distortion[0], DistCtrX = CorpusData.camera[viewID].distortion[1], DistCtrY = CorpusData.camera[viewID].distortion[2];
-			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f  \n", fx, fy, skew, u0, v0,
+			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f ", fx, fy, skew, u0, v0,
 				omega, DistCtrX, DistCtrY,
 				rv[0], rv[1], rv[2], T[0], T[1], T[2]);
+			if (CorpusData.camera[viewID].ShutterModel == 1)
+				fprintf(fp, "%.16f %.16f  %.16f %.16f %.16f %.16f \n", CorpusData.camera[viewID].wt[0], CorpusData.camera[viewID].wt[1], CorpusData.camera[viewID].wt[2],
+				CorpusData.camera[viewID].wt[3], CorpusData.camera[viewID].wt[4], CorpusData.camera[viewID].wt[5]);
+			else
+				fprintf(fp, "\n");
 		}
 	}
+	fclose(fp);
+
 	return true;
 }
 bool ReSaveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData, double ScaleFactor)
@@ -6656,35 +7053,50 @@ bool ReSaveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData, double
 
 	for (int viewID = 0; viewID < CorpusData.nCameras; viewID++)
 	{
-		fprintf(fp, "%d.png %d %d %d ", viewID, CorpusData.camera[viewID].LensModel, CorpusData.camera[viewID].width, CorpusData.camera[viewID].height);
-
-		fx = CorpusData.camera[viewID].intrinsic[0], fy = CorpusData.camera[viewID].intrinsic[1],
-			skew = CorpusData.camera[viewID].intrinsic[2],
-			u0 = CorpusData.camera[viewID].intrinsic[3], v0 = CorpusData.camera[viewID].intrinsic[4];
-
-		//Scale data
-		for (int jj = 0; jj < 3; jj++)
-			rv[jj] = CorpusData.camera[viewID].rt[jj], T[jj] = CorpusData.camera[viewID].rt[jj + 3] * ScaleFactor;
-
-		if (CorpusData.camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
+		if (CorpusData.camera[viewID].valid)
 		{
-			r1 = CorpusData.camera[viewID].distortion[0], r2 = CorpusData.camera[viewID].distortion[1], r3 = CorpusData.camera[viewID].distortion[2],
-				t1 = CorpusData.camera[viewID].distortion[3], t2 = CorpusData.camera[viewID].distortion[4],
-				p1 = CorpusData.camera[viewID].distortion[5], p2 = CorpusData.camera[viewID].distortion[6];
-			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f \n", fx, fy, skew, u0, v0,
-				r1, r2, r3, t1, t2, p1, p2,
-				rv[0], rv[1], rv[2], T[0], T[1], T[2]);
-		}
-		else
-		{
-			omega = CorpusData.camera[viewID].distortion[0], DistCtrX = CorpusData.camera[viewID].distortion[1], DistCtrY = CorpusData.camera[viewID].distortion[2];
-			fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f  \n", fx, fy, skew, u0, v0,
-				omega, DistCtrX, DistCtrY,
-				rv[0], rv[1], rv[2], T[0], T[1], T[2]);
+			fprintf(fp, "%d.png %d %d %d %d ", viewID, CorpusData.camera[viewID].LensModel, CorpusData.camera[viewID].ShutterModel, CorpusData.camera[viewID].width, CorpusData.camera[viewID].height);
+
+			fx = CorpusData.camera[viewID].intrinsic[0], fy = CorpusData.camera[viewID].intrinsic[1],
+				skew = CorpusData.camera[viewID].intrinsic[2],
+				u0 = CorpusData.camera[viewID].intrinsic[3], v0 = CorpusData.camera[viewID].intrinsic[4];
+
+			//Scale data
+			for (int jj = 0; jj < 3; jj++)
+				rv[jj] = CorpusData.camera[viewID].rt[jj], T[jj] = CorpusData.camera[viewID].rt[jj + 3] * ScaleFactor;
+
+			if (CorpusData.camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
+			{
+				r1 = CorpusData.camera[viewID].distortion[0], r2 = CorpusData.camera[viewID].distortion[1], r3 = CorpusData.camera[viewID].distortion[2],
+					t1 = CorpusData.camera[viewID].distortion[3], t2 = CorpusData.camera[viewID].distortion[4],
+					p1 = CorpusData.camera[viewID].distortion[5], p2 = CorpusData.camera[viewID].distortion[6];
+				fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f ", fx, fy, skew, u0, v0,
+					r1, r2, r3, t1, t2, p1, p2,
+					rv[0], rv[1], rv[2], T[0], T[1], T[2]);
+				if (CorpusData.camera[viewID].ShutterModel == 1)
+					fprintf(fp, "%.16f %.16f  %.16f %.16f %.16f %.16f \n", CorpusData.camera[viewID].wt[0], CorpusData.camera[viewID].wt[1], CorpusData.camera[viewID].wt[2],
+					CorpusData.camera[viewID].wt[3], CorpusData.camera[viewID].wt[4], CorpusData.camera[viewID].wt[5]);
+				else
+					fprintf(fp, "\n");
+			}
+			else
+			{
+				omega = CorpusData.camera[viewID].distortion[0], DistCtrX = CorpusData.camera[viewID].distortion[1], DistCtrY = CorpusData.camera[viewID].distortion[2];
+				fprintf(fp, "%lf %lf %lf %lf %lf %lf %lf %lf %.16f %.16f %.16f %.16f %.16f %.16f ", fx, fy, skew, u0, v0,
+					omega, DistCtrX, DistCtrY,
+					rv[0], rv[1], rv[2], T[0], T[1], T[2]);
+				if (CorpusData.camera[viewID].ShutterModel == 1)
+					fprintf(fp, "%.16f %.16f  %.16f %.16f %.16f %.16f \n", CorpusData.camera[viewID].wt[0], CorpusData.camera[viewID].wt[1], CorpusData.camera[viewID].wt[2],
+					CorpusData.camera[viewID].wt[3], CorpusData.camera[viewID].wt[4], CorpusData.camera[viewID].wt[5]);
+				else
+					fprintf(fp, "\n");
+			}
 		}
 	}
+	fclose(fp);
 	return true;
 }
+
 int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool saveDescriptor)
 {
 	int ii, jj, kk;
@@ -7088,215 +7500,6 @@ int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool notReadD
 		}
 	}
 
-	return 0;
-}
-bool loadIndividualNVMforpose(char *Path, CameraData *CameraInfo, vector<int>availViews, int timeIDstart, int timeIDstop, int nviews, bool sharedIntrinsics)
-{
-	char Fname[200];
-	bool *Avail = new bool[timeIDstop*nviews];
-	for (int ii = 0; ii < timeIDstop*nviews; ii++)
-		Avail[ii] = false;
-
-	for (int kk = 0; kk < availViews.size(); kk++)
-	{
-		int camID = availViews.at(kk);
-		for (int timeID = timeIDstart; timeID < timeIDstop; timeID++)
-		{
-			sprintf(Fname, "%s/%d_%d.nvm", Path, camID, timeID);
-			ifstream ifs(Fname);
-			if (ifs.fail())
-			{
-				cerr << "Cannot load " << Fname << endl;
-				continue;
-			}
-
-
-			string token;
-			ifs >> token; //NVM_V3
-			if (token != "NVM_V3")
-			{
-				cerr << "Can only load NVM_V3" << endl;
-				return false;
-			}
-
-			if (sharedIntrinsics == 1)
-			{
-				double fx, fy, u0, v0, radial1;
-				ifs >> token >> fx >> u0 >> fy >> v0 >> radial1;
-			}
-
-			//loading camera parameters
-			int nviews;
-			ifs >> nviews;
-			if (nviews <= 1)
-			{
-				cerr << "# of cameras must be more than 1." << endl;
-				return false;
-			}
-
-			sprintf(Fname, "%d_%d", camID, timeID); //filename we are looking for
-			double Quaterunion[4], CamCenter[3], T[3];
-			for (int ii = 0; ii < nviews; ii++)
-			{
-				string filename;
-				double f;
-				vector<double> q(4), c(3), d(2);
-				ifs >> filename >> f >> Quaterunion[0] >> Quaterunion[1] >> Quaterunion[2] >> Quaterunion[3] >> CamCenter[0] >> CamCenter[1] >> CamCenter[2] >> d[0] >> d[1];
-
-				std::size_t pos = filename.find(".ppm");
-				filename.erase(pos, 4);
-				const char * str = filename.c_str();
-
-				if (strcmp(str, Fname) == 0)
-				{
-					Avail[camID*timeIDstop + timeID] = true;
-					ceres::QuaternionToRotation(Quaterunion, CameraInfo[camID*timeIDstop + timeID].R);
-					mat_mul(CameraInfo[camID*timeIDstop + timeID].R, CamCenter, T, 3, 3, 1); //t = -RC
-					CameraInfo[camID*timeIDstop + timeID].T[0] = -T[0], CameraInfo[camID*timeIDstop + timeID].T[1] = -T[1], CameraInfo[camID*timeIDstop + timeID].T[2] = -T[2];
-					break;
-				}
-			}
-		}
-	}
-
-	sprintf(Fname, "%s/PinfoGL.txt", Path);
-	FILE *fp = fopen(Fname, "w+");
-	double iR[9], center[3];
-	for (int jj = 0; jj < nviews; jj++)
-	{
-		for (int ii = timeIDstart; ii < timeIDstop; ii++)
-		{
-			int viewID = jj*timeIDstop + ii;
-			if (Avail[viewID])
-			{
-				mat_invert(CameraInfo[viewID].R, iR);
-				CameraInfo[viewID].Rgl[0] = CameraInfo[viewID].R[0], CameraInfo[viewID].Rgl[1] = CameraInfo[viewID].R[1], CameraInfo[viewID].Rgl[2] = CameraInfo[viewID].R[2], CameraInfo[viewID].Rgl[3] = 0.0;
-				CameraInfo[viewID].Rgl[4] = CameraInfo[viewID].R[3], CameraInfo[viewID].Rgl[5] = CameraInfo[viewID].R[4], CameraInfo[viewID].Rgl[6] = CameraInfo[viewID].R[5], CameraInfo[viewID].Rgl[7] = 0.0;
-				CameraInfo[viewID].Rgl[8] = CameraInfo[viewID].R[6], CameraInfo[viewID].Rgl[9] = CameraInfo[viewID].R[7], CameraInfo[viewID].Rgl[10] = CameraInfo[viewID].R[8], CameraInfo[viewID].Rgl[11] = 0.0;
-				CameraInfo[viewID].Rgl[12] = 0, CameraInfo[viewID].Rgl[13] = 0, CameraInfo[viewID].Rgl[14] = 0, CameraInfo[viewID].Rgl[15] = 1.0;
-
-				mat_mul(iR, CameraInfo[viewID].T, center, 3, 3, 1);
-				CameraInfo[viewID].camCenter[0] = -center[0], CameraInfo[viewID].camCenter[1] = -center[1], CameraInfo[viewID].camCenter[2] = -center[2];
-
-				fprintf(fp, "%d %d: ", jj, ii);
-				for (int jj = 0; jj < 16; jj++)
-					fprintf(fp, "%.16f ", CameraInfo[viewID].Rgl[jj]);
-				for (int jj = 0; jj < 3; jj++)
-					fprintf(fp, "%.16f ", CameraInfo[viewID].camCenter[jj]);
-				fprintf(fp, "\n");
-			}
-		}
-	}
-	fclose(fp);
-
-	sprintf(Fname, "%s/Pinfo.txt", Path);
-	fp = fopen(Fname, "w+");
-	Mat rvec(1, 3, CV_64F), Rmat(3, 3, CV_64F);
-	for (int jj = 0; jj < nviews; jj++)
-	{
-		for (int ii = timeIDstart; ii < timeIDstop; ii++)
-		{
-			int viewID = jj*timeIDstop + ii;
-			if (Avail[viewID])
-			{
-				Rmat.at<double>(0, 0) = CameraInfo[viewID].R[0], Rmat.at<double>(0, 1) = CameraInfo[viewID].R[1], Rmat.at<double>(0, 2) = CameraInfo[viewID].R[2];
-				Rmat.at<double>(1, 0) = CameraInfo[viewID].R[3], Rmat.at<double>(1, 1) = CameraInfo[viewID].R[4], Rmat.at<double>(1, 2) = CameraInfo[viewID].R[5];
-				Rmat.at<double>(2, 0) = CameraInfo[viewID].R[6], Rmat.at<double>(2, 1) = CameraInfo[viewID].R[7], Rmat.at<double>(2, 2) = CameraInfo[viewID].R[8];
-
-				Rodrigues(Rmat, rvec);
-
-				fprintf(fp, "%d %d: ", jj, ii);
-				for (int kk = 0; kk < 3; kk++)
-					fprintf(fp, "%.16f ", rvec.at<double>(kk));
-				for (int kk = 0; kk < 3; kk++)
-					fprintf(fp, "%.16f ", CameraInfo[viewID].T[kk]);
-				fprintf(fp, "\n");
-			}
-		}
-	}
-	fclose(fp);
-
-	return true;
-}
-
-int GenerateCorpusVisualWords(char *Path, int nimages)
-{
-	char Fname[200];
-	Mat img;
-
-	vector<KeyPoint> keypoints;
-	Mat descriptors, featuresUnclustered;
-	SiftDescriptorExtractor detector;
-
-
-	for (int ii = 0; ii < nimages; ii++)//= nimages / 5)
-	{
-		keypoints.clear();
-		sprintf(Fname, "%s/%d.jpg", Path, ii);
-		img = imread(Fname, CV_LOAD_IMAGE_GRAYSCALE);
-		detector.detect(img, keypoints);
-		detector.compute(img, keypoints, descriptors);
-		featuresUnclustered.push_back(descriptors);
-		printf("%.2f %%percent done\n", 100.0*ii / nimages);
-	}
-
-	//Construct BOWKMeansTrainer
-	int dictionarySize = 1000, retries = 1, flags = KMEANS_PP_CENTERS;
-	TermCriteria tc(CV_TERMCRIT_ITER, 100, 0.001);
-
-	//Create the BoW (or BoF) trainer
-	double start = omp_get_wtime();
-	BOWKMeansTrainer bowTrainer(dictionarySize, tc, retries, flags);
-	Mat dictionary = bowTrainer.cluster(featuresUnclustered);
-	printf("Finished generating the dictionary .... in %.2fs", omp_get_wtime() - start);
-
-	//store the vocabulary
-	start = omp_get_wtime();
-	sprintf(Fname, "%s/dictionary.yml", Path);
-	FileStorage fs(Fname, FileStorage::WRITE);
-	fs << "vocabulary" << dictionary;
-	fs.release();
-	printf("Saving the dictionary .... in %.2fs", omp_get_wtime() - start);
-
-	return 0;
-}
-int ComputeWordsHistogram(char *Path, int nimages)
-{
-	char filename[200];
-
-	//prepare BOW descriptor extractor from the dictionary    
-	Mat dictionary;
-	sprintf(filename, "%s/dictionary.yml", Path);
-	FileStorage fs(filename, FileStorage::READ);
-	fs["vocabulary"] >> dictionary;
-	fs.release();
-
-
-	Mat img;
-	for (int ii = 0; ii < nimages; ii++)
-	{
-		double start = omp_get_wtime();
-		sprintf(filename, "%s/T%d.jpg", Path, ii);
-		img = imread(filename, CV_LOAD_IMAGE_GRAYSCALE);
-
-		Ptr<DescriptorMatcher> matcher(new FlannBasedMatcher);
-		Ptr<FeatureDetector> detector(new SiftFeatureDetector());
-		Ptr<DescriptorExtractor> extractor(new SiftDescriptorExtractor);
-		BOWImgDescriptorExtractor bowDE(extractor, matcher);
-		bowDE.setVocabulary(dictionary);
-
-		vector<KeyPoint> keypoints;
-		detector->detect(img, keypoints);
-		Mat bowDescriptor;
-		bowDE.compute(img, keypoints, bowDescriptor);
-
-		sprintf(filename, "%s/TH_%d.dat", Path, ii);
-		float hist[1000];
-		for (int jj = 0; jj < 1000; jj++)
-			hist[jj] = bowDescriptor.at<float>(0, jj);
-		WriteGridBinary(filename, hist, 1000, 1);
-		printf("Finished generating histogram feature for frame %d.... in %.2fs\n", ii, omp_get_wtime() - start);
-	}
 	return 0;
 }
 int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel, int distortionCorrected)
@@ -7753,6 +7956,86 @@ int DownSampleSpatialCalib(char *Path, int nviews, int startFrame, int stopFrame
 	return 0;
 }
 
+int GenerateCorpusVisualWords(char *Path, int nimages)
+{
+	char Fname[200];
+	Mat img;
+
+	vector<KeyPoint> keypoints;
+	Mat descriptors, featuresUnclustered;
+	SiftDescriptorExtractor detector;
+
+
+	for (int ii = 0; ii < nimages; ii++)//= nimages / 5)
+	{
+		keypoints.clear();
+		sprintf(Fname, "%s/%d.jpg", Path, ii);
+		img = imread(Fname, CV_LOAD_IMAGE_GRAYSCALE);
+		detector.detect(img, keypoints);
+		detector.compute(img, keypoints, descriptors);
+		featuresUnclustered.push_back(descriptors);
+		printf("%.2f %%percent done\n", 100.0*ii / nimages);
+	}
+
+	//Construct BOWKMeansTrainer
+	int dictionarySize = 1000, retries = 1, flags = KMEANS_PP_CENTERS;
+	TermCriteria tc(CV_TERMCRIT_ITER, 100, 0.001);
+
+	//Create the BoW (or BoF) trainer
+	double start = omp_get_wtime();
+	BOWKMeansTrainer bowTrainer(dictionarySize, tc, retries, flags);
+	Mat dictionary = bowTrainer.cluster(featuresUnclustered);
+	printf("Finished generating the dictionary .... in %.2fs", omp_get_wtime() - start);
+
+	//store the vocabulary
+	start = omp_get_wtime();
+	sprintf(Fname, "%s/dictionary.yml", Path);
+	FileStorage fs(Fname, FileStorage::WRITE);
+	fs << "vocabulary" << dictionary;
+	fs.release();
+	printf("Saving the dictionary .... in %.2fs", omp_get_wtime() - start);
+
+	return 0;
+}
+int ComputeWordsHistogram(char *Path, int nimages)
+{
+	char filename[200];
+
+	//prepare BOW descriptor extractor from the dictionary    
+	Mat dictionary;
+	sprintf(filename, "%s/dictionary.yml", Path);
+	FileStorage fs(filename, FileStorage::READ);
+	fs["vocabulary"] >> dictionary;
+	fs.release();
+
+
+	Mat img;
+	for (int ii = 0; ii < nimages; ii++)
+	{
+		double start = omp_get_wtime();
+		sprintf(filename, "%s/T%d.jpg", Path, ii);
+		img = imread(filename, CV_LOAD_IMAGE_GRAYSCALE);
+
+		Ptr<DescriptorMatcher> matcher(new FlannBasedMatcher);
+		Ptr<FeatureDetector> detector(new SiftFeatureDetector());
+		Ptr<DescriptorExtractor> extractor(new SiftDescriptorExtractor);
+		BOWImgDescriptorExtractor bowDE(extractor, matcher);
+		bowDE.setVocabulary(dictionary);
+
+		vector<KeyPoint> keypoints;
+		detector->detect(img, keypoints);
+		Mat bowDescriptor;
+		bowDE.compute(img, keypoints, bowDescriptor);
+
+		sprintf(filename, "%s/TH_%d.dat", Path, ii);
+		float hist[1000];
+		for (int jj = 0; jj < 1000; jj++)
+			hist[jj] = bowDescriptor.at<float>(0, jj);
+		WriteGridBinary(filename, hist, 1000, 1);
+		printf("Finished generating histogram feature for frame %d.... in %.2fs\n", ii, omp_get_wtime() - start);
+	}
+	return 0;
+}
 int ImportCalibDatafromHanFormat(char *Path, VideoData &AllVideoInfo, int nVGAPanels, int nVGACamsPerPanel, int nHDs)
 {
 	char Fname[200];
@@ -11903,63 +12186,7 @@ int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, un
 	return 0;
 }
 
-int CheckerBoardDetection(char *Path, int viewID, int startF, int stopF)
-{
-	char Fname[1024];
 
-	// Initializations
-	int elem_size, found, count;
-	CvSize board_size = { 12, 7 }, img_size = { 0, 0 };
-	CvMemStorage* storage;
-	CvSeq* image_points_seq = 0;
-	CvPoint2D32f* cornerPts = 0;
-
-	// Allocate memory
-	elem_size = board_size.width*board_size.height*sizeof(cornerPts[0]);
-	storage = cvCreateMemStorage(MAX(elem_size * 4, 1 << 16));
-	cornerPts = (CvPoint2D32f*)cvAlloc(elem_size);
-	image_points_seq = cvCreateSeq(0, sizeof(CvSeq), elem_size, storage);
-
-	bool firsttime = true;
-	IplImage *view = 0, *viewGray = 0;
-	for (int fid = startF; fid < stopF; fid++)
-	{
-		sprintf(Fname, "%s/%d/%d.png", Path, viewID, fid);
-		view = cvLoadImage(Fname, 1);
-		if (view == NULL)
-			continue;
-		if (firsttime)
-		{
-			viewGray = cvCreateImage(cvGetSize(view), 8, 1), firsttime = false;
-			sprintf(Fname, "%s/%d/Corner", Path, viewID), makeDir(Fname);
-		}
-
-		img_size = cvGetSize(view);
-		found = cvFindChessboardCorners(view, board_size, cornerPts, &count, CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_FAST_CHECK | CV_CALIB_CB_NORMALIZE_IMAGE);
-
-		if (found == 1)
-		{
-			//not so good result for low res images
-			//cvCvtColor(view, viewGray, CV_BGR2GRAY);
-			//cvFindCornerSubPix(viewGray, cornerPts, count, cvSize(11, 11), cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 100, 0.001));
-
-			cvDrawChessboardCorners(view, board_size, cornerPts, count, found);
-			//cvShowImage("Detected corners", view);
-			//cvWaitKey(1);
-
-			sprintf(Fname, "%s/%d/Corner/CV_%d.png", Path, viewID, fid); cvSaveImage(Fname, view);
-
-			sprintf(Fname, "%s/%d/Corner/_CV_%d.txt", Path, viewID, fid); FILE *fp = fopen(Fname, "w+");
-			for (int ii = 0; ii < count; ii++)
-				fprintf(fp, "%.3f %.3f\n", cornerPts[ii].x, cornerPts[ii].y);
-			fclose(fp);
-		}
-
-		cvReleaseImage(&view);
-	}
-
-	return 0;
-}
 int RefineCheckBoardDetection2(char *Path, int viewID, int startF, int stopF)
 {
 	char Fname[200];
@@ -12604,6 +12831,62 @@ double computeReprojectionErrors(const vector<vector<Point3f> >& objectPoints, c
 
 	return std::sqrt(totalErr / totalPoints);
 }
+int CheckerBoardDetection(char *Path, int viewID, int startF, int stopF, int bw, int bh)
+{
+	char Fname[1024];
+
+	// Initializations
+	int elem_size, found, count;
+	CvSize board_size = { bw, bh }, img_size = { 0, 0 };
+	CvMemStorage* storage;
+	CvSeq* image_points_seq = 0;
+	CvPoint2D32f* cornerPts = 0;
+
+	// Allocate memory
+	elem_size = board_size.width*board_size.height*sizeof(cornerPts[0]);
+	storage = cvCreateMemStorage(MAX(elem_size * 4, 1 << 16));
+	cornerPts = (CvPoint2D32f*)cvAlloc(elem_size);
+	image_points_seq = cvCreateSeq(0, sizeof(CvSeq), elem_size, storage);
+
+	bool firsttime = true;
+	IplImage *view = 0, *viewGray = 0;
+	for (int fid = startF; fid < stopF; fid++)
+	{
+		sprintf(Fname, "%s/%d/%d.png", Path, viewID, fid);	view = cvLoadImage(Fname, 1);
+		if (view == NULL)
+			continue;
+		if (firsttime)
+		{
+			viewGray = cvCreateImage(cvGetSize(view), 8, 1), firsttime = false;
+			sprintf(Fname, "%s/%d/Corner", Path, viewID), makeDir(Fname);
+		}
+
+		img_size = cvGetSize(view);
+		found = cvFindChessboardCorners(view, board_size, cornerPts, &count, CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_FAST_CHECK | CV_CALIB_CB_NORMALIZE_IMAGE);
+
+		if (found == 1)
+		{
+			//not so good result for low res images
+			cvCvtColor(view, viewGray, CV_BGR2GRAY);
+			cvFindCornerSubPix(viewGray, cornerPts, count, cvSize(11, 11), cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 100, 0.001));
+
+			cvDrawChessboardCorners(view, board_size, cornerPts, count, found);
+			cvShowImage("Detected corners", view);
+			cvWaitKey(1);
+
+			sprintf(Fname, "%s/%d/Corner/CV_%d.png", Path, viewID, fid); cvSaveImage(Fname, view);
+
+			sprintf(Fname, "%s/%d/Corner/CV_%d.txt", Path, viewID, fid); FILE *fp = fopen(Fname, "w+");
+			for (int ii = 0; ii < count; ii++)
+				fprintf(fp, "%.3f %.3f\n", cornerPts[ii].x, cornerPts[ii].y);
+			fclose(fp);
+		}
+
+		cvReleaseImage(&view);
+	}
+
+	return 0;
+}
 int SingleCameraCalibration(char *Path, int camID, int startFrame, int stopFrame, int bw, int bh, bool hasPoint, int step, float squareSize, int calibrationPattern, int width, int height, bool showUndistorsed)
 {
 	int calibFlag = 0;
@@ -12660,7 +12943,7 @@ int SingleCameraCalibration(char *Path, int camID, int startFrame, int stopFrame
 				imagePoints.push_back(pointBuf);
 				drawChessboardCorners(view, boardSize, Mat(pointBuf), found);
 
-				sprintf(Fname, "%s/%d/Corner/CV2_%d.txt", Path, camID, ii); FILE *fp = fopen(Fname, "w+");
+				sprintf(Fname, "%s/%d/Corner/CV_%d.txt", Path, camID, ii); FILE *fp = fopen(Fname, "w+");
 				for (int jj = 0; jj < bw*bh; jj++)
 					fprintf(fp, "%f %f ", pointBuf[jj].x, pointBuf[jj].y);
 				fclose(fp);
@@ -12685,13 +12968,13 @@ int SingleCameraCalibration(char *Path, int camID, int startFrame, int stopFrame
 		float u, v;
 		for (int ii = startFrame; ii <= stopFrame; ii += step)
 		{
-			sprintf(Fname, "%s/%d/Corner/CV2_%d.txt", Path, camID, ii); FILE *fp = fopen(Fname, "r");
+			sprintf(Fname, "%s/%d/Corner/CV_%d.txt", Path, camID, ii); FILE *fp = fopen(Fname, "r");
 			if (fp == NULL)
 				continue;
 			for (int jj = 0; jj < bw*bh; jj++)
 			{
 				fscanf(fp, "%f %f ", &u, &v);
-				pointBuf.push_back(Point2f(u - 1, v - 1));
+				pointBuf.push_back(Point2f(u, v));
 			}
 			fclose(fp);
 
@@ -12709,7 +12992,7 @@ int SingleCameraCalibration(char *Path, int camID, int startFrame, int stopFrame
 	{
 	case 1://CHESSBOARD:
 	case 2://CIRCLES_GRID:
-		if (1)//Matlab detection
+		if (0)//Matlab detection
 			for (int i = 0; i < boardSize.width; ++i)
 				for (int j = 0; j < boardSize.height; ++j)
 					objectPoints[0].push_back(Point3f(float(i*squareSize), float(j*squareSize), 0));
@@ -12753,21 +13036,25 @@ int SingleCameraCalibration(char *Path, int camID, int startFrame, int stopFrame
 			distCoeffs.at<double>(0), distCoeffs.at<double>(1), distCoeffs.at<double>(4), distCoeffs.at<double>(3), distCoeffs.at<double>(2)); //OpenCV tangential distortion is a bit different from mine.
 		fclose(fp);
 
-		double  Rvec[3], RTmat[9], Rmat[9], T[3], Rgl[16], C[3];
+		double  Rvec[3], Rmat[9], T[3], Rgl[16], C[3];
 		sprintf(Fname, "%s/CamPose_%d.txt", Path, camID); fp = fopen(Fname, "w+");
 		for (int ii = 0; ii < (int)ValidFrame.size(); ii++)
 		{
 			for (int jj = 0; jj < 3; jj++)
 				Rvec[jj] = rvecs[ii].at<double>(jj), T[jj] = tvecs[ii].at<double>(jj);
 
-			ceres::AngleAxisToRotationMatrix(Rvec, RTmat); //actually return the transpose of what you get with rodrigues
-			mat_transpose(RTmat, Rmat, 3, 3);
+			//ceres::AngleAxisToRotationMatrix(Rvec, RTmat); //actually return the transpose of what you get with rodrigues
+			//mat_transpose(RTmat, Rmat, 3, 3);
+			convertRvecToRmat(Rvec, Rmat);
 			GetRCGL(Rmat, T, Rgl, C);
 
 			fprintf(fp, "%d %.16f %.16f %.16f %.1f %.16f %.16f %.16f %.1f %.16f %.16f %.16f %.1f 0.0 0.0 0.0 1.0 %.16f %.16f %.16f\n",
 				ValidFrame[ii], Rgl[0], Rgl[1], Rgl[2], Rgl[3], Rgl[4], Rgl[5], Rgl[6], Rgl[7], Rgl[8], Rgl[9], Rgl[10], Rgl[11], C[0], C[1], C[2]);
 		}
 		fclose(fp);
+
+		//Additional data for rolling shutter BA: vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D,
+
 	}
 
 	//Visualization routine

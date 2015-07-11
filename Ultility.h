@@ -53,6 +53,7 @@ void DecodePhaseShift2(char *Image, char *PBM, double *PhaseUW, int width, int h
 void GenerateSplineBasisWithBreakPts(double *Basis, double *DBasis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder, int DerivativeOrder);
 void GenerateResamplingSplineBasisWithBreakPts(double *Basis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder);
 void GenerateResamplingSplineBasisWithBreakPts(double *Basis, vector<double> ResampledPts, vector<double>BreakPts, int SplineOrder);
+void FindActingControlPts(double t, int *ActingID, int ncontrols, gsl_bspline_workspace *bw, gsl_vector *Bi, int splineOrder);
 
 //Image processing
 bool RoateImage180(char *fname, char *Img, int &width, int &height, int nchannels, bool silent = false);
@@ -608,14 +609,16 @@ void ComputeInterCamerasPose(double *R1, double *T1, double *R2, double *T2, dou
 void Rotation2Quaternion(double *R, double *q);
 void Quaternion2Rotation(double *q, double *R);
 void QuaternionLinearInterp(double *quad1, double *quad2, double *quadi, double u);
+int Get_Pose_from_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsamples, char *Fname3 = 0);
 
 double DistanceOfTwoPointsSfM(char *Path, int id1, int id2, int id3);
 
 int IsBlurred(const unsigned char* const luminance, const int width, const int height, float &blur, float &extent, float blurThresh = 0.075);
 void BlurDetectionDriver(char *Path, int nimages, int width, int height, float blurThresh);
 
-int BAVisualSfMDriver(char *Path, char *nvmName, char *camInfo, char *IntrinsicInfo = NULL, bool lensconversion = 1, int sharedIntrinsics = 0);
+int GenerateVisualSFMinput(char *path, int startFrame, int stopFrame, int npts);
 bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics, int nHDs = 30, int nVGAs = 24, int nPanels = 20);
+bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize, int sharedIntrinsics);
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool saveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor = 1.0);
@@ -628,6 +631,7 @@ int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int S
 int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime);
 int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime);
 int WriteVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime);
+void GettPosesGL(double *R, double *T, double *poseGL);
 void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID);
 void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime = 0);
 int DownSampleSpatialCalib(char *Path, int nviews, int startFrame, int stopFrame, int Factor);
@@ -685,5 +689,6 @@ int CleanUp2DTrackingByGradientConsistency(char *Path, int nviews, int ntrajects
 int DownSampleTracking(char *Path, int nviews, int ntrajects, int HighFrameRateFactor);
 int DeletePointsOf2DTracks(char *Path, int nCams, int npts);
 
+int CheckerBoardDetection(char *Path, int viewID, int startF, int stopF, int bw, int bh);
 int SingleCameraCalibration(char *Path, int camID, int startFrame, int stopFrame, int bw, int bh, bool hasPoint, int step, float squareSize, int calibrationPattern, int width = 1920, int height = 1080, bool showUndistorsed = false);
 #endif

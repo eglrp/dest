@@ -51,6 +51,7 @@ void FishEyeDistortionPoint(Point2d *Points, double *K, double* invK, double ome
 void FishEyeCorrection(unsigned char *Img, int width, int height, int nchannels, double *K, double* invK, double omega, int intepAlgo, double ImgMag, double Contscale, double *Para = NULL);
 
 void LensDistortionPoint(Point2d *img_point, double *K, double *distortion, int npts = 1);
+void LensDistortionPoint2(Point2d *img_point, double *Intrinsic, double *distortion, int npts = 1);
 void LensCorrectionPoint(vector<Point2f> &uv, double *K, double *distortion);
 void LensDistortionPoint(vector<Point2d> &img_point, double *K, double *distortion);
 void LensCorrectionPoint(Point2d *uv, double *K, double *distortion, int npts = 1);
@@ -98,6 +99,7 @@ void Stereo_Triangulation(vector<Point2d> pts1, vector<Point2d> pts2, double *P1
 void TwoViewTriangulationQualityCheck(Point2d *pts1, Point2d *pts2, Point3d *WC, double *P1, double *P2, bool *GoodPoints, double thresh, int npts = 1, double *K1 = 0, double *K2 = 0, double *distortion1 = 0, double *distortion2 = 0);
 void NviewTriangulation(Point2d *pts, double *P, Point3d *WC, int nview, int npts, double *Cov, double *A, double *B);
 void NviewTriangulation(vector<Point2d> *pts, double *P, Point3d *WC, int nview, int npts, double *Cov, double *A, double *B);
+void NviewTriangulation(CameraData *ViewInfo, int AvailViews, vector <vector<int> > &viewIdAll3D, vector<vector<Point2d> > &uvAll3D, vector<Point3d> &AllP3D);
 double NviewTriangulationRANSAC(Point2d *pts, double *P, Point3d *WC, bool *PassedTri, vector<int> *Inliers, int nview, int npts, int MaxRanSacIter, double inlierPercent, double threshold, double *A = NULL, double *B = NULL, double *tP = NULL, bool nonlinear = false, bool refineRanSac = false);
 double NviewTriangulationRANSAC(vector<Point2d> *pts, double *P, Point3d *WC, bool *PassedTri, vector<int> *Inliers, int nview, int npts, int MaxRanSacIter, double inlierPercent, double threshold, double *A = NULL, double *B = NULL, double *tP = NULL, bool nonlinear = false, bool refineRanSac = false);
 void NviewTriangulationNonLinear(double *P, double *Point2D, double *Point3D, double *ReprojectionError, int nviews, int npts = 1);
@@ -115,7 +117,7 @@ double PinholeReprojectionErrorSimpleDebug(double *P, Point3d Point, Point2d uv)
 void PinholeDistortionReprojectionDebug(double *intrinsic, double* distortion, double* rt, Point2d observed, Point3d Point, double *residuals);
 int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<vector<double> >scaleAll3D, vector<int> AvailViews, vector<int> SharedIntrinsicCamID, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, bool fixFirstCamPose, int distortionCorrected, int LossType, bool debug = false, bool silent = true);
 int ProjectionCayLeyReProjection(double *intrinsic, double* distortion, double* rt, double *wt, Point2d &predicted, Point3d Point, int width, int height);
-int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<vector<double> >scaleAll3D, vector<int> AvailViews, vector<int> SharedIntrinsicCamID, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, bool fixFirstCamPose, int distortionCorrected, int LossType, bool debug = false, bool silent = true);
+int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<vector<double> >scaleAll3D, vector<int> AvailViews, vector<int> SharedIntrinsicCamID, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, bool fixFirstCamPose, bool fixLocalPose, int distortionCorrected, int LossType, bool debug = false, bool silent = true);
 
 void IncrementalBundleAdjustment(char *Path, int nviews, int timeID, int maxKeypoints);
 int GlobalShutterBundleAdjustmentDriver(char *Path, int nViews, int distortionCorrected, vector< int> SharedIntrinsicCamID, int LossType = 0);
@@ -127,12 +129,15 @@ int Build3DFromSyncedImages(char *Path, int nviews, int startTime, int stopTime,
 int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int cameraID, int timeID, int distortionCorrected, vector<int> CorpusViewToMatch, const float nndrRatio = 0.6f, const int ninlierThresh = 40);
 int CameraPose_GSBA(char *Path, CameraData &camera, vector<Point3d>  Vxyz, vector<Point2d> uvAll3D, vector<double>scaleAll3D, vector<bool> &Good, bool fixIntrinsic, bool fixDistortion, int distortionCorrected, bool debug);
 int EstimateCameraPoseFromCorpus(char *Path, Corpus corpusData, CameraData  &cameraParas, int cameraID, bool fixedIntrinsc, bool fixedDistortion, int distortionCorrected, int sharedIntriniscOptim, int timeID);
-int VideoPose_GSBA(char *Path, int startTime, int stopTime, int nviews, int selectedCams, int distortionCorrected, int LensType, bool fixedIntrinisc, bool fixedDistortion, double threshold);
-int VideoPose_RSBA(char *Path, int startTime, int stopTime, int nviews, int selectedCams, int distortionCorrected, int LensType, bool fixedIntrinisc, bool fixedDistortion, double threshold);
-int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, int module, int nCams, int selectedCams, int distortionCorrected, int sharedIntriniscOptim, int LensType);
+int VideoPose_GSBA(char *Path, int startTime, int stopTime, int selectedCams, int distortionCorrected, int LensType, bool fixedIntrinisc, bool fixedDistortion, bool fixed3D, double threshold);
+int VideoPose_RSBA(char *Path, int startFrame, int stopFrame, int selectedCams, int distortionCorrected, int LensType, bool fixedIntrinisc, bool fixedDistortion, double threshold, int controlStep = 1, int SplineOrder = 4);
+int LocalizeCameraFromCorpusDriver(char *Path, int StartTime, int StopTime, int module, int nCams, int selectedCams, int distortionCorrected, int GetIntrinsicFromCorpus, int sharedIntriniscOptim, int LensType);
 
 int BundleAdjustDomeTableCorres(char *Path, int startF_HD, int stopF_HD, int startF_VGA, int stopF_VGA, bool fixIntrinsic, bool fixDistortion, bool fixPose, bool fixIntrinsicVGA, bool fixDistortionVGA, bool fixPoseVGA, bool debug);
 int BundleAdjustDomeMultiNVM(char *Path, int nNvm, int maxPtsPerNvM, bool fixIntrinsic, bool fixDistortion, bool fixPose, bool debug);
+int ReCalibratedFromGroundTruthCorrespondences(char *Path, int camID, int startFrame, int stopFrame, int Allnpts, int ShutterModel = 0);
+int VisualSfm_Refine(char *Path, int ShutterModel = 0, double threshold = 5.0, bool fixedIntrinsc = false, bool fixedDistortion = false, bool fixedPose = false, bool fixedfirstCamPose = true, bool distortionCorrected = false, bool doubleRefinement = true);
+
 
 int SparsePointTrackingDriver(char *Path, vector<Point2d> &Tracks, vector<float*> &ImgPara, int viewID, int startF, int stopF, LKParameters LKArg, int &width, int &height, int nchannels);
 #endif

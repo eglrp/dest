@@ -16,7 +16,7 @@ using namespace std;
 #define LIMIT3D 1e-6
 #define Pi 3.1415926535897932
 #define MaxnFrames 7000
-#define MaxnCams 100
+#define MaxnCams 500
 #define OPTICALFLOW_BIDIRECT_DIST_THRESH 3.0
 
 #define MOTION_TRANSLATION 0
@@ -47,9 +47,15 @@ struct LKParameters
 
 struct CameraData
 {
-	double K[9], distortion[7], R[9], Quat[4], T[3], rt[6],wt[6], P[12], intrinsic[5], invK[9], invR[9];
+	CameraData(){
+		valid = false;
+		for (int ii = 0; ii < 6; ii++)
+			wt[ii] = 0.0;
+	}
+
+	double K[9], distortion[7], R[9], Quat[4], T[3], rt[6], wt[6], P[12], intrinsic[5], invK[9], invR[9];
 	double Rgl[16], camCenter[3];
-	int LensModel;
+	int LensModel, ShutterModel;
 	double threshold, ninlierThresh;
 	std::string filename;
 	int nviews, width, height;

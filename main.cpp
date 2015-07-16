@@ -7834,23 +7834,23 @@ struct CeresResamplingSpline {
 		/*T xo, yo, zo;
 		for (int ii = 0; ii < nResamples; ii++)
 		{
-			x = (T) 0.0, y = (T) 0.0, z = (T)0.0;
-			for (int jj = 0; jj < nCoeffs; jj++)
-			{
-				if (PhiPrior[jj + ii*nCoeffs] < 0.00001)
-					continue;
-				x += (T)PhiPrior[jj + ii*nCoeffs] * C[0][jj],
-					y += (T)PhiPrior[jj + ii*nCoeffs] * C[0][jj + nCoeffs],
-					z += (T)PhiPrior[jj + ii*nCoeffs] * C[0][jj + 2 * nCoeffs];
-			}
+		x = (T) 0.0, y = (T) 0.0, z = (T)0.0;
+		for (int jj = 0; jj < nCoeffs; jj++)
+		{
+		if (PhiPrior[jj + ii*nCoeffs] < 0.00001)
+		continue;
+		x += (T)PhiPrior[jj + ii*nCoeffs] * C[0][jj],
+		y += (T)PhiPrior[jj + ii*nCoeffs] * C[0][jj + nCoeffs],
+		z += (T)PhiPrior[jj + ii*nCoeffs] * C[0][jj + 2 * nCoeffs];
+		}
 
-			if (ii > 0)
-			{
-				T dx = x - xo, dy = y - yo, dz = z - zo;
-				T error = (T)lamda2*(dx*dx + dy*dy + dz*dz) / (T)(TimeStampPrior[ii] - TimeStampPrior[ii - 1]);
-				residuals[2 * nData + ii - 1] = sqrt(max((T)(1.0e-16), error));
-			}
-			xo = x, yo = y, zo = z;
+		if (ii > 0)
+		{
+		T dx = x - xo, dy = y - yo, dz = z - zo;
+		T error = (T)lamda2*(dx*dx + dy*dy + dz*dz) / (T)(TimeStampPrior[ii] - TimeStampPrior[ii - 1]);
+		residuals[2 * nData + ii - 1] = sqrt(max((T)(1.0e-16), error));
+		}
+		xo = x, yo = y, zo = z;
 		}*/
 
 		return true;
@@ -7939,7 +7939,7 @@ void ResamplingOf3DTrajectorySpline(vector<ImgPtEle> &Traj3D, bool non_monotonic
 	{
 		double xyz1[] = { Traj3D[ii].pt3D.x, Traj3D[ii].pt3D.y, Traj3D[ii].pt3D.z };
 		double xyz2[] = { Traj3D[ii + 1].pt3D.x, Traj3D[ii + 1].pt3D.y, Traj3D[ii + 1].pt3D.z };
-		double costi = LeastActionError(xyz1, xyz2, Traj3D[ii].timeStamp, Traj3D[ii + 1].timeStamp, eps, motionPriorPower);
+		double costi = LeastActionError(xyz1, xyz2, Traj3D[ii].timeStamp, Traj3D[ii + 1].timeStamp, 1.0e-6, 2);
 		ActionCost += costi;
 	}
 
@@ -8085,8 +8085,7 @@ void ResamplingOf3DTrajectorySpline(vector<ImgPtEle> &Traj3D, bool non_monotonic
 int ResamplingOf3DTrajectorySplineDriver(char *Path, vector<int> SelectedCams, vector<double> OffsetInfo, int startFrame, int stopFrame, int ntracks, double lamda)
 {
 	char Fname[200]; FILE *fp = 0;
-	//const double Tscale = 1000.0, fps = 60.0, ialpha = 1.0 / fps;
-	const double Tscale = 10.0, fps = 1.0, ialpha = 1.0 / fps;
+	const double Tscale = 1000.0, fps = 60.0, ialpha = 1.0 / fps;
 
 	//Read calib info
 	int nCams = (int)SelectedCams.size();
@@ -8262,7 +8261,7 @@ int ResamplingOf3DTrajectorySplineDriver(char *Path, vector<int> SelectedCams, v
 #pragma omp critical
 		printf("%d: ", trackID);
 
-		ResamplingOf3DTrajectorySpline(Traj3D[trackID], true, ialpha *Tscale, ialpha *Tscale / nCams, lamda);
+		ResamplingOf3DTrajectorySpline(Traj3D[trackID], true, ialpha *Tscale, ialpha *Tscale / 2, lamda);
 
 #pragma omp critical
 		{
@@ -8328,48 +8327,17 @@ struct CeresResamplingDCT {
 	double  *X, *P, *iBData, *sqrtWeight, lamda1, lamda2;
 	Point2d *pt2D;
 };
-void GenerateDCTBasis(double *Basis, int nsamples, double *Weight = NULL)
-{
-	double s = sqrt(1.0 / nsamples);
-	for (int ll = 0; ll < nsamples; ll++)
-		Basis[ll] = s;
-
-	for (int kk = 1; kk < nsamples; kk++)
-	{
-		double s = sqrt(2.0 / nsamples);
-		for (int ll = 0; ll < nsamples; ll++)
-			Basis[kk*nsamples + ll] = s*cos(Pi*kk *(1.0*ll - 0.5) / nsamples);
-	}
-
-	if (Weight != NULL)
-	{
-		for (int ll = 0; ll < nsamples; ll++)
-			Weight[ll] = 2.0*(cos(Pi*(ll - 1) / nsamples) - 1.0);
-	}
-
-	return;
-}
-void GenerateiDCTBasis(double *Basis, int nsamples, double t)
-{
-	Basis[0] = sqrt(1.0 / nsamples);
-
-	double s = sqrt(2.0 / nsamples);
-	for (int kk = 1; kk < nsamples; kk++)
-		Basis[kk] = s*cos(Pi*kk *(t + 0.5) / nsamples);
-
-	return;
-}
 void ResamplingOf3DTrajectoryDCT(vector<ImgPtEle> &Traj3D, int PriorOrder, bool non_monotonicDescent, double Resample_Step, double lamda1, double lamda2, bool silent = true)
 {
 	double earliest = Traj3D[0].timeStamp, latest = Traj3D.back().timeStamp;
 	int nData = (int)Traj3D.size(), nResamples = (int)((latest - earliest) / Resample_Step);
 
-	if (PriorOrder == 1)
-		lamda2 = lamda2*Resample_Step;//scale the weight to take into account the temporal integration of uniformedly sampled motion prior 
+	//if (PriorOrder == 1)
+	//	lamda2 = lamda2*Resample_Step;//scale the weight to take into account the temporal integration of uniformedly sampled motion prior 
 
 	double *X = new double[nData * 3], *C = new double[3 * nResamples];
 	double *iBData = new double[nData*nResamples], *BResampled = new double[nResamples*nResamples], *sqrtWeight = new double[nResamples];
-	double *PmatData = new double[nData * 12], *TimeStampData = new double[nData], *TimeStampResampled = new double[nResamples];
+	double *PmatData = new double[nData * 12], *TimeStampData = new double[nData];
 	Point2d *pt2dData = new Point2d[nData];
 
 	for (int ii = 0; ii < nData; ii++)
@@ -8379,25 +8347,23 @@ void ResamplingOf3DTrajectoryDCT(vector<ImgPtEle> &Traj3D, int PriorOrder, bool 
 
 		pt2dData[ii] = Traj3D[ii].pt2D;
 		X[ii] = Traj3D[ii].pt3D.x, X[ii + nData] = Traj3D[ii].pt3D.y, X[ii + 2 * nData] = Traj3D[ii].pt3D.z;
-		TimeStampData[ii] = (Traj3D[ii].timeStamp - earliest) / (latest - earliest)*(nData - 1);//Normalize to [0, n-1] range
+		TimeStampData[ii] = (Traj3D[ii].timeStamp - earliest) / (latest - earliest)*(nResamples - 1);//Normalize to [0, n-1] range
 	}
-	for (int ii = 0; ii < nResamples; ii++)
-		TimeStampResampled[ii] = floor(earliest) + Resample_Step*ii;
 
 	//Generate DCT Basis
-	GenerateDCTBasis(BResampled, nResamples, sqrtWeight);
+	GenerateDCTBasis(nResamples, BResampled, sqrtWeight);
 	for (int ii = 0; ii < nResamples; ii++)
 		if (PriorOrder == 1)
 			sqrtWeight[ii] = sqrt(-sqrtWeight[ii]); //(1) using precomputed sqrt is better for ceres' squaring residual square nature; (2) weigths are negative, but that does not matter for ctwc optim.
 		else
-			sqrtWeight[ii] = -sqrtWeight[ii];
+			sqrtWeight[ii] = -sqrtWeight[ii]; //ctw.^2c-->ceres: residuals = c*W;
 
 	for (int ii = 0; ii < nData; ii++)
 		GenerateiDCTBasis(iBData + ii*nResamples, nResamples, TimeStampData[ii]);
 
 	//Initialize basis coefficients: iPd(:, 1:activeBasis)*C =  X_d
 	const int nactiveBasis = 20;
-	Map < Matrix < double, Dynamic, Dynamic, RowMajor >> eiBData(iBData, nData, nResamples);
+	Map < Matrix < double, Dynamic, Dynamic, RowMajor > > eiBData(iBData, nData, nResamples);
 	MatrixXd etiBData = eiBData.block(0, 0, nData, nactiveBasis);
 	JacobiSVD<MatrixXd> etiP_svd(etiBData, ComputeThinU | ComputeThinV);
 	for (int ii = 0; ii < 3; ii++)
@@ -8411,36 +8377,37 @@ void ResamplingOf3DTrajectoryDCT(vector<ImgPtEle> &Traj3D, int PriorOrder, bool 
 	}
 
 #ifdef ENABLE_DEBUG_FLAG
-	double x, y, z, numX, numY, denum;
-
-	//Projection cost : (PiBC-u)^2
-	double projectionCost = 0.0;
-	for (int ii = 0; ii < nData; ii++)
 	{
-		//X = iB*C
-		x = 0.0, y = 0.0, z = 0.0;
-		for (int jj = 0; jj < nResamples; jj++)
+		double x, y, z, numX, numY, denum;
+
+		//Projection cost : (PiBC-u)^2
+		double projectionCost = 0.0;
+		for (int ii = 0; ii < nData; ii++)
 		{
-			x += iBData[jj + ii*nResamples] * C[jj],
-				y += iBData[jj + ii*nResamples] * C[jj + nResamples],
-				z += iBData[jj + ii*nResamples] * C[jj + 2 * nResamples];
+			//X = iB*C
+			x = 0.0, y = 0.0, z = 0.0;
+			for (int jj = 0; jj < nResamples; jj++)
+			{
+				x += iBData[jj + ii*nResamples] * C[jj],
+					y += iBData[jj + ii*nResamples] * C[jj + nResamples],
+					z += iBData[jj + ii*nResamples] * C[jj + 2 * nResamples];
+			}
+
+			numX = PmatData[12 * ii] * x + PmatData[12 * ii + 1] * y + PmatData[12 * ii + 2] * z + PmatData[12 * ii + 3];
+			numY = PmatData[12 * ii + 4] * x + PmatData[12 * ii + 5] * y + PmatData[12 * ii + 6] * z + PmatData[12 * ii + 7];
+			denum = PmatData[12 * ii + 8] * x + PmatData[12 * ii + 9] * y + PmatData[12 * ii + 10] * z + PmatData[12 * ii + 11];
+
+			projectionCost += (pow(numX / denum - pt2dData[ii].x, 2) + pow(numY / denum - pt2dData[ii].y, 2));
 		}
 
-		numX = PmatData[12 * ii] * x + PmatData[12 * ii + 1] * y + PmatData[12 * ii + 2] * z + PmatData[12 * ii + 3];
-		numY = PmatData[12 * ii + 4] * x + PmatData[12 * ii + 5] * y + PmatData[12 * ii + 6] * z + PmatData[12 * ii + 7];
-		denum = PmatData[12 * ii + 8] * x + PmatData[12 * ii + 9] * y + PmatData[12 * ii + 10] * z + PmatData[12 * ii + 11];
-
-		projectionCost += (pow(numX / denum - pt2dData[ii].x, 2) + pow(numY / denum - pt2dData[ii].y, 2));
-	}
-
-	//Motion prior in DCT form: CT*W*C
-	//Motion prior in DCT form: CT*W*C
-	double MotionPrior = 0.0;
-	for (int ii = 0; ii < nResamples; ii++)
-		MotionPrior += pow(sqrtWeight[ii], 2)*(pow(C[ii], 2) + pow(C[ii + nResamples], 2) + pow(C[ii + 2 * nResamples], 2));
+		//Motion prior in DCT form: CT*W*C
+		double MotionPrior = 0.0;
+		for (int ii = 0; ii < nResamples; ii++)
+			MotionPrior += pow(sqrtWeight[ii], 2)*(pow(C[ii], 2) + pow(C[ii + nResamples], 2) + pow(C[ii + 2 * nResamples], 2));
 
 #pragma omp critical
-	printf("(DCT before: Motion cost, projection cost, Totalcost): %.4e %.4e %.4e\n", MotionPrior, sqrt(projectionCost / nData), lamda1*projectionCost + lamda2*MotionPrior);
+		printf("(DCT before: Motion cost, projection cost, Totalcost): %.4e %.4e %.4e\n", MotionPrior, sqrt(projectionCost / nData), lamda1*projectionCost + lamda2*MotionPrior);
+	}
 #endif
 
 	//Run ceres optimization
@@ -8470,7 +8437,7 @@ void ResamplingOf3DTrajectoryDCT(vector<ImgPtEle> &Traj3D, int PriorOrder, bool 
 		std::cout << summary.FullReport() << "\n";
 
 #ifdef ENABLE_DEBUG_FLAG
-	double x, y, z, numX, numY, denum;
+	{double x, y, z, numX, numY, denum;
 
 	//Projection cost : (PiBC-u)^2
 	double projectionCost = 0.0;
@@ -8499,10 +8466,11 @@ void ResamplingOf3DTrajectoryDCT(vector<ImgPtEle> &Traj3D, int PriorOrder, bool 
 
 #pragma omp critical
 	printf("(DCT after: Motion cost, projection cost, Totalcost): %.4e %.4e %.4e\n\n", MotionPrior, sqrt(projectionCost / nData), lamda1*projectionCost + lamda2*MotionPrior);
+	}
 #endif
 
 	//Final curve: iP*C =  X
-	Map < Matrix < double, Dynamic, Dynamic, RowMajor >> eBResampled(BResampled, nResamples, nResamples);
+	Map < Matrix < double, Dynamic, Dynamic, RowMajor > > eBResampled(BResampled, nResamples, nResamples);
 	for (int ii = 0; ii < 3; ii++)
 	{
 		Map<VectorXd> eX(X + nData*ii, nData);
@@ -8521,8 +8489,6 @@ void ResamplingOf3DTrajectoryDCT(vector<ImgPtEle> &Traj3D, int PriorOrder, bool 
 int ResamplingOf3DTrajectoryDCTDriver(char *Path, vector<int> &SelectedCams, vector<double> &OffsetInfo, int PriorOrder, int startFrame, int stopFrame, int ntracks, double lamda1, double lamda2)
 {
 	char Fname[200]; FILE *fp = 0;
-	//const double Tscale = 1000.0, fps = 60.0, ialpha = 1.0 / fps;
-	const double Tscale = 10.0, fps = 1.0, ialpha = 1.0 / fps;
 
 	//Read calib info
 	int nCams = (int)SelectedCams.size();
@@ -8690,27 +8656,31 @@ int ResamplingOf3DTrajectoryDCTDriver(char *Path, vector<int> &SelectedCams, vec
 	}
 
 	printf("Resampling:\n");
-
-	omp_set_num_threads(omp_get_max_threads());
-#pragma omp parallel for
-	for (int trackID = 0; trackID < ntracks; trackID++)
+	for (int trial = 0; trial <= 50; trial++)
 	{
-#pragma omp critical
-		printf("%d: ", trackID);
+		lamda1 = 0.1 + 0.9 / 50 * trial; lamda2 = 1.0 - lamda2;
 
-		double earliest = Traj3D[trackID][0].timeStamp, latest = Traj3D[trackID].back().timeStamp;
-		int nData = (int)Traj3D[trackID].size();
-		double resamplingStep = (latest - earliest) / nData;
-
-		ResamplingOf3DTrajectoryDCT(Traj3D[trackID], PriorOrder, true, resamplingStep, lamda1, lamda2, true);
-
-#pragma omp critical
+		omp_set_num_threads(omp_get_max_threads());
+#pragma omp parallel for
+		for (int trackID = 0; trackID < ntracks; trackID++)
 		{
-			sprintf(Fname, "%s/DCTResampled_Track_%d.txt", Path, trackID); remove(Fname);
-			fp = fopen(Fname, "w+");
-			for (int ii = 0; ii < (int)Traj3D[trackID].size(); ii++)
-				fprintf(fp, "%.4f %.4f %.4f %.4f %d %d\n", Traj3D[trackID][ii].pt3D.x, Traj3D[trackID][ii].pt3D.y, Traj3D[trackID][ii].pt3D.z, Traj3D[trackID][ii].timeStamp, Traj3D[trackID][ii].viewID, Traj3D[trackID][ii].frameID);
-			fclose(fp);
+#pragma omp critical
+			printf("%d: ", trackID);
+
+			double earliest = Traj3D[trackID][0].timeStamp, latest = Traj3D[trackID].back().timeStamp;
+			int nData = (int)Traj3D[trackID].size();
+			double resamplingStep = (latest - earliest) / nData;
+
+			ResamplingOf3DTrajectoryDCT(Traj3D[trackID], PriorOrder, true, resamplingStep, lamda1, lamda2, true);
+
+#pragma omp critical
+			{
+				sprintf(Fname, "%s/%d DCTResampled_Track_%d.txt", Path, trial, trackID); remove(Fname);
+				fp = fopen(Fname, "w+");
+				for (int ii = 0; ii < (int)Traj3D[trackID].size(); ii++)
+					fprintf(fp, "%.4f %.4f %.4f %.4f %d %d\n", Traj3D[trackID][ii].pt3D.x, Traj3D[trackID][ii].pt3D.y, Traj3D[trackID][ii].pt3D.z, Traj3D[trackID][ii].timeStamp, Traj3D[trackID][ii].viewID, Traj3D[trackID][ii].frameID);
+				fclose(fp);
+			}
 		}
 	}
 	printf("Done!\n\n");
@@ -10036,11 +10006,11 @@ int TestLeastActionOnSyntheticData(char *Path)
 	const int nCams = 10, npts = 31, width = 1920, height = 1080, startFrame = 0, stopFrame = 55, rate = 10;
 	double Intrinsic[5] = { 1500, 1500, 0, 960, 540 }, distortion[7] = { 0, 0, 0, 0, 0, 0, 0 }, radius = 3000, PMissingData = 0.0, noise2D = 2.0;
 	int UnSyncFrameTimeStamp[] = { 0, 1, 29, 5, 16, 3, 27, 2, 18, 4 };
-	//SimulateCamerasAnd2DPointsForMoCap(Path, nCams, npts, Intrinsic, distortion, width, height, radius, true, false, rate, PMissingData, noise2D, UnSyncFrameTimeStamp);
+	SimulateCamerasAnd2DPointsForMoCap(Path, nCams, npts, Intrinsic, distortion, width, height, radius, true, false, rate, PMissingData, noise2D, UnSyncFrameTimeStamp);
 
 	//Input Parameters
 	const int PriorOrder = 1, motionPriorPower = 2, SearchRange = 10;
-	double lamdaData = 0.80, lamdaPrior = lamdaData*5.0, SearchStep = 0.1;
+	double lamdaData = 0.80, lamdaPrior = 1.0 - lamdaData, SearchStep = 0.1;
 
 	int STCalibration = 4;
 	if (STCalibration == 1)
@@ -10139,7 +10109,7 @@ int TestLeastActionOnSyntheticData(char *Path)
 
 		//Triangulate trajectories
 		TrajectoryTriangulation(Path, SortedSelectedCamera, SortedTimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
-		//ResamplingOf3DTrajectorySplineDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, startFrame, stopFrame, npts, lamdaData);
+		ResamplingOf3DTrajectorySplineDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, startFrame, stopFrame, npts, lamdaData);
 		ResamplingOf3DTrajectoryDCTDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, PriorOrder, startFrame, stopFrame, npts, lamdaData, lamdaPrior);
 
 		sprintf(Fname, "%s/FMotionPriorSync.txt", Path);	fp = fopen(Fname, "w+");
@@ -10913,20 +10883,305 @@ int DomeSyncGroundTruth()
 	return 0;
 }
 
+int SimulateRollingShutterCameraAnd2DPointsForMoCap(char *Path, int npts, double *Intrinsic, double *distortion, int width, int height, double radius = 5e3, bool saveGT3D = true, bool show2DImage = false, double Noise2D = 2.0)
+{
+	char Fname[200];
+	double noise3D_CamShake = 20 / 60;
+	double x, y, z, cx = 0, cy = 0, cz = 0;
+
+	int nframes;
+	Point2d pt;
+	Point3d p3d;
+	vector<Point3d> allXYZ;
+	for (int pid = 0; pid < npts; pid++)
+	{
+		sprintf(Fname, "%s/Track3D/%d.txt", Path, pid); FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+			printf("Cannot load %s\n", Fname);
+		while (fscanf(fp, "%lf %lf %lf", &x, &y, &z) != EOF)
+		{
+			if (pid == 0)
+				cx += x, cy += y, cz += z;
+			else
+				x -= cx, y -= cy, z -= cz;
+
+			allXYZ.push_back(Point3d(x, y, z));
+		}
+		fclose(fp);
+
+		if (pid == 0)
+		{
+			nframes = (int)allXYZ.size();
+			cx /= nframes, cy /= nframes, cz /= nframes;
+		}
+	}
+
+
+	CameraData *Camera = new CameraData[nframes];
+	for (int frameID = 0; frameID < nframes; frameID++)
+	{
+		Camera[frameID].valid = true;
+		GenerateCamerasExtrinsicOnCircle(Camera[frameID], 180.0*frameID / nframes / 180.0 * Pi, radius, Point3d(cx, cy - 700, cz), Point3d(cx, cy - 700, cz), Point3d(0, 0, 0));
+		SetIntrinisc(Camera[frameID], Intrinsic);
+		GetKFromIntrinsic(Camera[frameID]);
+		for (int ii = 0; ii < 7; ii++)
+			Camera[frameID].distortion[ii] = distortion[ii];
+		AssembleP(Camera[frameID]);
+	}
+
+
+	vector<int> UsedFrames;
+	sprintf(Fname, "%s/Intrinsic_0.txt", Path); FILE *fp = fopen(Fname, "w+");
+	for (int frameID = 0; frameID < nframes; frameID++)
+	{
+		if (!Camera[frameID].valid)
+			continue;
+
+		UsedFrames.push_back(frameID);
+		fprintf(fp, "%d 0 %d %d ", frameID, width, height);
+		for (int ii = 0; ii < 5; ii++)
+			fprintf(fp, "%.2f ", Camera[frameID].intrinsic[ii]);
+		for (int ii = 0; ii < 7; ii++)
+			fprintf(fp, "%.6f ", distortion[ii]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	sprintf(Fname, "%s/CamPose_0.txt", Path); fp = fopen(Fname, "w+");
+	for (int frameID = 0; frameID < nframes; frameID++)
+	{
+		if (!Camera[frameID].valid)
+			continue;
+
+		GetRCGL(Camera[frameID]);
+
+		fprintf(fp, "%d ", frameID);
+		for (int jj = 0; jj < 16; jj++)
+			fprintf(fp, "%.16f ", Camera[frameID].Rgl[jj]);
+		for (int jj = 0; jj < 3; jj++)
+			fprintf(fp, "%.16f ", Camera[frameID].camCenter[jj]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	vector<ImgPtEle> *PerCam_UV = new vector<ImgPtEle>[(int)allXYZ.size()];
+	for (int pid = 0; pid < (int)allXYZ.size(); pid++)
+	{
+		for (int frameID = 0; frameID < nframes; frameID++)
+		{
+			int iter;
+			CameraData CamI;
+			double relativeDiff, theta = 1.0*frameID / nframes, subframe = 0.0, osubframe = subframe;
+			for (iter = 0; iter < 20; iter++)
+			{
+				GenerateCamerasExtrinsicOnCircle(CamI, 180.0*theta / 180.0 * Pi, radius, Point3d(cx, cy - 700, cz), Point3d(cx, cy - 700, cz), Point3d(0, 0, 0));
+				SetIntrinisc(CamI, Intrinsic);
+				GetKFromIntrinsic(CamI);
+				for (int ii = 0; ii < 7; ii++)
+					CamI.distortion[ii] = distortion[ii];
+				AssembleP(CamI);
+				ProjectandDistort(allXYZ[pid], &pt, CamI.P, CamI.K, CamI.distortion);
+				subframe = pt.y / height;
+				relativeDiff = abs((subframe - osubframe) / subframe);
+				if (relativeDiff < 1.e-9)
+					break;
+				osubframe = subframe;
+				theta = (subframe + frameID) / nframes;
+			}
+			if (iter > 19)
+				continue;
+			if (subframe<0.0 || subframe>1.0)
+				continue;
+
+			Point2d Noise(gaussian_noise(0.0, Noise2D), gaussian_noise(0.0, Noise2D));
+			if (Noise.x > 3.0*Noise2D)
+				Noise.x = 3.0*Noise2D;
+			else if (Noise.x < -3.0 *Noise2D)
+				Noise.x = -3.0*Noise2D;
+			if (Noise.y > 3.0*Noise2D)
+				Noise.y = 3.0*Noise2D;
+			else if (Noise.y < -3.0 *Noise2D)
+				Noise.y = -3.0*Noise2D;
+			pt.x += Noise.x, pt.y += Noise.y;
+
+			ImgPtEle ptEle;
+			ptEle.pt2D = pt, ptEle.viewID = 0, ptEle.frameID = frameID, ptEle.imWidth = width, ptEle.imHeight = height;
+			ptEle.pt3D = allXYZ[pid];
+			ptEle.timeStamp = frameID;
+
+			for (int ii = 0; ii < 9; ii++)
+				ptEle.R[ii] = CamI.R[ii];
+			for (int ii = 0; ii < 3; ii++)
+				ptEle.T[ii] = CamI.T[ii];
+			PerCam_UV[pid].push_back(ptEle);
+		}
+	}
+
+	/*sprintf(Fname, "%s/RollingShutterPose", Path), makeDir(Fname);
+	for (int pid = 0; pid < (int)allXYZ.size(); pid++)
+	{
+	sprintf(Fname, "%s/RollingShutterPose/CamPose_%d.txt", Path, pid); fp = fopen(Fname, "w+");
+	for (int fid = 0; fid < (int)PerCam_UV[pid].size(); fid++)
+	{
+	double Rgl[16], C[3];
+	GetRCGL(PerCam_UV[pid][fid].R, PerCam_UV[pid][fid].T, Rgl, C);
+	fprintf(fp, "%.8f ", PerCam_UV[pid][fid].frameID + PerCam_UV[pid][fid].pt2D.y / height);
+	for (int ii = 0; ii < 16; ii++)
+	fprintf(fp, "%.16f ", Rgl[ii]);
+	for (int ii = 0; ii < 3; ii++)
+	fprintf(fp, "%.16f ", C[ii]);
+	fprintf(fp, "\n");
+	}
+	fclose(fp);
+	}*/
+
+	sprintf(Fname, "%s/RollingShutterPose", Path), makeDir(Fname);
+	sprintf(Fname, "%s/RollingShutterPose/CamPose.txt", Path); fp = fopen(Fname, "w+");
+	for (int pid = 0; pid < (int)allXYZ.size(); pid++)
+	{
+		for (int fid = 0; fid < (int)PerCam_UV[pid].size(); fid++)
+		{
+			double twist[6];  convertRTToTwist(PerCam_UV[pid][fid].R, PerCam_UV[pid][fid].T, twist);
+			fprintf(fp, "%.8f ", PerCam_UV[pid][fid].frameID + PerCam_UV[pid][fid].pt2D.y / height);
+			for (int ii = 0; ii < 6; ii++)
+				fprintf(fp, "%.16f ", twist[ii]);
+			fprintf(fp, "\n");
+		}
+	}
+	fclose(fp);
+
+
+	//Generate rolling shutter 2d data
+	bool binary = true;
+	if (binary)
+	{
+		sprintf(Fname, "%s/VideoPose_Optim_Input.dat", Path);
+		ofstream fout; fout.open(Fname, ios::binary);
+		int n = (int)allXYZ.size();
+		fout.write(reinterpret_cast<char *>(&n), sizeof(int));
+		for (int pid = 0; pid < (int)allXYZ.size(); pid++)
+		{
+			int nvisibles = PerCam_UV[pid].size();
+			float X = (float)allXYZ[pid].x, Y = (float)allXYZ[pid].y, Z = (float)allXYZ[pid].z;
+
+			fout.write(reinterpret_cast<char *>(&nvisibles), sizeof(int));
+			fout.write(reinterpret_cast<char *>(&X), sizeof(float));
+			fout.write(reinterpret_cast<char *>(&Y), sizeof(float));
+			fout.write(reinterpret_cast<char *>(&Z), sizeof(float));
+			for (int fid = 0; fid < (int)PerCam_UV[pid].size(); fid++)
+			{
+				float u = (float)PerCam_UV[pid][fid].pt2D.x, v = (float)PerCam_UV[pid][fid].pt2D.y, s = (float)1.0;
+				fout.write(reinterpret_cast<char *>(&PerCam_UV[pid][fid].frameID), sizeof(int));
+				fout.write(reinterpret_cast<char *>(&u), sizeof(float));
+				fout.write(reinterpret_cast<char *>(&v), sizeof(float));
+				fout.write(reinterpret_cast<char *>(&s), sizeof(float));
+			}
+		}
+		fout.close();
+	}
+	else
+	{
+		sprintf(Fname, "%s/VideoPose_Optim_Input.txt", Path);
+		fp = fopen(Fname, "w+");
+		fprintf(fp, "%d \n", (int)allXYZ.size());
+		for (int pid = 0; pid < (int)allXYZ.size(); pid++)
+		{
+			int nvisibles = PerCam_UV[pid].size();
+			float X = (float)allXYZ[pid].x, Y = (float)allXYZ[pid].y, Z = (float)allXYZ[pid].z;
+
+			fprintf(fp, "%d %.4f %.4f %.4f ", nvisibles, X, Y, Z);
+			for (int fid = 0; fid < (int)PerCam_UV[pid].size(); fid++)
+			{
+				float u = (float)PerCam_UV[pid][fid].pt2D.x, v = (float)PerCam_UV[pid][fid].pt2D.y, s = (float)1.0;
+				fprintf(fp, "%d %.3f %.3f %.1f ", PerCam_UV[pid][fid].frameID, u, v, s);
+			}
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+
+
+	if (show2DImage)
+	{
+		Mat Img(height, width, CV_8UC3, Scalar(0, 0, 0)), displayImg;
+		static CvScalar colors[] =
+		{
+			{ { 0, 0, 255 } },
+			{ { 0, 128, 255 } },
+			{ { 0, 255, 255 } },
+			{ { 0, 255, 0 } },
+			{ { 255, 128, 0 } },
+			{ { 255, 255, 0 } },
+			{ { 255, 0, 0 } },
+			{ { 255, 0, 255 } },
+			{ { 255, 255, 255 } }
+		};
+		cvNamedWindow("Image", CV_WINDOW_NORMAL);
+
+		for (int frameID = 0; frameID < nframes; frameID++)
+		{
+			displayImg = Img.clone();
+			for (int pid = 0; pid < (int)allXYZ.size(); pid++)
+			{
+				for (int ii = 0; ii < (int)PerCam_UV[pid].size(); ii++)
+				{
+					if (frameID == PerCam_UV[pid][ii].frameID)
+					{
+						circle(displayImg, PerCam_UV[pid][ii].pt2D, 4, colors[pid % 9], 2, 8, 0);
+						break;
+					}
+				}
+			}
+
+			sprintf(Fname, "frame %d", frameID);
+			CvPoint text_origin = { width / 30, height / 30 };
+			putText(displayImg, Fname, text_origin, CV_FONT_HERSHEY_SIMPLEX, 3.0 * 640 / Img.cols, CV_RGB(255, 0, 0), 2);
+			imshow("Image", displayImg);
+			waitKey(10);
+		}
+	}
+	return 0;
+}
+int TestRollingShutterCalibOnSyntheticData(char *Path, int se3)
+{
+	const int nCams = 10, npts = 2, width = 1920, height = 1080, startFrame = 0, stopFrame = 539;
+	double Intrinsic[5] = { 1500, 1500, 0, 960, 540 }, distortion[7] = { 0, 0, 0, 0, 0, 0, 0 }, radius = 3000, noise2D = 0.0;
+	//SimulateRollingShutterCameraAnd2DPointsForMoCap(Path, npts, Intrinsic, distortion, width, height, radius, 1, 1, noise2D);
+
+	//VideoSplineRSBA(Path, startFrame, stopFrame, 0, 1, 0, 1, 1, 10.0, 2, 4, se3==1, false);
+	if (se3 == 1)
+		Pose_se_BSplineInterpolation("E:/SimRollingShutter/CamPoseS_se3_0.txt", "E:/SimRollingShutter/CamPose_se3_1.txt", stopFrame, "E:/SimRollingShutter/CamPose_se3_2.txt");
+	else
+		Pose_se_BSplineInterpolation("E:/SimRollingShutter/CamPoseS_so3_0.txt", "E:/SimRollingShutter/CamPose_so3_1.txt", stopFrame, "E:/SimRollingShutter/CamPose_so3_2.txt");
+
+	//double lamda = 0.2;
+	//VideoDCTRSBA(Path, startFrame, stopFrame, 0, 1, 0, 1, 1,100.0, 2, lamda, false);
+	//Pose_se_DCTInterpolation("E:/SimRollingShutter2/CamPoseDCT_0.txt", "E:/SimRollingShutter2/CamPose_1.txt", stopFrame - startFrame + 1);
+
+	//visualizationDriver(Path, 2, 1, stopFrame, true, false, true, false, false, 1);
+
+	return 0;
+}
+
 int main(int argc, char** argv)
 {
-	srand(0);//srand(time(NULL));
-	char Path[] = "E:/Sim", Fname[200], Fname2[200];
+	srand(0);
+	srand(time(NULL));
+	char Path[] = "E:/SimMotionPrior", Fname[200], Fname2[200];
 
-
+	//TestRollingShutterCalibOnSyntheticData(Path, atoi(argv[1]));
+	//TestRollingShutterCalibOnSyntheticData(Path, 1);
+	//TestRollingShutterCalibOnSyntheticData(Path, 0);
 	//CheckerBoardDetection(Path, 0, 0, 150, 11, 8);
 	//SingleCameraCalibration(Path, 0, 1, 132, 11, 8, true, 1, 50.8, 1);
 	//GenerateVisualSFMinput("E:/RollingShutter3/0/Corner", 0, 131, 88);
 	//ReCalibratedFromGroundTruthCorrespondences(Path, 0, 0, 131, 88, atoi(argv[1]));
 	//TestMotionPrior3DDriver("D:/cmu_mocap");
-	//Get_Pose_from_se_BSplineInterpolation("E:/RollingShutter/_CamPoseS_0.txt", "E:/RollingShutter/__CamPose_0.txt", 100, "E:/RollingShutter/Pose.txt");
-	//visualizationDriver(Path, 1, 1, 100, true, false, true, false, false, 1);
+	//Pose_se_BSplineInterpolation("E:/SimRollingShutter/_CamPoseS_0.txt", "E:/SimRollingShutter/__CamPose_0.txt", 500, "E:/SimRollingShutter/CamPose_1.txt");
+	//visualizationDriver(Path, 2, 1, 500, true, false, true, false, false, 1);
 	//CheckerBoardMultiviewSpatialTemporalCalibration(Path, 7, 0, 300, 0);
+	//visualizationDriver(Path, 10, 0, 540, false, false, true, false, false, 0);
+	//visualizationDriver(Path, 10, 0, 519, false, false, true, true, false, 0);
 	TestLeastActionOnSyntheticData(Path);
 	//ShowSyncLoad(Path, "FMotionPriorSync", Path, 7);
 	//RenderSuperCameraFromMultipleUnSyncedCamerasA(Path, 0, 1200, 1, false);
@@ -11003,7 +11258,7 @@ int main(int argc, char** argv)
 		printf("This mode is not supported in Linux\n");
 #endif
 		return 0;
-	}
+		}
 	else if (mode == 1) //step 2: calibrate camera individually if needed
 	{
 		char *Path = argv[2],
@@ -11133,9 +11388,9 @@ int main(int argc, char** argv)
 		if (module == 3)
 		{
 			int controlStep = 3;
-			VideoPose_RSBA(Path, StartTime, StopTime, seletectedCam, distortionCorrected, LensType, false, false, 3.0, controlStep);
+			VideoSplineRSBA(Path, StartTime, StopTime, seletectedCam, distortionCorrected, LensType, false, false, 3.0, controlStep);
 
-			//Get_Pose_from_se_BSplineInterpolation("E:/RollingShutter/_CamPoseS_0.txt", "E:/RollingShutter/__CamPose_0.txt", 100, "E:/RollingShutter/Pose.txt");
+			//Pose_se_BSplineInterpolation("E:/RollingShutter/_CamPoseS_0.txt", "E:/RollingShutter/__CamPose_0.txt", 100, "E:/RollingShutter/Pose.txt");
 		}
 
 		if (module != 0)
@@ -11311,7 +11566,7 @@ int main(int argc, char** argv)
 
 
 	return 0;
-}
+	}
 
 /*// f(x,y) = (1-x)^2 + 100(y - x^2)^2;
 struct MyScalarCostFunctor {
@@ -11445,7 +11700,7 @@ for (int ii = 0; ii < nknots; ii++)
 gsl_vector_set(gsl_BreakPts, ii, BreakPts[ii]);
 
 //contruct knots
-gsl_bspline_knots(gsl_BreakPts, bw);
+gsl_BSplineGetKnots(gsl_BreakPts, bw);
 
 //construct basis matrix
 for (int ii = 0; ii < nsamples; ii++)
@@ -11504,7 +11759,7 @@ output[0].z += control[k].z * b;
 return;
 }
 
-void SplineKnots(int *u, int n, int t)
+void BSplineGetKnots(int *u, int n, int t)
 {
 int j;
 
@@ -11541,7 +11796,7 @@ Point3d outp[RESOLUTION];
 
 int main(int argc, char **argv)
 {
-SplineKnots(knots, N, T);
+BSplineGetKnots(knots, N, T);
 
 double interval = 0;
 double increment = (N - T + 2) / (double)(RESOLUTION - 1);

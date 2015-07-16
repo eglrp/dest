@@ -268,6 +268,43 @@ int siftgpu(char *Fname1, char *Fname2, const float nndrRatio, const double frac
 	return 0;
 }
 
+//DCT
+void GenerateDCTBasis(int nsamples, double *Basis, double *Weight)
+{
+	if (Basis != NULL)
+	{
+		double s = sqrt(1.0 / nsamples);
+		for (int ll = 0; ll < nsamples; ll++)
+			Basis[ll] = s;
+
+		for (int kk = 1; kk < nsamples; kk++)
+		{
+			double s = sqrt(2.0 / nsamples);
+			for (int ll = 0; ll < nsamples; ll++)
+				Basis[kk*nsamples + ll] = s*cos(Pi*kk *(1.0*ll - 0.5) / nsamples);
+		}
+	}
+
+	if (Weight != NULL)
+	{
+		for (int ll = 0; ll < nsamples; ll++)
+			Weight[ll] = 2.0*(cos(Pi*(ll - 1) / nsamples) - 1.0);
+	}
+
+	return;
+}
+void GenerateiDCTBasis(double *Basis, int nsamples, double t)
+{
+	Basis[0] = sqrt(1.0 / nsamples);
+
+	double s = sqrt(2.0 / nsamples);
+	for (int kk = 1; kk < nsamples; kk++)
+		Basis[kk] = s*cos(Pi*kk *(t + 0.5) / nsamples);
+
+	return;
+}
+
+//BSpline
 void GenerateSplineBasisWithBreakPts(double *Basis, double *DBasis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder, int DerivativeOrder)
 {
 	if (ResampledPts[nResamples - 1] > BreakPts[nbreaks - 1])
@@ -482,48 +519,270 @@ void GenerateResamplingSplineBasisWithBreakPtsExample()
 
 	return;
 }
-void FindActingControlPts(double t, int *ActingID, int ncontrols, gsl_bspline_workspace *bw, gsl_vector *Bi, int splineOrder)
+int FindActingControlPts(double t, int *ActingID, int ncontrols, gsl_bspline_workspace *bw, gsl_vector *Bi, int splineOrder, int extraNControls)
 {
 	gsl_bspline_eval(t, Bi, bw);
 
-	//pick the top splineOrder biggest coeffs
-	int count = 0, startID = -1;
-	double TopCoeff[10];
-
+	int startID = -1;
 	for (int ii = 0; ii < ncontrols; ii++)
 	{
-		if (gsl_vector_get(Bi, ii) > 1.0e-6)
+		double bi = gsl_vector_get(Bi, ii);
+		if (bi > 1.0e-9)
 		{
-			if (startID < 0)
-				startID = ii;
-			TopCoeff[count] = -gsl_vector_get(Bi, ii);
-			count++;
-		}
-
-		if (count > splineOrder)
-		{
-			if (TopCoeff[0] < TopCoeff[count - 1])
-				startID++;//over estimate the first coeff
-
-			for (int jj = 0; jj < splineOrder; jj++)
-				ActingID[jj] = startID;
+			startID = ii;
 			break;
 		}
 	}
 
-	if (count <= splineOrder) //happen at the begining and end
-	{
-		if (count == 1 && startID != 0)
-			startID = startID - splineOrder + 1;
-		else if (startID + splineOrder > ncontrols)
-			startID--;
+	//add points at the two ends of acting controls just in case
+	while (startID - extraNControls / 2 < 0) //at the begining,  ---> need to decrese starting point
+		startID++;
+	while (startID + splineOrder + extraNControls / 2 > ncontrols) //at the end, #control points is less than SplineOrder ---> need to decrese starting point
+		startID--;
 
-		for (int jj = 0; jj < splineOrder; jj++)
-			ActingID[jj] = startID + jj;
+	for (int ii = 0; ii < splineOrder + extraNControls; ii++) //assume # controls >> Splineorder + extraNControl
+		ActingID[ii] = startID - extraNControls / 2 + ii;
+
+	return 0;
+}
+
+static void BSplineLVB(const double * t, const int jhigh, const int index, const double x, const int left, int * j, double * deltal, double * deltar, double * biatx)
+{
+	int i;
+	double saved;
+	double term;
+
+	if (index == 1)
+	{
+		*j = 0;
+		biatx[0] = 1.0;
+	}
+
+	for (; *j < jhigh - 1; *j += 1)
+	{
+		deltar[*j] = t[left + *j + 1] - x;
+		deltal[*j] = x - t[left - *j];
+
+		saved = 0.0;
+
+		for (i = 0; i <= *j; i++)
+		{
+			term = biatx[i] / (deltar[i] + deltal[*j - i]);
+
+			biatx[i] = saved + deltar[i] * term;
+
+			saved = deltal[*j - i] * term;
+		}
+
+		biatx[*j + 1] = saved;
 	}
 
 	return;
 }
+static void BSplineLVD(const double * knots, const int SplineOrder, const double x, const int left, double * deltal, double * deltar, double * a, double * dbiatx, const int nderiv)
+{
+	int i, ideriv, il, j, jlow, jp1mid, kmm, ldummy, m, mhigh;
+	double factor, fkmm, sum;
+
+	int bsplvb_j;
+	double *dbcol = dbiatx;
+
+	mhigh = min(nderiv, SplineOrder - 1);
+	BSplineLVB(knots, SplineOrder - mhigh, 1, x, left, &bsplvb_j, deltal, deltar, dbcol);
+	if (mhigh > 0)
+	{
+		ideriv = mhigh;
+		for (m = 1; m <= mhigh; m++)
+		{
+			for (j = ideriv, jp1mid = 0; j < (int)SplineOrder; j++, jp1mid++)
+				dbiatx[j + ideriv*SplineOrder] = dbiatx[jp1mid];
+
+			ideriv--;
+			BSplineLVB(knots, SplineOrder - ideriv, 2, x, left, &bsplvb_j, deltal, deltar, dbcol);
+		}
+
+		jlow = 0;
+		for (i = 0; i < (int)SplineOrder; i++)
+		{
+			for (j = jlow; j < (int)SplineOrder; j++)
+				a[i + j*SplineOrder] = 0.0;
+			jlow = i;
+			a[i + i*SplineOrder] = 1.0;
+		}
+
+		for (m = 1; m <= mhigh; m++)
+		{
+			kmm = SplineOrder - m;
+			fkmm = (float)kmm;
+			il = left;
+			i = SplineOrder - 1;
+
+			for (ldummy = 0; ldummy < kmm; ldummy++)
+			{
+				factor = fkmm / (knots[il + kmm] - knots[il]);
+
+				for (j = 0; j <= i; j++)
+					a[j + i*SplineOrder] = factor*(a[j + i*SplineOrder] - a[j + (i - 1)*SplineOrder]);
+
+				il--;
+				i--;
+			}
+
+			for (i = 0; i < (int)SplineOrder; i++)
+			{
+				sum = 0;
+				jlow = max(i, m);
+				for (j = jlow; j < (int)SplineOrder; j++)
+					sum += a[i + j*SplineOrder] * dbiatx[j + m*SplineOrder];
+
+				dbiatx[i + m*SplineOrder] = sum;
+			}
+		}
+	}
+
+	return;
+
+}
+void BSplineFindActiveCtrl(int *ActingID, const double x, double *knots, int nbreaks, int nControls, int SplineOrder, int extraNControls)
+{
+	int i;
+	int nknots = nControls + SplineOrder, nPolyPieces = nbreaks - 1;
+
+	// find i such that t_i <= x < t_{i+1} 
+	for (i = SplineOrder - 1; i < SplineOrder + nPolyPieces - 1; i++)
+	{
+		const double ti = knots[i];
+		const double tip1 = knots[i + 1];
+
+		if (ti <= x && x < tip1)
+			break;
+		if (ti < x && x == tip1 && tip1 == knots[SplineOrder + nPolyPieces - 1])
+			break;
+	}
+
+	int startID = i - SplineOrder + 1;
+	while (startID - extraNControls / 2 < 0) //at the begining,  ---> need to decrese starting point
+		startID++;
+	while (startID + SplineOrder + extraNControls / 2 > nControls) //at the end, #control points is less than SplineOrder ---> need to decrese starting point
+		startID--;
+
+	startID = startID - extraNControls / 2;
+	for (int ii = 0; ii < SplineOrder + extraNControls; ii++)
+		ActingID[ii] = startID + ii;
+
+	return;
+}
+static inline int BSplineFindInterval(const double x, int *flag, double *knots, int nbreaks, int nControls, int SplineOrder)
+{
+	int i;
+	int nknots = nControls + SplineOrder, nPolyPieces = nbreaks - 1;
+	if (x < knots[0])
+	{
+		*flag = -1;
+		return 0;
+	}
+
+	// find i such that t_i <= x < t_{i+1} 
+	for (i = SplineOrder - 1; i < SplineOrder + nPolyPieces - 1; i++)
+	{
+		const double ti = knots[i];
+		const double tip1 = knots[i + 1];
+
+		if (tip1 < ti)
+		{
+			printf("knots vector is not increasing"); abort();
+		}
+
+		if (ti <= x && x < tip1)
+			break;
+
+		if (ti < x && x == tip1 && tip1 == knots[SplineOrder + nPolyPieces - 1])//if (ti < x && x == tip1 && tip1 == gsl_vector_get(knots, SplineOrder + nPolyPieces	- 1))
+			break;
+	}
+
+	if (i == SplineOrder + nPolyPieces - 1)
+		*flag = 1;
+	else
+		*flag = 0;
+
+	return i;
+}
+static inline int BSplineEvalInterval(const double x, int * i, const int flag, double *knots, int nbreaks, int nControls, int SplineOrder)
+{
+	if (flag == -1)
+	{
+		printf("x outside of knot interval"); abort();
+	}
+	else if (flag == 1)
+	{
+		if (x <= knots[*i] + DBL_EPSILON)
+			*i -= 1;
+		else
+		{
+			printf("x outside of knot interval"); abort();
+		}
+	}
+
+	if (knots[*i] == knots[*i + 1])
+	{
+		printf("knot(i) = knot(i+1) will result in division by zero"); abort();
+	}
+
+	return 0;
+}
+int BSplineGetKnots(double *knots, double *BreakLoc, int nbreaks, int nControls, int SplineOrder)
+{
+	int i;
+	for (i = 0; i < SplineOrder; i++)
+		knots[i] = BreakLoc[0];
+
+	int nPolyPieces = nbreaks - 1;
+	for (i = 1; i < nPolyPieces; i++)
+		knots[i + SplineOrder - 1] = BreakLoc[i];
+
+	for (i = nControls; i < nControls + SplineOrder; i++)
+		knots[i] = BreakLoc[nPolyPieces];
+	return 0;
+}
+int BSplineGetNonZeroBasis(const double x, double * dB, int * istart, int * iend, double *knots, int nbreaks, int nControls, int SplineOrder, const int nderiv)
+{
+	int flag = 0;
+
+	int i = BSplineFindInterval(x, &flag, knots, nbreaks, nControls, SplineOrder);
+	int error = BSplineEvalInterval(x, &i, flag, knots, nbreaks, nControls, SplineOrder);
+	if (error)
+		return error;
+
+	*istart = i - SplineOrder + 1;
+	*iend = i;
+
+	double deltal[4], deltar[4], A[16];//Assuming cubi B spline
+	BSplineLVD(knots, SplineOrder, x, *iend, deltal, deltar, A, dB, nderiv);
+
+	return 0;
+}
+int BSplineGetBasis(const double x, double * B, double *knots, int nbreaks, int nControls, int SplineOrder, const int nderiv)
+{
+	int i, j, istart, iend, error;
+	double Bi[4 * 3];//up to 2nd der of cubic spline
+
+	error = BSplineGetNonZeroBasis(x, Bi, &istart, &iend, knots, nbreaks, nControls, SplineOrder, nderiv);
+	if (error)
+		return error;
+
+	for (j = 0; j <= nderiv; j++)
+	{
+		for (i = 0; i < istart; i++)
+			B[i + j*nControls] = 0.0;
+		for (i = istart; i <= iend; i++)
+			B[i + j*nControls] = Bi[(i - istart) + j*SplineOrder];
+		for (i = iend + 1; i < nControls; i++)
+			B[i + j*nControls] = 0.0;
+	}
+
+	return 0;
+}
+
 void dec2bin(int dec, int*bin, int num_bin)
 {
 	bool stop = false;
@@ -5423,10 +5682,6 @@ void Save3DPoints(char *Path, Point3d *All3D, vector<int>Selected3DIndex)
 	}
 	fclose(fp);
 }
-void DisplayMatrix(char *Fname, Mat m)
-{
-	printf("%s: ", Fname), cout << m << endl;
-}
 
 void convertRTToTwist(double *R, double *T, double *twist)
 {
@@ -5482,7 +5737,7 @@ void convertRTToTwist(double *R, double *T, double *twist)
 	}
 
 	//solve Vt = T;
-	Map < Matrix < double, 3, 3, RowMajor >> matV(V);
+	Map < Matrix < double, 3, 3, RowMajor > > matV(V);
 	Map<Vector3d> matT(T), matt(twist);
 	matt = matV.lu().solve(matT);
 
@@ -5520,7 +5775,7 @@ void convertTwistToRT(double *twist, double *R, double *T)
 void convertRmatToRvec(double *R, double *r)
 {
 	//Project R to SO(3)
-	Map < Matrix < double, 3, 3, RowMajor >> matR(R); //matR is referenced to R;
+	Map < Matrix < double, 3, 3, RowMajor > > matR(R); //matR is referenced to R;
 	JacobiSVD<MatrixXd> svd(matR, ComputeFullU | ComputeFullV);
 	matR = svd.matrixU()*svd.matrixV().transpose();
 
@@ -6001,9 +6256,9 @@ void QuaternionLinearInterp(double *quad1, double *quad2, double *quadi, double 
 	return;
 }
 
-int Get_Pose_from_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsamples, char *Fname3)
+int Pose_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsamples, char *Fname3)
 {
-	int nControls, nbreaks, SplineOrder;
+	int nControls, nbreaks, SplineOrder, se3;
 
 	//Read data
 	FILE *fp = fopen(Fname1, "r");
@@ -6012,7 +6267,7 @@ int Get_Pose_from_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsampl
 		printf("Cannot load %s\n", Fname1);
 		return 1;
 	}
-	fscanf(fp, "%d %d %d\n", &nControls, &nbreaks, &SplineOrder);
+	fscanf(fp, "%d %d %d %d\n", &nControls, &nbreaks, &SplineOrder, &se3);
 
 	double *BreakLoc = new double[nbreaks];
 	double *ControlLoc = new double[nControls];
@@ -6043,25 +6298,42 @@ int Get_Pose_from_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsampl
 		SampleLoc[ii] = BreakLoc[0] + step*ii;
 
 	int ActingID[4];
-	double twist[6], R[9], T[3], poseGL[19];
+	double twist[6], tr[6], R[9], T[3], poseGL[19];
 
 	fp = fopen(Fname2, "w+");
 	for (int ii = 0; ii < nsamples; ii++)
 	{
-		FindActingControlPts(SampleLoc[ii], ActingID, nControls, bw, Bi, SplineOrder);
+		FindActingControlPts(SampleLoc[ii], ActingID, nControls, bw, Bi, SplineOrder, 0);
 
 		gsl_bspline_eval(SampleLoc[ii], Bi, bw);
 		for (int jj = 0; jj < 6; jj++)
 		{
-			twist[jj] = 0.0;
-			for (int ii = 0; ii < 4; ii++)
-				twist[jj] += ControlPose[jj + 6 * ActingID[ii]] * gsl_vector_get(Bi, ActingID[ii]);
+			if (se3 == 1)
+			{
+				twist[jj] = 0.0;
+				for (int kk = 0; kk < 4; kk++)
+					twist[jj] += ControlPose[jj + 6 * ActingID[kk]] * gsl_vector_get(Bi, ActingID[kk]);
+			}
+			else
+			{
+				tr[jj] = 0;
+				for (int kk = 0; kk < 4; kk++)
+					tr[jj] += ControlPose[jj + 6 * ActingID[kk]] * gsl_vector_get(Bi, ActingID[kk]);
+			}
 		}
 
-		convertTwistToRT(twist, R, T);
+		if (se3 == 1)
+			convertTwistToRT(twist, R, T);
+		else
+		{
+			convertRvecToRmat(tr + 3, R);
+			for (int jj = 0; jj < 3; jj++)
+				T[jj] = tr[jj];
+		}
+
 		GetPosesGL(R, T, poseGL);
 
-		fprintf(fp, "%d ", ii);
+		fprintf(fp, "%d ", (int)SampleLoc[ii]);
 		for (int jj = 0; jj < 19; jj++)
 			fprintf(fp, "%.16e ", poseGL[jj]);
 		fprintf(fp, "\n");
@@ -6072,16 +6344,71 @@ int Get_Pose_from_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsampl
 	fp = fopen(Fname3, "w+");
 	for (int ii = 0; ii < nControls; ii++)
 	{
-		convertTwistToRT(&ControlPose[6 * ii], R, T);
+		if (se3 == 1)
+			convertTwistToRT(&ControlPose[6 * ii], R, T);
+		else
+		{
+			convertRvecToRmat(&ControlPose[6 * ii], R);
+			for (int jj = 0; jj < 3; jj++)
+				T[jj] = ControlPose[6 * ii + jj];
+		}
 		GetPosesGL(R, T, poseGL);
 
-		fprintf(fp, "%d ", ii);
+		fprintf(fp, "%d ", (int)(ControlLoc[ii] + 0.5));
 		for (int jj = 0; jj < 19; jj++)
 			fprintf(fp, "%.16e ", poseGL[jj]);
 		fprintf(fp, "\n");
 	}
 	fclose(fp);
 
+	return 0;
+}
+int Pose_se_DCTInterpolation(char *FnameIn, char *FnameOut, int nsamples)
+{
+	int startFrame, nCoeffs, sampleStep;
+
+	FILE *fp = fopen(FnameIn, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", FnameIn);
+		return 1;
+	}
+
+	fscanf(fp, "%d %d %d ", &startFrame, &nCoeffs, &sampleStep);
+	double *C = new double[6 * nCoeffs];
+	for (int jj = 0; jj < 6; jj++)
+		for (int ii = 0; ii < nCoeffs; ii++)
+			fscanf(fp, "%lf ", &C[ii + jj*nCoeffs]);
+	fclose(fp);
+
+	double *iBi = new double[nCoeffs];
+	double twist[6], R[9], T[3], poseGL[19];
+	double stopFrame = sampleStep*(nCoeffs - 1) + startFrame, resampleStep = 1.0*nCoeffs / (stopFrame - startFrame);
+
+	fp = fopen(FnameOut, "w+");
+	for (int ii = 0; ii < nsamples; ii++)
+	{
+		double loc = 1.0*ii * resampleStep; //linspace(0, ncoeffs-1, nsamples)
+		GenerateiDCTBasis(iBi, nCoeffs, loc);
+		for (int jj = 0; jj < 6; jj++)
+		{
+			twist[jj] = 0.0;
+			for (int ii = 0; ii < nCoeffs; ii++)
+				twist[jj] += C[ii + jj*nCoeffs] * iBi[ii];
+		}
+
+		convertTwistToRT(twist, R, T);
+		GetPosesGL(R, T, poseGL);
+
+		loc = loc / resampleStep + startFrame; //linspace(startF, stopF, nsamples)
+		fprintf(fp, "%d ", (int)(loc + 0.5));
+		for (int jj = 0; jj < 19; jj++)
+			fprintf(fp, "%.16e ", poseGL[jj]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	delete[]iBi;
 	return 0;
 }
 void ComputeInterCamerasPose(double *R1, double *T1, double *R2, double *T2, double *R21, double *T21)
@@ -6642,7 +6969,7 @@ bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize,
 		return false;
 	}
 	CorpusData.nCameras = nviews;
-	CorpusData.camera = new CameraData[nviews+1];//1 is just in case camera start at 1
+	CorpusData.camera = new CameraData[nviews + 1];//1 is just in case camera start at 1
 	double Quaterunion[4], CamCenter[3], T[3];
 	vector<int> CameraOrder;
 
@@ -6687,7 +7014,7 @@ bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize,
 
 		CorpusData.camera[viewID].valid = true;
 		CorpusData.camera[viewID].intrinsic[0] = f, CorpusData.camera[viewID].intrinsic[1] = f,
-			CorpusData.camera[viewID].intrinsic[2] = 0, CorpusData.camera[viewID].intrinsic[3] = 1.0*ImgSize[viewID].x / 2-0.5, CorpusData.camera[viewID].intrinsic[4] = 1.0*ImgSize[viewID].y / 2-0.5;
+			CorpusData.camera[viewID].intrinsic[2] = 0, CorpusData.camera[viewID].intrinsic[3] = 1.0*ImgSize[viewID].x / 2 - 0.5, CorpusData.camera[viewID].intrinsic[4] = 1.0*ImgSize[viewID].y / 2 - 0.5;
 		CorpusData.camera[viewID].width = ImgSize[viewID].x, CorpusData.camera[viewID].height = ImgSize[viewID].y;
 
 		ceres::QuaternionToRotation(Quaterunion, CorpusData.camera[viewID].R);
@@ -6723,7 +7050,7 @@ bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize,
 	for (int i = 0; i < nPoints; i++)
 	{
 		viewID3D.clear(), uv3D.clear(), scale3D.clear();
-		ifs >> xyz.x >> xyz.y >> xyz.z>> rgb.x >> rgb.y>> rgb.z;
+		ifs >> xyz.x >> xyz.y >> xyz.z >> rgb.x >> rgb.y >> rgb.z;
 
 		CorpusData.xyz.push_back(xyz);
 		CorpusData.rgb.push_back(rgb);
@@ -6760,7 +7087,7 @@ bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 
 	char Fname[200];
 	int lensType, shutterModel, width, height;
-	double fx, fy, skew, u0, v0, r1, r2, r3, t1, t2, p1, p2, omega, DistCtrX, DistCtrY, rv[3], T[3], wt[6];
+	double fx, fy, skew, u0, v0, r1, r2, r3, t1, t2, p1, p2, omega, DistCtrX, DistCtrY, rv[3], T[3];
 
 	fscanf(fp, "%d ", &CorpusData.nCameras);
 	CorpusData.camera = new CameraData[CorpusData.nCameras + 20];

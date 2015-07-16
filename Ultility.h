@@ -49,11 +49,19 @@ void Average_Filtering_All(char *lpD, int width, int height, int ni, int HSize, 
 void MConventional_PhaseShifting(char *lpD, char *lpPBM, double* lpFO, int nipf, int length, int Mask_Threshold, double *f_atan2);
 void DecodePhaseShift2(char *Image, char *PBM, double *PhaseUW, int width, int height, int *frequency, int nfrequency, int sstep, int LFstep, int half_filter_size, int m_mask);
 
+void GenerateDCTBasis(int nsamples, double *Basis, double *Weight = NULL);
+void GenerateiDCTBasis(double *Basis, int nsamples, double t);
+
 //Bspline basis resampling
 void GenerateSplineBasisWithBreakPts(double *Basis, double *DBasis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder, int DerivativeOrder);
 void GenerateResamplingSplineBasisWithBreakPts(double *Basis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder);
 void GenerateResamplingSplineBasisWithBreakPts(double *Basis, vector<double> ResampledPts, vector<double>BreakPts, int SplineOrder);
-void FindActingControlPts(double t, int *ActingID, int ncontrols, gsl_bspline_workspace *bw, gsl_vector *Bi, int splineOrder);
+int FindActingControlPts(double t, int *ActingID, int ncontrols, gsl_bspline_workspace *bw, gsl_vector *Bi, int splineOrder, int extraNControls = 2);
+
+void BSplineFindActiveCtrl(int *ActingID, const double x, double *knots, int nbreaks, int nControls, int SplineOrder, int extraNControls = 2);
+int BSplineGetKnots(double *knots, double *BreakLoc, int nbreaks, int nControls, int SplineOrder);
+int BSplineGetNonZeroBasis(const double x, double * dB, int * istart, int * iend, double *knots, int nbreaks, int nControls, int SplineOrder, const int nderiv);
+int BSplineGetBasis(const double x, double * B, double *knots, int nbreaks, int nControls, int SplineOrder, const int nderiv = 0);
 
 //Image processing
 bool RoateImage180(char *fname, char *Img, int &width, int &height, int nchannels, bool silent = false);
@@ -569,7 +577,6 @@ void ReadPointCorrespondences(char *Path, int nviews, int timeID, vector<int> *P
 void GenerateMergePointCorrespondences(vector<int> *MergePointCorres, vector<int> *PointCorres, int totalPts);
 void GenerateViewandPointCorrespondences(vector<int> *ViewCorres, vector<int> *PointIDCorres, vector<int> *PointCorres, vector<int> CumIDView, int totalPts);
 void Save3DPoints(char *Path, Point3d *All3D, vector<int>Selected3DIndex);
-void DisplayMatrix(char *Fname, Mat m);
 
 void convertRTToTwist(double *R, double *T, double *twist);
 void convertTwistToRT(double *twist, double *R, double *T);
@@ -608,8 +615,10 @@ void ComputeInterCamerasPose(double *R1, double *T1, double *R2, double *T2, dou
 
 void Rotation2Quaternion(double *R, double *q);
 void Quaternion2Rotation(double *q, double *R);
+
 void QuaternionLinearInterp(double *quad1, double *quad2, double *quadi, double u);
-int Get_Pose_from_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsamples, char *Fname3 = 0);
+int Pose_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsamples, char *Fname3 = 0);
+int Pose_se_DCTInterpolation(char *FnameIn, char *FnameOut, int nsamples);
 
 double DistanceOfTwoPointsSfM(char *Path, int id1, int id2, int id3);
 

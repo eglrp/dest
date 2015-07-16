@@ -29,7 +29,7 @@ bool SaveScreen = false, SaveStaticViewingParameters = false, SetStaticViewingPa
 
 bool drawCorpusPoints = false, drawCorpusCameras = true, drawTimeVaryingCorpusPoints = false;
 bool drawTimeVaryingCameraPose = false, drawCameraTraject = false;
-bool drawTimeVarying3DPoints = false, drawTimeVarying3DPointTrajectory = false;
+bool drawTimeVarying3DPoints = false, drawCatTimeVarying3DPoint = false;
 bool drawNative3DTrajectory = true, drawNative3DTrajectoryOneInstance = false, IndiviualTrajectory = false, Trajectory_Time = false, EndTime = false;
 bool TimeVaryingPointsOne = true, TimeVaryingPointsTwo = true, Native3DTrajectoryOne = true;
 bool AutomaticUpdate = false;
@@ -949,7 +949,7 @@ void RenderObjects()
 		}
 
 		//Concat 3D points from 3D points at individual time instance
-		if (drawTimeVarying3DPointTrajectory)
+		if (drawCatTimeVarying3DPoint)
 		{
 			if (TimeVaryingPointsOne)
 			{
@@ -1147,20 +1147,25 @@ void RenderObjects()
 					int maxtime = min(timeID, (int)g_vis.glCameraPoseInfo[j].size() - 1);
 					for (unsigned int i = 0; i <= maxtime; ++i)
 					{
-						if (g_vis.glCameraPoseInfo[j][i].frameID < 0)
+						if (g_vis.glCameraPoseInfo[j][i].frameID < 0 || g_vis.glCameraPoseInfo[j][i].frameID >timeID)
 							continue;
 						float* centerPt = g_vis.glCameraPoseInfo[j][i].camCenter;
 						if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
 							continue;
 						glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
-						glColor3fv(White);
+						if (j == 0)
+							glColor3fv(White);
+						else if (j == 1)
+							glColor3fv(Red);
+						else
+							glColor3fv(Green);
 					}
 					glEnd();
 
 					//drawPoints on the trajectory
 					for (unsigned int i = 0; i <= maxtime; ++i)
 					{
-						if (g_vis.glCameraPoseInfo[j][i].frameID < 0)
+						if (g_vis.glCameraPoseInfo[j][i].frameID < 0 || g_vis.glCameraPoseInfo[j][i].frameID >timeID)
 							continue;
 						float* centerPt = g_vis.glCameraPoseInfo[j][i].camCenter;
 						if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
@@ -1170,24 +1175,35 @@ void RenderObjects()
 						glPushMatrix();
 						glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
 						glColor3fv(White);
-						glutSolidSphere(pointSize/2.5, 10, 10);
+						glutSolidSphere(pointSize / 2.5, 10, 10);
 						glPopMatrix();
 					}
 
 					//Draw camera at the end of the trajectory
-					float* centerPt = g_vis.glCameraPoseInfo[j][maxtime].camCenter;
-					GLfloat* R = g_vis.glCameraPoseInfo[j][maxtime].Rgl;
+					int dist, closestID = -1, closestFrame = maxTime + 1;
+					for (int i = 0; i < maxtime; i++)
+					{
+						dist = abs(g_vis.glCameraPoseInfo[j][i].frameID - timeID);
+						if (closestFrame >dist)
+							closestFrame = dist, closestID = i;
+					}
 
-					glPushMatrix();
-					glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
-					glMultMatrixf(R);
-					DrawCamera();
-					glPopMatrix();
+					if (closestFrame ==0)
+					{
+						float* centerPt = g_vis.glCameraPoseInfo[j][closestID].camCenter;
+						GLfloat* R = g_vis.glCameraPoseInfo[j][closestID].Rgl;
+
+						glPushMatrix();
+						glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+						glMultMatrixf(R);
+						DrawCamera();
+						glPopMatrix();
+					}
 				}
 
 				for (unsigned int i = 0; i < g_vis.glCameraPoseInfo[j].size(); ++i)
 				{
-					if (g_vis.glCameraPoseInfo[j][i].frameID < 0)
+					if (g_vis.glCameraPoseInfo[j][i].frameID < 0 || g_vis.glCameraPoseInfo[j][i].frameID >timeID)
 						continue;
 
 					if (i != timeID)
@@ -1336,20 +1352,20 @@ void Visualization()
 	glutMainLoop();
 
 }
-int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, bool hasColor, bool hasPatchNormal, bool hasTimeVaryingCameraPose, bool hasTimeVarying3DPoints, bool hasTimeVaryingTrajectory, int CurrentTime)
+int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, bool hasColor, bool hasPatchNormal, bool hasTimeVaryingCameraPose, bool hasTimeVarying3DPoints, bool hasCatTimeVarying3DPoints, int CurrentTime)
 {
 	Path = inPath;
 	nviews = nViews;
 	drawPointColor = hasColor, drawPatchNormal = hasPatchNormal;
 	drawTimeVaryingCameraPose = hasTimeVaryingCameraPose, drawTimeVarying3DPoints = hasTimeVarying3DPoints;
-	drawTimeVarying3DPointTrajectory = hasTimeVaryingTrajectory;
+	drawCatTimeVarying3DPoint = hasCatTimeVarying3DPoints;
 
 	maxTime = StopTime, timeID = CurrentTime;
 	VisualizationManager g_vis;
-	ReadCurrentSfmGL(Path, drawPointColor, drawPatchNormal);
+	//ReadCurrentSfmGL(Path, drawPointColor, drawPatchNormal);
 	//ReadCurrent3DGL(Path, drawPointColor, drawPatchNormal, timeID, true);
 	//ReadCurrent3DGL2(Path, drawPointColor, drawPatchNormal, timeID, false);
-	Read3DTrajectory(Path);
+	//Read3DTrajectory(Path);
 	//Read3DTrajectoryWithCovariance(Path);
 
 	//PointsCentroid[0] = 919, PointsCentroid[1] = 154, PointsCentroid[2] = 894;
@@ -1659,7 +1675,7 @@ bool ReadCurrent3DGL(char *path, bool drawPointColor, bool drawPatchNormal, int 
 		PointsCentroid[0] /= g_vis.PointPosition.size(), PointsCentroid[1] /= g_vis.PointPosition.size(), PointsCentroid[2] /= g_vis.PointPosition.size();
 
 	//Concatenate points in case the trajectory mode is used
-	if (drawTimeVarying3DPointTrajectory) //in efficient of there are many points
+	if (drawCatTimeVarying3DPoint) //in efficient of there are many points
 	{
 		if (g_vis.catPointPosition == NULL)
 			g_vis.catPointPosition = new vector<Point3d>[g_vis.PointPosition.size()];
@@ -1680,7 +1696,7 @@ bool ReadCurrent3DGL2(char *path, bool drawPointColor, bool drawPatchNormal, int
 	if (setCoordinate)
 		PointsCentroid[0] = 0.0f, PointsCentroid[1] = 0.0f, PointsCentroid[2] = 0.f;
 	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
-	sprintf(Fname, "%s/Dynamic/C_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
+	sprintf(Fname, "%s/Dynamic/A_%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
 	//sprintf(Fname, "%s/3DPoints/%d.txt", path, timeID); FILE *fp = fopen(Fname, "r");
 	if (fp == NULL)
 	{
@@ -1713,7 +1729,7 @@ bool ReadCurrent3DGL2(char *path, bool drawPointColor, bool drawPatchNormal, int
 		PointsCentroid[0] /= g_vis.PointPosition2.size(), PointsCentroid[1] /= g_vis.PointPosition2.size(), PointsCentroid[2] /= g_vis.PointPosition2.size();
 
 	//Concatenate points in case the trajectory mode is used
-	if (drawTimeVarying3DPointTrajectory) //in efficient of there are many points
+	if (drawCatTimeVarying3DPoint) //in efficient of there are many points
 	{
 		if (g_vis.catPointPosition2 == NULL)
 			g_vis.catPointPosition2 = new vector<Point3d>[g_vis.PointPosition.size()];
@@ -1741,11 +1757,11 @@ int Read3DTrajectory(char *path, int trialID)
 	while (true)
 	{
 		if (trialID == 0)
-			sprintf(Fname, "%s/OptimizedRaw_Track_%d.txt", path, npts);
+			sprintf(Fname, "%s/Track3D/%d.txt", path, npts); //sprintf(Fname, "%s/OptimizedRaw_Track_%d.txt", path, npts);
 		else if (trialID == 1)
-			sprintf(Fname, "%s/Resampled2_Track_%d.txt", path, npts);
+			sprintf(Fname, "%s/DCTResampled_Track_%d.txt", path, npts);
 		else if (trialID == 2)
-			sprintf(Fname, "%s/Resampled_Track_%d.txt", path, npts);
+			sprintf(Fname, "%s/SplineResampled_Track_%d.txt", path, npts);
 		//sprintf(Fname, "%s/OptimizedRaw_Track_%d_%d.txt", path, npts, trialID);
 
 		FILE *fp = fopen(Fname, "r");
@@ -1879,11 +1895,14 @@ void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime)
 	char Fname[200];
 	g_vis.glCameraPoseInfo = new vector<CamInfo>[(StopTime - StartTime + 1)*nviews];
 
+	bool createTimeStack = TimeInstancesStack.size() == 0 ? true : false;
+
 	int timeID;
 	CamInfo temp;
 	for (int ii = 0; ii < nviews; ii++)
 	{
-		sprintf(Fname, "%s/CamPose_%d.txt", path, ii);		FILE *fp = fopen(Fname, "r");
+		sprintf(Fname, "%s/CamPose_%d.txt", path, ii);
+		FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 		{
 			printf("Cannot load %s\n", Fname);
@@ -1907,6 +1926,9 @@ void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime)
 				fscanf(fp, "%f ", &temp.Rgl[jj]);
 			for (int jj = 0; jj < 3; jj++)
 				fscanf(fp, "%f ", &temp.camCenter[jj]);
+
+			if (ii == 0 && createTimeStack)
+				TimeInstancesStack.push_back(timeID);
 
 			g_vis.glCameraPoseInfo[ii].push_back(temp);
 		}

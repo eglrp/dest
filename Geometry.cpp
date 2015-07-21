@@ -2627,7 +2627,7 @@ int FundamentalMatOutliersRemove(char *Path, int timeID, int id1, int id2, int n
 		cfg.losac.innerSampleSize = 15, cfg.losac.innerRansacRepetitions = 5, cfg.losac.thresholdMultiplier = 2.0, cfg.losac.numStepsIterative = 4;
 
 	if (notCalibrated)
-		cfg.common.inlierThreshold *= 1.5;
+		cfg.common.inlierThreshold *= 3.0;//;
 
 	int ninliers = 0;
 	double Fmat[9];
@@ -4687,7 +4687,7 @@ void NviewTriangulation(vector<Point2d> *pts, double *P, Point3d *WC, int nview,
 
 	return;
 }
-void NviewTriangulation(CameraData *ViewInfo, int nviews, vector <vector<int> > &viewIdAll3D, vector<vector<Point2d> > &uvAll3D, vector<Point3d> &AllP3D)
+void NviewTriangulation(CameraData *ViewInfo, int nviews, vector <vector<int> > &viewIdAll3D, vector<vector<Point2d> > &uvAll3D, vector<Point3d> &AllP3D, bool CayleyRS)
 {
 	int count;
 
@@ -4722,7 +4722,11 @@ void NviewTriangulation(CameraData *ViewInfo, int nviews, vector <vector<int> > 
 			for (int jj = 0; jj < count; jj++)
 				points2d[2 * jj] = p2d[jj].x, points2d[2 * jj + 1] = p2d[jj].y;
 
-			NviewTriangulationNonLinear(P, points2d, point3d, &error, count, 1);
+			if (!CayleyRS)
+				NviewTriangulationNonLinear(P, points2d, point3d, &error, count, 1);
+			else
+				NviewTriangulationNonLinearCayley(ViewInfo, points2d, point3d, &error, nviews, 1);
+
 			AllP3D[ii] = Point3d(point3d[0], point3d[1], point3d[2]);
 		}
 	}
@@ -6616,6 +6620,67 @@ int CayleyDistortionReprojectionDebug(double *intrinsic, double* distortion, dou
 
 	return count;
 }
+void NviewTriangulationNonLinearCayley(CameraData *camInfo, double *Point2D, double *Point3D, double *ReprojectionError, int nviews, int npts)
+{
+	ceres::Problem problem;
+
+	//printf("Error before: \n");
+
+	double residuals[2];
+	for (int ii = 0; ii < npts; ii++)
+	{
+		ReprojectionError[ii] = 0.0;
+		for (int jj = 0; jj < nviews; jj++)
+		{
+			if (!camInfo[jj].valid)
+				continue;
+
+			CayleyReprojectionDebug(camInfo[jj].intrinsic, camInfo[jj].rt, camInfo[jj].wt, Point2d(Point2D[2 * (ii*nviews + jj)], Point2D[2 * (ii*nviews + jj) + 1]), Point3d(Point3D[3 * ii], Point3D[3 * ii + 1], Point3D[3 * ii + 2]), camInfo[jj].width, camInfo[jj].height, residuals);
+			ReprojectionError[ii] += residuals[0] * residuals[0] + residuals[1] * residuals[1];
+
+			ceres::CostFunction* cost_function = CayleyReprojectionError::Create(camInfo[jj].intrinsic, Point2D[2 * (ii*nviews + jj)], Point2D[2 * (ii*nviews + jj) + 1], 1.0, camInfo[jj].width, camInfo[jj].height);
+			problem.AddResidualBlock(cost_function, NULL, camInfo[jj].rt, camInfo[jj].wt, &Point3D[ii]);
+
+			problem.SetParameterBlockConstant(camInfo[jj].rt);
+			problem.SetParameterBlockConstant(camInfo[jj].wt);
+		}
+
+		ReprojectionError[ii] /= nviews;
+		//printf("%f ", ReprojectionError[ii]);
+	}
+	//printf("\n");
+
+
+	ceres::Solver::Options options;
+	options.num_threads = omp_get_max_threads();
+	options.num_linear_solver_threads = omp_get_max_threads();
+	options.max_num_iterations = 100;
+	options.linear_solver_type = ceres::SPARSE_SCHUR;
+	options.minimizer_progress_to_stdout = false;
+
+	ceres::Solver::Summary summary;
+	ceres::Solve(options, &problem, &summary);
+	//std::cout << summary.FullReport() << "\n";
+
+	//printf("Error after: \n");
+	for (int ii = 0; ii < npts; ii++)
+	{
+		ReprojectionError[ii] = 0.0;
+		for (int jj = 0; jj < nviews; jj++)
+		{
+			if (!camInfo[jj].valid)
+				continue;
+
+			CayleyReprojectionDebug(camInfo[jj].intrinsic, camInfo[jj].rt, camInfo[jj].wt, Point2d(Point2D[2 * (ii*nviews + jj)], Point2D[2 * (ii*nviews + jj) + 1]), Point3d(Point3D[3 * ii], Point3D[3 * ii + 1], Point3D[3 * ii + 2]), camInfo[jj].width, camInfo[jj].height, residuals);
+			ReprojectionError[ii] += residuals[0] * residuals[0] + residuals[1] * residuals[1];
+		}
+		ReprojectionError[ii] /= nviews;
+		//printf("%f ", ReprojectionError[ii]);
+	}
+	//printf("\n");
+
+	return;
+}
 
 int IncrementalBA(char *Path, int nviews, int timeID, CameraData *AllViewsInfo, vector<int> availViews, vector<int>*PointCorres, vector<int>mask, vector<int> Selected3DIndex, Point3d *All3D, vector<Point2d> *selected2D, vector<int>*nSelectedViews, int nSelectedPts, int totalPts, bool fixIntrinsic, bool fixDistortion, bool showReProjectionError, bool debug)
 {
@@ -7119,6 +7184,7 @@ int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d
 					fprintf(fp, "%d %.4f %.4f %.4f ", jj, xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]);
 				}
 				fprintf(fp, "V %d: %.4f %.4f %.4f %.4f ", viewID, uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, residuals[0], residuals[1]);
+				//fprintf(fp, "%.2f %.2f\n", residuals[0], residuals[1]);
 			}
 		}
 		if (validViewcount > 1)
@@ -7223,6 +7289,7 @@ int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d
 				}
 				if (debug)
 					fprintf(fp, "V %d: %.4f %.4f %.4f %.4f ", viewID, uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, residuals[0], residuals[1]);
+				//fprintf(fp, "%.2f %.2f\n", residuals[0], residuals[1]);
 			}
 			if (!once &&debug)
 				fprintf(fp, "\n");
@@ -7429,6 +7496,7 @@ int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<
 					fprintf(fp, "%d %.4f %.4f %.4f ", jj, xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]);
 				}
 				fprintf(fp, "V %d: %.4f %.4f %.4f %.4f ", viewID, uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, residuals[0], residuals[1]);
+				//fprintf(fp, "%.3f %.3f\n", residuals[0], residuals[1]);
 			}
 		}
 		if (validViewcount > 1)
@@ -7531,6 +7599,8 @@ int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<
 				}
 				if (debug)
 					fprintf(fp, "V %d: %.4f %.4f %.4f %.4f ", viewID, uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, residuals[0], residuals[1]);
+				//fprintf(fp, "%.3f %.3f\n", residuals[0], residuals[1]);
+
 			}
 			if (!once &&debug)
 				fprintf(fp, "\n");
@@ -11770,7 +11840,7 @@ int ReCalibratedFromGroundTruthCorrespondences(char *Path, int camID, int startF
 	delete[]P, delete[]A, delete[]B, delete[]points2d;*/
 	NviewTriangulation(corpusData.camera, corpusData.nCameras, viewIdAll3D, uvAll3D, P3D);
 
-	//Re-bundle adjust
+	//Re-adjust the bundle
 	vector<int>sharedCam;
 	for (int ii = 0; ii < nframes; ii++)
 		sharedCam.push_back(ii);
@@ -11786,12 +11856,12 @@ int ReCalibratedFromGroundTruthCorrespondences(char *Path, int camID, int startF
 
 	sprintf(Fname, "%s/Corpus", Path);
 	SaveCurrentSfmGL(Fname, corpusData.camera, AvailableViews, P3D, vector<Point3i>());
-	visualizationDriver(Path, nframes, startFrame, stopFrame, false, false, false, false, false, 0);
+	visualizationDriver(Path, nframes, startFrame, stopFrame, false, false, false, false, false, false, 0);
 
 	delete[]Correspondences;
 	return 0;
 }
-int VisualSfm_Refine(char *Path, int ShutterModel, double threshold, bool fixedIntrinsc, bool fixedDistortion, bool fixedPose, bool fixedfirstCamPose, bool distortionCorrected, bool doubleRefinement)
+int RefineVisualSfM(char *Path, int ShutterModel, double threshold, bool fixedIntrinsc, bool fixedDistortion, bool fixedPose, bool fixedfirstCamPose, bool distortionCorrected, bool doubleRefinement)
 {
 	char Fname[200];
 
@@ -11823,6 +11893,7 @@ int VisualSfm_Refine(char *Path, int ShutterModel, double threshold, bool fixedI
 	else
 		CayleyRollingShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, AvailableViews, Refinement_SharedIntrinsic, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, false, distortionCorrected, 0, false, false);
 
+
 	if (doubleRefinement)
 	{
 		for (int ii = 0; ii < corpusData.nCameras; ii++)
@@ -11835,11 +11906,11 @@ int VisualSfm_Refine(char *Path, int ShutterModel, double threshold, bool fixedI
 	}
 
 	sprintf(Fname, "%s/Corpus/BA_Camera_AllParams_after.txt", Path);
-	ReSaveBundleAdjustedNVMResults(Fname, corpusData, 1000.0);
+	ReSaveBundleAdjustedNVMResults(Fname, corpusData);
 
 	sprintf(Fname, "%s/Corpus", Path);
 	SaveCurrentSfmGL(Fname, corpusData.camera, AvailableViews, corpusData.xyz, vector<Point3i>());
-	visualizationDriver(Path, corpusData.nCameras, 0, 1, true, false, false, false, false, 0);
+	visualizationDriver(Path, corpusData.nCameras, 0, 1, true, false, false, false, false, false, 0);
 	return 0;
 }
 

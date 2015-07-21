@@ -5686,7 +5686,7 @@ void Save3DPoints(char *Path, Point3d *All3D, vector<int>Selected3DIndex)
 void convertRTToTwist(double *R, double *T, double *twist)
 {
 	//OpenCV code to handle log map for SO(3)
-	Map < Matrix < double, 3, 3, RowMajor >> matR(R); //matR is referenced to R;
+	Map < Matrix < double, 3, 3, RowMajor > > matR(R); //matR is referenced to R;
 	JacobiSVD<MatrixXd> svd(matR, ComputeFullU | ComputeFullV);
 	//Matrix3d S = svd.singularValues().asDiagonal();
 	matR = svd.matrixU()*svd.matrixV().transpose();//Project R to SO(3)
@@ -6897,7 +6897,7 @@ bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics,
 				}
 				else
 				{
-					printf("cannot find %s\n", filename);
+					printf("cannot find %s\n", filename.c_str());
 					abort();
 				}
 			}
@@ -7005,7 +7005,7 @@ bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize,
 				}
 				else
 				{
-					printf("cannot find %s\n", filename);
+					printf("cannot find %s\n", filename.c_str());
 					abort();
 				}
 			}

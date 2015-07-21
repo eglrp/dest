@@ -18,7 +18,6 @@ static int g_Width = 1200, g_Height = 900, g_xClick = 0, g_yClick = 0, g_mouseYR
 enum cam_mode { CAM_DEFAULT, CAM_ROTATE, CAM_ZOOM, CAM_PAN };
 static cam_mode g_camMode = CAM_DEFAULT;
 GLfloat Red[3] = { 1, 0, 0 }, Green[3] = { 0, 1, 0 }, Blue[3] = { 0, 0, 1 }, White[3] = { 1, 1, 1 }, Yellow[3] = { 1.0f, 1.0f, 204.0f / 255.f };
-vector<Point3f> RandTrajColor;
 
 double Discontinuity3DThresh = 5000.0*UnitScale,
 DiscontinuityTimeThresh = 10000.0; //unit: ms
@@ -30,8 +29,8 @@ bool SaveScreen = false, SaveStaticViewingParameters = false, SetStaticViewingPa
 bool drawCorpusPoints = false, drawCorpusCameras = true, drawTimeVaryingCorpusPoints = false;
 bool drawTimeVaryingCameraPose = false, drawCameraTraject = false;
 bool drawTimeVarying3DPoints = false, drawCatTimeVarying3DPoint = false;
-bool drawNative3DTrajectory = true, drawNative3DTrajectoryOneInstance = false, IndiviualTrajectory = false, Trajectory_Time = false, EndTime = false;
-bool TimeVaryingPointsOne = true, TimeVaryingPointsTwo = true, Native3DTrajectoryOne = true;
+bool drawNative3DTrajectory = true, drawNative3DTrajectoryOneInstance = false, IndiviualTrajectory = false, Trajectory_Time = true, EndTime = false;
+bool TimeVaryingPointsOne = true, TimeVaryingPointsTwo = true, Native3DTrajectoryOne = true, colorVisibility = false, showSkeleton = false;
 bool AutomaticUpdate = false;
 double DisplayStartTime = 0.0, DisplayTimeStep = 0.016; //60fps
 
@@ -41,6 +40,7 @@ int *maxFramesToDrawPerCamera = 0;
 vector<int> PickedPoints, PickedTraject, PickCams;
 vector<double>TimeInstancesStack;
 vector<Point3d> PickPoint3D;
+vector<Point3d> SkeletonPoints;
 typedef struct { GLfloat  viewDistance, CentroidX, CentroidY, CentroidZ; int timeID, mouseYRotate, mouseXRotate; } ViewingParas;
 vector <ViewingParas> DynamicViewingParas;
 VisualizationManager g_vis;
@@ -753,7 +753,7 @@ void RenderObjects()
 
 	if ((oTrialID != TrialID))
 	{
-		Read3DTrajectory(Path, TrialID);
+		Read3DTrajectory(Path, TrialID, colorVisibility);
 		oTrialID = TrialID;
 	}
 	if (TimeInstancesStack.size() - 1 < timeID)
@@ -780,7 +780,7 @@ void RenderObjects()
 				glColor3f(g_vis.CorpusPointColor[i].x, g_vis.CorpusPointColor[i].y, g_vis.CorpusPointColor[i].z);
 			else
 				glColor3fv(Red);
-			glutSolidSphere(pointSize / 2.5, 4, 4);
+			glutSolidSphere(pointSize / 1.25, 4, 4);
 			glPopMatrix();
 
 			if (drawPatchNormal)
@@ -810,7 +810,7 @@ void RenderObjects()
 				glColor3f(g_vis.CorpusPointColor2[i].x, g_vis.CorpusPointColor2[i].y, g_vis.CorpusPointColor2[i].z);
 			else
 				glColor3fv(Green);
-			glutSolidSphere(pointSize / 2.5, 4, 4);
+			glutSolidSphere(pointSize / 1.25, 4, 4);
 			glPopMatrix();
 
 			if (drawPatchNormal)
@@ -988,69 +988,102 @@ void RenderObjects()
 	//draw 3d trajectories
 	if (drawNative3DTrajectory)
 	{
-		if (Native3DTrajectoryOne)
+		if (drawNative3DTrajectoryOneInstance &&showSkeleton)
+			SkeletonPoints.clear();
+
+		if (drawCameraTraject)
 		{
-			if (drawCameraTraject)
+			for (int vid = 0; vid < nviews; vid++)
 			{
-				for (int vid = 0; vid < nviews; vid++)
+				int maxFramesToDraw = 0;
+				for (int tid = 0; tid < g_vis.Traject3D.size(); tid++)
 				{
-					int maxFramesToDraw = 0;
-					for (int tid = 0; tid < g_vis.Traject3D.size(); tid++)
+					for (int fid = 0; fid < g_vis.Track3DLength[tid]; fid++)
 					{
-						for (int fid = 0; fid < g_vis.Track3DLength[tid]; fid++)
-						{
-							if (g_vis.Traject3D[tid][fid].timeID > TimeInstancesStack[timeID])
-								break;
-							if (vid == g_vis.Traject3D[tid][fid].viewID)
-								maxFramesToDraw = max(maxFramesToDraw, g_vis.Traject3D[tid][fid].frameID);
-						}
+						if (g_vis.Traject3D[tid][fid].timeID > TimeInstancesStack[timeID])
+							break;
+						if (vid == g_vis.Traject3D[tid][fid].viewID)
+							maxFramesToDraw = max(maxFramesToDraw, g_vis.Traject3D[tid][fid].frameID);
 					}
-					maxFramesToDrawPerCamera[vid] = maxFramesToDraw;
+				}
+				maxFramesToDrawPerCamera[vid] = maxFramesToDraw;
+			}
+		}
+
+		vector<Point2i> segNode;
+		GLfloat TrajPointColorI[4]; 	float alpha = 0.2;
+		for (int tid = 0; tid < g_vis.Traject3D.size(); tid++)
+		{
+			if (IndiviualTrajectory)
+				if (tid != TrajecID)
+					continue;
+
+			segNode.clear();
+			DetermineDiscontinuityInTrajectory(segNode, g_vis.Traject3D[tid], g_vis.Track3DLength[tid]);
+
+			//draw lines
+			if (!drawNative3DTrajectoryOneInstance)
+			{
+				for (int segID = 0; segID < segNode.size(); segID++)
+				{
+					if (segNode[segID].y - segNode[segID].x < 3)
+						continue;
+
+					glPushMatrix();
+					glBegin(GL_LINE_STRIP);
+					for (int fid = segNode[segID].x; fid < segNode[segID].y; fid++)
+					{
+						TrajPointColorI[0] = g_vis.Traject3D[tid][fid].rgb.x, TrajPointColorI[1] = g_vis.Traject3D[tid][fid].rgb.y, TrajPointColorI[2] = g_vis.Traject3D[tid][fid].rgb.z, TrajPointColorI[3] = 1.0f;
+						if (Trajectory_Time)
+							TrajPointColorI[3] = 1.0f* pow(g_vis.Traject3D[tid][fid].timeID / TimeInstancesStack[timeID], 20);
+
+						if (Trajectory_Time && g_vis.Traject3D[tid][fid].timeID > TimeInstancesStack[timeID])
+							continue;
+						if (TrajPointColorI[3] < 7.5e-2)
+							continue;
+
+						glVertex3f(g_vis.Traject3D[tid][fid].WC.x - PointsCentroid[0], g_vis.Traject3D[tid][fid].WC.y - PointsCentroid[1], g_vis.Traject3D[tid][fid].WC.z - PointsCentroid[2]);
+						glColor4fv(TrajPointColorI);
+					}
+					glEnd();
+					glPopMatrix();
 				}
 			}
 
-			vector<Point2i> segNode;
-			GLfloat RandTrajColorI[4]; 	float alpha = 0.2;
-			for (int tid = 0; tid < g_vis.Traject3D.size(); tid++)
+			//draw points on the lines
+			for (int segID = 0; segID < segNode.size(); segID++)
 			{
-				if (IndiviualTrajectory)
-					if (tid != TrajecID)
+				if (segNode[segID].y - segNode[segID].x < 3)
+					continue;
+
+				for (int fid = segNode[segID].x; fid < segNode[segID].y; fid++)
+				{
+					if (!drawNative3DTrajectoryOneInstance &&Trajectory_Time && g_vis.Traject3D[tid][fid].timeID > TimeInstancesStack[timeID])
+						continue;
+					else if (Trajectory_Time && g_vis.Traject3D[tid][fid].timeID != TimeInstancesStack[timeID])
 						continue;
 
-				segNode.clear();
-				DetermineDiscontinuityInTrajectory(segNode, g_vis.Traject3D[tid], g_vis.Track3DLength[tid]);
+					if (drawNative3DTrajectoryOneInstance &&showSkeleton)
+						SkeletonPoints.push_back(Point3d(g_vis.Traject3D[tid][fid].WC.x, g_vis.Traject3D[tid][fid].WC.y, g_vis.Traject3D[tid][fid].WC.z));
 
-				//draw lines
-				if (!drawNative3DTrajectoryOneInstance)
-				{
-					for (int segID = 0; segID < segNode.size(); segID++)
-					{
-						if (segNode[segID].y - segNode[segID].x < 3)
-							continue;
+					TrajPointColorI[0] = g_vis.Traject3D[tid][fid].rgb.x, TrajPointColorI[1] = g_vis.Traject3D[tid][fid].rgb.y, TrajPointColorI[2] = g_vis.Traject3D[tid][fid].rgb.z, TrajPointColorI[3] = 1.0f;
+					if (Trajectory_Time)
+						TrajPointColorI[3] = 1.0f* pow(g_vis.Traject3D[tid][fid].timeID / TimeInstancesStack[timeID], 20);
 
-						glPushMatrix();
-						glBegin(GL_LINE_STRIP);
-						for (int fid = segNode[segID].x; fid < segNode[segID].y; fid++)
-						{
-							RandTrajColorI[0] = RandTrajColor[tid].x, RandTrajColorI[1] = RandTrajColor[tid].y, RandTrajColorI[2] = RandTrajColor[tid].z, RandTrajColorI[3] = 1.0f;
-							if (Trajectory_Time)
-								RandTrajColorI[3] = 1.0f* pow(g_vis.Traject3D[tid][fid].timeID / TimeInstancesStack[timeID], 10);
+					if (TrajPointColorI[3] < 7.5e-2)
+						continue;
 
-							if (Trajectory_Time && g_vis.Traject3D[tid][fid].timeID > TimeInstancesStack[timeID])
-								continue;
-
-							if (RandTrajColorI[3] < 2.5e-2)
-								continue;
-
-							glVertex3f(g_vis.Traject3D[tid][fid].WC.x - PointsCentroid[0], g_vis.Traject3D[tid][fid].WC.y - PointsCentroid[1], g_vis.Traject3D[tid][fid].WC.z - PointsCentroid[2]);
-							glColor4fv(RandTrajColorI);
-						}
-						glEnd();
-						glPopMatrix();
-					}
+					glPushMatrix();
+					glTranslatef(g_vis.Traject3D[tid][fid].WC.x - PointsCentroid[0], g_vis.Traject3D[tid][fid].WC.y - PointsCentroid[1], g_vis.Traject3D[tid][fid].WC.z - PointsCentroid[2]);
+					glColor4fv(TrajPointColorI);
+					glutSolidSphere(pointSize, 10, 10);
+					glPopMatrix();
 				}
+			}
 
-				//draw points on the lines
+
+			if (Trajectory_Time && drawTimeVaryingCameraPose)
+			{
 				for (int segID = 0; segID < segNode.size(); segID++)
 				{
 					if (segNode[segID].y - segNode[segID].x < 3)
@@ -1058,74 +1091,50 @@ void RenderObjects()
 
 					for (int fid = segNode[segID].x; fid < segNode[segID].y; fid++)
 					{
-						if (!drawNative3DTrajectoryOneInstance &&Trajectory_Time && g_vis.Traject3D[tid][fid].timeID > TimeInstancesStack[timeID])
+						if (timeID>0 && g_vis.Traject3D[tid][fid].timeID <= TimeInstancesStack[timeID - 1])
 							continue;
-						else if (Trajectory_Time && g_vis.Traject3D[tid][fid].timeID != TimeInstancesStack[timeID])
-							continue;
-
-						RandTrajColorI[0] = RandTrajColor[tid].x, RandTrajColorI[1] = RandTrajColor[tid].y, RandTrajColorI[2] = RandTrajColor[tid].z, RandTrajColorI[3] = 1.0f;
-						if (Trajectory_Time)
-							RandTrajColorI[3] = 1.0f* pow(g_vis.Traject3D[tid][fid].timeID / TimeInstancesStack[timeID], 10);
-
-						if (RandTrajColorI[3] < 2.5e-2)
+						if (g_vis.Traject3D[tid][fid].timeID > TimeInstancesStack[timeID])
 							continue;
 
+						int visibleCam = g_vis.Traject3D[tid][fid].viewID, visibleCam_FrameID = g_vis.Traject3D[tid][fid].frameID;
+						if (visibleCam_FrameID< 0 || visibleCam_FrameID>g_vis.glCameraPoseInfo[visibleCam].size() || PlottedTimeVaryingCameras[visibleCam])
+							continue;
+						PlottedTimeVaryingCameras[visibleCam] = true;
+
+						float* centerPt = g_vis.glCameraPoseInfo[visibleCam][visibleCam_FrameID].camCenter;
+						if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
+							continue;
+						GLfloat* R = g_vis.glCameraPoseInfo[visibleCam][visibleCam_FrameID].Rgl;
+
+						glLoadName(visibleCam);//for picking purpose
 						glPushMatrix();
-						glTranslatef(g_vis.Traject3D[tid][fid].WC.x - PointsCentroid[0], g_vis.Traject3D[tid][fid].WC.y - PointsCentroid[1], g_vis.Traject3D[tid][fid].WC.z - PointsCentroid[2]);
-						glColor4fv(RandTrajColorI);
-						glutSolidSphere(pointSize, 10, 10);
+						glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+						glMultMatrixf(R);
+						DrawCamera();
 						glPopMatrix();
-					}
-				}
 
-				if (Trajectory_Time && drawTimeVaryingCameraPose)
-				{
-					for (int segID = 0; segID < segNode.size(); segID++)
-					{
-						if (segNode[segID].y - segNode[segID].x < 3)
-							continue;
-
-						for (int fid = segNode[segID].x; fid < segNode[segID].y; fid++)
+						if (drawCameraTraject)
 						{
-							if (timeID>0 && g_vis.Traject3D[tid][fid].timeID <= TimeInstancesStack[timeID - 1])
-								continue;
-							if (g_vis.Traject3D[tid][fid].timeID > TimeInstancesStack[timeID])
-								continue;
-
-							int visibleCam = g_vis.Traject3D[tid][fid].viewID, visibleCam_FrameID = g_vis.Traject3D[tid][fid].frameID;
-							if (visibleCam_FrameID< 0 || visibleCam_FrameID>g_vis.glCameraPoseInfo[visibleCam].size() || PlottedTimeVaryingCameras[visibleCam])
-								continue;
-							PlottedTimeVaryingCameras[visibleCam] = true;
-
-							float* centerPt = g_vis.glCameraPoseInfo[visibleCam][visibleCam_FrameID].camCenter;
-							if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
-								continue;
-							GLfloat* R = g_vis.glCameraPoseInfo[visibleCam][visibleCam_FrameID].Rgl;
-
-							glLoadName(visibleCam);//for picking purpose
-							glPushMatrix();
-							glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
-							glMultMatrixf(R);
-							DrawCamera();
-							glPopMatrix();
-
-							if (drawCameraTraject)
+							glBegin(GL_LINE_STRIP);
+							for (int fid = 0; fid <= maxFramesToDrawPerCamera[visibleCam]; fid++)
 							{
-								glBegin(GL_LINE_STRIP);
-								for (int fid = 0; fid <= maxFramesToDrawPerCamera[visibleCam]; fid++)
-								{
-									float* centerPt = g_vis.glCameraPoseInfo[visibleCam][fid].camCenter;
-									if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
-										continue;
-									glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
-									glColor3fv(White);
-								}
-								glEnd();
+								float* centerPt = g_vis.glCameraPoseInfo[visibleCam][fid].camCenter;
+								if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
+									continue;
+								glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+								glColor3fv(White);
 							}
+							glEnd();
 						}
 					}
 				}
 			}
+		}
+
+		if (drawNative3DTrajectoryOneInstance &&showSkeleton)
+		{
+			if ((int)SkeletonPoints.size() == 31)
+				RenderSkeleton2(SkeletonPoints, Red);
 		}
 
 		if (drawTimeVaryingCameraPose)
@@ -1184,11 +1193,11 @@ void RenderObjects()
 					for (int i = 0; i < maxtime; i++)
 					{
 						dist = abs(g_vis.glCameraPoseInfo[j][i].frameID - timeID);
-						if (closestFrame >dist)
+						if (closestFrame > dist)
 							closestFrame = dist, closestID = i;
 					}
 
-					if (closestFrame ==0)
+					if (closestFrame == 0)
 					{
 						float* centerPt = g_vis.glCameraPoseInfo[j][closestID].camCenter;
 						GLfloat* R = g_vis.glCameraPoseInfo[j][closestID].Rgl;
@@ -1336,10 +1345,12 @@ void Visualization()
 
 	glutCreateWindow("SfM!");
 
-	glEnable(GL_DEPTH_TEST);
+
 	glShadeModel(GL_SMOOTH);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glEnable(GL_DEPTH_TEST);
+	//glEnable(GL_CULL_FACE);
 
 	glutDisplayFunc(display);
 	glutKeyboardFunc(Keyboard);
@@ -1352,20 +1363,22 @@ void Visualization()
 	glutMainLoop();
 
 }
-int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, bool hasColor, bool hasPatchNormal, bool hasTimeVaryingCameraPose, bool hasTimeVarying3DPoints, bool hasCatTimeVarying3DPoints, int CurrentTime)
+int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, bool hasColor, bool hasPatchNormal, bool hasTimeVaryingCameraPose, bool hasTimeVarying3DPoints, bool hasCatTimeVarying3DPoints, bool docolorVisibility, int CurrentTime)
 {
 	Path = inPath;
 	nviews = nViews;
 	drawPointColor = hasColor, drawPatchNormal = hasPatchNormal;
 	drawTimeVaryingCameraPose = hasTimeVaryingCameraPose, drawTimeVarying3DPoints = hasTimeVarying3DPoints;
 	drawCatTimeVarying3DPoint = hasCatTimeVarying3DPoints;
+	colorVisibility = docolorVisibility;
+	showSkeleton = true;
 
 	maxTime = StopTime, timeID = CurrentTime;
 	VisualizationManager g_vis;
 	//ReadCurrentSfmGL(Path, drawPointColor, drawPatchNormal);
 	//ReadCurrent3DGL(Path, drawPointColor, drawPatchNormal, timeID, true);
 	//ReadCurrent3DGL2(Path, drawPointColor, drawPatchNormal, timeID, false);
-	//Read3DTrajectory(Path);
+	Read3DTrajectory(Path, 0, colorVisibility);
 	//Read3DTrajectoryWithCovariance(Path);
 
 	//PointsCentroid[0] = 919, PointsCentroid[1] = 154, PointsCentroid[2] = 894;
@@ -1740,7 +1753,7 @@ bool ReadCurrent3DGL2(char *path, bool drawPointColor, bool drawPatchNormal, int
 
 	return true;
 }
-int Read3DTrajectory(char *path, int trialID)
+int Read3DTrajectory(char *path, int trialID, bool colorVisibility)
 {
 	char Fname[200];
 	Point3i iColor; Point3f fColor; Point3f t3d, n3d;
@@ -1750,18 +1763,26 @@ int Read3DTrajectory(char *path, int trialID)
 	const int nframes = 5000;
 	Point3d P3dTemp[nframes];
 	double x, y, z, t, timeStamp[nframes];
-	int camID[nframes], frameID[nframes], dummy[nframes];
+	int camID[nframes], sortedCamID[nframes], frameID[nframes], dummy[nframes];
+	vector<int>AvailCamID, nVisibles, AddedCamID;
+
+	Mat colorMapSource = Mat::zeros(256, 1, CV_8U);
+	for (unsigned int i = 0; i <= 255; i++)
+		colorMapSource.at<uchar>(i, 0) = i;
+	Mat colorMap; applyColorMap(colorMapSource, colorMap, COLORMAP_COOL);
 
 	maxTime = 0;
 	int npts = 0;
 	while (true)
 	{
 		if (trialID == 0)
-			sprintf(Fname, "%s/Track3D/%d.txt", path, npts); //sprintf(Fname, "%s/OptimizedRaw_Track_%d.txt", path, npts);
+			sprintf(Fname, "%s/OptimizedRaw_Track_%d.txt", path, npts);//sprintf(Fname, "%s/Track3D/%d.txt", path, npts); //
 		else if (trialID == 1)
 			sprintf(Fname, "%s/DCTResampled_Track_%d.txt", path, npts);
 		else if (trialID == 2)
 			sprintf(Fname, "%s/SplineResampled_Track_%d.txt", path, npts);
+		else if (trialID == 3)
+			sprintf(Fname, "%s/frameSynced_Track_%d.txt", path, npts);
 		//sprintf(Fname, "%s/OptimizedRaw_Track_%d_%d.txt", path, npts, trialID);
 
 		FILE *fp = fopen(Fname, "r");
@@ -1770,12 +1791,21 @@ int Read3DTrajectory(char *path, int trialID)
 			printf("Cannot load %s\n", Fname);
 			break;
 		}
-		int count = 0, cID, fID;
+		AvailCamID.clear();
+		int count = 0, alreadyAddedCount, cID, fID;
 		while (fscanf(fp, "%lf %lf %lf %lf %d %d", &x, &y, &z, &t, &cID, &fID) != EOF)
 		{
 			timeStamp[count] = t, camID[count] = cID, frameID[count] = fID;
 			P3dTemp[count].x = x, P3dTemp[count].y = y, P3dTemp[count].z = z;
 			count++;
+
+			alreadyAddedCount = 0;
+			for (int ii = 0; ii < (int)AvailCamID.size(); ii++)
+				if (AvailCamID[ii] == cID)
+					alreadyAddedCount++;
+
+			if (alreadyAddedCount == 0)
+				AvailCamID.push_back(cID);
 
 			//Read all the time possible
 			bool found = false;
@@ -1800,16 +1830,110 @@ int Read3DTrajectory(char *path, int trialID)
 		for (int ii = 0; ii < count; ii++)
 		{
 			int id = dummy[ii];
+			sortedCamID[ii] = camID[id];
 			track3D[ii].timeID = timeStamp[ii];
 			track3D[ii].WC = P3dTemp[id], track3D[ii].viewID = camID[id], track3D[ii].frameID = frameID[id];
 		}
 
+		//look in a window to determine #camera sees the point at that time instance in the window
+		if (colorVisibility)
+		{
+			int nCams = (int)AvailCamID.size(), minVis = nCams;
+			nVisibles.clear();
+			for (int jj = 0; jj < nCams / 2; jj++)
+			{
+				AddedCamID.clear();
+				for (int ii = 0; ii < nCams; ii++)
+				{
+					for (int kk = 0; kk < nCams; kk++)
+					{
+						if (sortedCamID[jj + ii] == AvailCamID[kk])
+						{
+							alreadyAddedCount = 0;
+							for (int ll = 0; ll < (int)AddedCamID.size(); ll++)
+								if (AvailCamID[kk] == AddedCamID[ll])
+									alreadyAddedCount++;
+							if (alreadyAddedCount == 0)
+								AddedCamID.push_back(AvailCamID[kk]);
+							break;
+						}
+					}
+				}
+				if ((int)AddedCamID.size() < minVis)
+					minVis = (int)AddedCamID.size();
+				nVisibles.push_back((int)AddedCamID.size());
+			}
+			for (int jj = nCams / 2; jj < count - nCams / 2; jj++)
+			{
+				AddedCamID.clear();
+				for (int ii = 0; ii < nCams; ii++)
+				{
+					for (int kk = 0; kk < nCams; kk++)
+					{
+						if (sortedCamID[jj - nCams / 2 + ii] == AvailCamID[kk])
+						{
+							alreadyAddedCount = 0;
+							for (int ll = 0; ll < (int)AddedCamID.size(); ll++)
+								if (AvailCamID[kk] == AddedCamID[ll])
+									alreadyAddedCount++;
+							if (alreadyAddedCount == 0)
+								AddedCamID.push_back(AvailCamID[kk]);
+							break;
+						}
+					}
+				}
+				if ((int)AddedCamID.size() < minVis)
+					minVis = (int)AddedCamID.size();
+				nVisibles.push_back((int)AddedCamID.size());
+			}
+			for (int jj = count - nCams / 2; jj < count; jj++)
+			{
+				AddedCamID.clear();
+				for (int ii = 0; ii < nCams; ii++)
+				{
+					for (int kk = 0; kk < nCams; kk++)
+					{
+						if (sortedCamID[jj - nCams + ii] == AvailCamID[kk])
+						{
+							alreadyAddedCount = 0;
+							for (int ll = 0; ll < (int)AddedCamID.size(); ll++)
+								if (AvailCamID[kk] == AddedCamID[ll])
+									alreadyAddedCount++;
+							if (alreadyAddedCount == 0)
+								AddedCamID.push_back(AvailCamID[kk]);
+							break;
+						}
+					}
+				}
+				if ((int)AddedCamID.size() < minVis)
+					minVis = (int)AddedCamID.size();
+				nVisibles.push_back((int)AddedCamID.size());
+			}
+
+			int range = nCams - minVis, nvis;
+			for (int ii = 0; ii < count; ii++)
+			{
+				nvis = nVisibles[ii];
+				int colorIdx = (int)(1.0*(nvis - minVis) / range* 255.0 + 0.5);
+
+				Point3f PointColor;
+				PointColor.z = colorMap.at<Vec3b>(colorIdx, 0)[0] / 255.0; //blue
+				PointColor.y = colorMap.at<Vec3b>(colorIdx, 0)[1] / 255.0; //green
+				PointColor.x = colorMap.at<Vec3b>(colorIdx, 0)[2] / 255.0;	//red
+				//RandTrajColor.push_back(PointColor);
+				track3D[ii].rgb = PointColor;
+			}
+		}
+		else
+		{
+			Point3f PointColor(0.7, 0.5, 0.2); //Offset 0.2 so that non of the trajectories can be too dark to be seen
+			for (int ii = 0; ii < count; ii++)
+				track3D[ii].rgb = PointColor;
+			//RandTrajColor.push_back(PointColor);
+		}
+
 		g_vis.Track3DLength.push_back(count);
 		g_vis.Traject3D.push_back(track3D);
-
-		//Point3f RandTrajColorI(0.8f*rand() / RAND_MAX + 0.2, 0.8f*rand() / RAND_MAX + 0.2f, 0.8f*rand() / RAND_MAX + 0.2f); //Offset 0.2 so that non of the trajectories can be too dark to be seen
-		Point3f RandTrajColorI(0.7, 0.5, 0.2); //Offset 0.2 so that non of the trajectories can be too dark to be seen
-		RandTrajColor.push_back(RandTrajColorI);
 
 		maxTime = max(maxTime, count);
 		npts++;

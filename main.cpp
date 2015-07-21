@@ -3424,7 +3424,7 @@ int TestFrameSyncTriangulation(char *Path)
 	//double OffsetInfo[3];
 	//LeastActionSyncBruteForce2DTriplet(Path, SelectedCams, 0, 53, 1, OffsetInfo);
 	TriangulateFrameSync2DTrajectories(Path, SelectedCams, SyncFrameOffset, 0, 54, npts);
-	visualizationDriver(Path, 3, 0, 400, true, false, true, false, true, 0);
+	visualizationDriver(Path, 3, 0, 400, true, false, true, false, true, false, 0);
 	return 0;
 }
 
@@ -7210,7 +7210,7 @@ int IncrementalLeastActionSyncDiscreteContinous2D(char *Path, vector<int> Select
 
 	return NotSuccess;
 }
-int TrajectoryTriangulation(char *Path, vector<int> SelectedCams, vector<double> TimeStampInfoVector, int npts, int startFrame, int stopFrame, double lamda, int motionPriorPower)
+int TrajectoryTriangulation(char *Path, vector<int> &SelectedCams, vector<double> &TimeStampInfoVector, int npts, int startFrame, int stopFrame, double lamda, int motionPriorPower)
 {
 	char Fname[200]; FILE *fp = 0;
 	const double Tscale = 1000.0, fps = 60.0, ialpha = 1.0 / fps, eps = 1.0e-6;
@@ -8082,7 +8082,7 @@ void ResamplingOf3DTrajectorySpline(vector<ImgPtEle> &Traj3D, bool non_monotonic
 
 	return;
 }
-int ResamplingOf3DTrajectorySplineDriver(char *Path, vector<int> SelectedCams, vector<double> OffsetInfo, int startFrame, int stopFrame, int ntracks, double lamda)
+int ResamplingOf3DTrajectorySplineDriver(char *Path, vector<int> &SelectedCams, vector<double> &OffsetInfo, int startFrame, int stopFrame, int ntracks, double lamda)
 {
 	char Fname[200]; FILE *fp = 0;
 	const double Tscale = 1000.0, fps = 60.0, ialpha = 1.0 / fps;
@@ -8252,7 +8252,7 @@ int ResamplingOf3DTrajectorySplineDriver(char *Path, vector<int> SelectedCams, v
 		}
 	}
 
-	printf("Resampling:\n");
+	printf("Cubic Bspline resampling:\n");
 
 	omp_set_num_threads(omp_get_max_threads());
 #pragma omp parallel for
@@ -8261,7 +8261,7 @@ int ResamplingOf3DTrajectorySplineDriver(char *Path, vector<int> SelectedCams, v
 #pragma omp critical
 		printf("%d: ", trackID);
 
-		ResamplingOf3DTrajectorySpline(Traj3D[trackID], true, ialpha *Tscale, ialpha *Tscale / 2, lamda);
+		ResamplingOf3DTrajectorySpline(Traj3D[trackID], true, ialpha *Tscale, ialpha *Tscale / nCams, lamda);
 
 #pragma omp critical
 		{
@@ -8361,7 +8361,7 @@ void ResamplingOf3DTrajectoryDCT(vector<ImgPtEle> &Traj3D, int PriorOrder, bool 
 	for (int ii = 0; ii < nData; ii++)
 		GenerateiDCTBasis(iBData + ii*nResamples, nResamples, TimeStampData[ii]);
 
-	//Initialize basis coefficients: iPd(:, 1:activeBasis)*C =  X_d
+	//Initialize basis coefficients: iBd(:, 1:activeBasis)*C =  X_d
 	const int nactiveBasis = 20;
 	Map < Matrix < double, Dynamic, Dynamic, RowMajor > > eiBData(iBData, nData, nResamples);
 	MatrixXd etiBData = eiBData.block(0, 0, nData, nactiveBasis);
@@ -8469,13 +8469,12 @@ void ResamplingOf3DTrajectoryDCT(vector<ImgPtEle> &Traj3D, int PriorOrder, bool 
 	}
 #endif
 
-	//Final curve: iP*C =  X
-	Map < Matrix < double, Dynamic, Dynamic, RowMajor > > eBResampled(BResampled, nResamples, nResamples);
+	//Final curve: iB*C =  X
 	for (int ii = 0; ii < 3; ii++)
 	{
 		Map<VectorXd> eX(X + nData*ii, nData);
 		Map<VectorXd> eC(C + nResamples*ii, nResamples);
-		eX = eBResampled.transpose()*eC;
+		eX = eiBData*eC;
 	}
 
 	for (int ii = 0; ii < nData; ii++)
@@ -8655,34 +8654,35 @@ int ResamplingOf3DTrajectoryDCTDriver(char *Path, vector<int> &SelectedCams, vec
 		}
 	}
 
-	printf("Resampling:\n");
-	for (int trial = 0; trial <= 50; trial++)
-	{
-		lamda1 = 0.1 + 0.9 / 50 * trial; lamda2 = 1.0 - lamda2;
+	printf("DCT-based resampling:\n");
+	//for (int trial = 0; trial <= 50; trial++)
+	//{
+	//	lamda1 = 0.1 + 0.9 / 50 * trial; lamda2 = 1.0 - lamda2;
 
-		omp_set_num_threads(omp_get_max_threads());
+	omp_set_num_threads(omp_get_max_threads());
 #pragma omp parallel for
-		for (int trackID = 0; trackID < ntracks; trackID++)
+	for (int trackID = 0; trackID < ntracks; trackID++)
+	{
+#pragma omp critical
+		printf("%d: ", trackID);
+
+		double earliest = Traj3D[trackID][0].timeStamp, latest = Traj3D[trackID].back().timeStamp;
+		int nData = (int)Traj3D[trackID].size();
+		double resamplingStep = (latest - earliest) / nData;
+
+		double lamda2_ = lamda2*resamplingStep;
+		ResamplingOf3DTrajectoryDCT(Traj3D[trackID], PriorOrder, true, resamplingStep, lamda1, lamda2_, true);
+
+#pragma omp critical
 		{
-#pragma omp critical
-			printf("%d: ", trackID);
-
-			double earliest = Traj3D[trackID][0].timeStamp, latest = Traj3D[trackID].back().timeStamp;
-			int nData = (int)Traj3D[trackID].size();
-			double resamplingStep = (latest - earliest) / nData;
-
-			ResamplingOf3DTrajectoryDCT(Traj3D[trackID], PriorOrder, true, resamplingStep, lamda1, lamda2, true);
-
-#pragma omp critical
-			{
-				sprintf(Fname, "%s/%d DCTResampled_Track_%d.txt", Path, trial, trackID); remove(Fname);
-				fp = fopen(Fname, "w+");
-				for (int ii = 0; ii < (int)Traj3D[trackID].size(); ii++)
-					fprintf(fp, "%.4f %.4f %.4f %.4f %d %d\n", Traj3D[trackID][ii].pt3D.x, Traj3D[trackID][ii].pt3D.y, Traj3D[trackID][ii].pt3D.z, Traj3D[trackID][ii].timeStamp, Traj3D[trackID][ii].viewID, Traj3D[trackID][ii].frameID);
-				fclose(fp);
-			}
+			sprintf(Fname, "%s/DCTResampled_Track_%d.txt", Path, trackID); remove(Fname);
+			fp = fopen(Fname, "w+");
+			for (int ii = 0; ii < (int)Traj3D[trackID].size(); ii++)
+				fprintf(fp, "%.4f %.4f %.4f %.4f %d %d\n", Traj3D[trackID][ii].pt3D.x, Traj3D[trackID][ii].pt3D.y, Traj3D[trackID][ii].pt3D.z, Traj3D[trackID][ii].timeStamp, Traj3D[trackID][ii].viewID, Traj3D[trackID][ii].frameID);
+			fclose(fp);
 		}
 	}
+	//}
 	printf("Done!\n\n");
 
 	delete[]VideoInfo;
@@ -8775,8 +8775,8 @@ int CheckerBoardMultiviewSpatialTemporalCalibration(char *Path, int nCams, int s
 	bool fixedIntrinsc = true, fixedDistortion = true, fixedPose = false, fixedfirstCamPose = true, distortionCorrected = false;
 
 	//Input Parameters
-	const int motionPriorPower = 2, SearchRange = 10;
-	double lamdaData = 0.8, SearchStep = 0.1;
+	const int PriorOrder = 1, motionPriorPower = 2, SearchRange = 10;
+	double lamdaData = 0.85, lamdaPrior = 1.0 - lamdaData, SearchStep = 0.1;
 
 	if (STCalibration == 1)
 	{
@@ -8897,15 +8897,12 @@ int CheckerBoardMultiviewSpatialTemporalCalibration(char *Path, int nCams, int s
 
 		//Triangulate trajectories
 		TrajectoryTriangulation(Path, SortedSelectedCamera, SortedTimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
-		ResamplingOf3DTrajectorySplineDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, startFrame, stopFrame, npts, lamdaData);
+		//ResamplingOf3DTrajectorySplineDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, startFrame, stopFrame, npts, lamdaData);
+		ResamplingOf3DTrajectoryDCTDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, PriorOrder, startFrame, stopFrame, npts, lamdaData, lamdaPrior);
 
 		sprintf(Fname, "%s/FMotionPriorSync.txt", Path);	fp = fopen(Fname, "w+");
 		for (int ii = 0; ii < (int)SortedSelectedCamera.size(); ii++)
 			fprintf(fp, "%d %.4f\n", SortedSelectedCamera[ii], SortedTimeStampInfoVector[ii]);
-		fclose(fp);
-		sprintf(Fname, "%s/FMotionPriorSync.txt", Path);	fp = fopen(Fname, "w+");
-		for (int ii = 0; ii < (int)SelectedCamera.size(); ii++)
-			fprintf(fp, "%d %.4f\n", SelectedCamera[ii], TimeStampInfoVector[ii]);
 		fclose(fp);
 
 		printf("Total time: %.2fs\n\n", omp_get_wtime() - startTime);
@@ -8928,29 +8925,38 @@ int CheckerBoardMultiviewSpatialTemporalCalibration(char *Path, int nCams, int s
 			SelectedCamera.push_back(selected), TimeStampInfoVector.push_back(offsetValue);
 		fclose(fp);
 
+		int nCams = (int)SelectedCamera.size();
+		vector<int>  sortedSelectedCamera(nCams);
+		vector<double> sortedTimeStampInfoVector(nCams);
+		for (int ii = 0; ii < nCams; ii++)
+			sortedSelectedCamera[ii] = SelectedCamera[ii],
+			sortedTimeStampInfoVector[ii] = TimeStampInfoVector[ii];
+
 		if (STCalibration == 2)
-			TrajectoryTriangulation(Path, SelectedCamera, TimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
+			TrajectoryTriangulation(Path, sortedSelectedCamera, sortedTimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
 		else if (STCalibration == 3)
-			ResamplingOf3DTrajectorySplineDriver(Path, SelectedCamera, TimeStampInfoVector, startFrame, stopFrame, npts, lamdaData);
+			ResamplingOf3DTrajectorySplineDriver(Path, sortedSelectedCamera, sortedTimeStampInfoVector, startFrame, stopFrame, npts, lamdaData);
 		else if (STCalibration == 4)
-			Generate3DUncertaintyFromRandomSampling(Path, SelectedCamera, TimeStampInfoVector, startFrame, stopFrame, npts, 0, 100, motionPriorPower);
-		else if (STCalibration == 5)
+			ResamplingOf3DTrajectoryDCTDriver(Path, sortedSelectedCamera, sortedTimeStampInfoVector, PriorOrder, startFrame, stopFrame, npts, lamdaData, lamdaPrior);
+		else if (STCalibration == 4)
+			Generate3DUncertaintyFromRandomSampling(Path, sortedSelectedCamera, sortedTimeStampInfoVector, startFrame, stopFrame, npts, 0, 100, motionPriorPower);
+		else if (STCalibration == 6)
 		{
 			vector<int>DelayInfoVector;
 			for (int ii = 0; ii < nCams; ii++)
-				DelayInfoVector.push_back((int)(-(1.0*TimeStampInfoVector[ii] + 0.5)));
+				DelayInfoVector.push_back((int)(-(1.0*sortedTimeStampInfoVector[ii] + 0.5)));
 
-			double Rate = 1000.0, ialpha = 1.0 / 60.0;
+			double Rate = 10.0, ialpha = 1.0;
 			double GTFrameTimeStamp[10];
-			for (int ii = 0; ii < nCams; ii++)
-				GTFrameTimeStamp[ii] = TimeStampInfoVector[ii];
+			for (int ii = 0; ii < (int)sortedTimeStampInfoVector.size(); ii++)
+				GTFrameTimeStamp[ii] = sortedTimeStampInfoVector[ii];
 
-			TriangulateFrameSync2DTrajectories(Path, SelectedCamera, DelayInfoVector, startFrame, stopFrame, npts, false, GTFrameTimeStamp, &ialpha, &Rate);
+			TriangulateFrameSync2DTrajectories(Path, sortedSelectedCamera, DelayInfoVector, startFrame, stopFrame, npts, false, GTFrameTimeStamp, &ialpha, &Rate);
 		}
 		printf("Total time: %.2fs\n\n", omp_get_wtime() - startTime);
 	}
 
-	visualizationDriver(Path, nCams, startFrame, stopFrame, true, false, true, false, false, 0);
+	visualizationDriver(Path, nCams, startFrame, stopFrame, true, false, true, false, false, true, 0);
 	return 0;
 }
 
@@ -9005,7 +9011,7 @@ int IncrementalLASyncDriverJump(char *Path, int sampleStartID, int nsamples)
 		//TrajectoryTriangulation(Path, SelectedCams, nCams, 0, stopFrame, nTracks, OffsetInfo);
 	}
 
-	visualizationDriver(Path, nCams, 0, 600, true, false, true, false, true, 0);
+	visualizationDriver(Path, nCams, 0, 600, true, false, true, false, true, true, 0);
 
 	return 0;
 }
@@ -9055,7 +9061,7 @@ int IncrementalLASyncDriver(char *Path, int sampleStartID, int nsamples)
 
 		//TrajectoryTriangulation(Path, SelectedCams, nCams, 0, stopFrame, nTracks, OffsetInfo, lamda, motionPriorPower);
 	}
-	visualizationDriver(Path, nCams, 0, 600, true, false, true, false, true, 0);
+	visualizationDriver(Path, nCams, 0, 600, true, false, true, false, true, true, 0);
 
 	return 0;
 }
@@ -9617,7 +9623,7 @@ int TestLeastActionStillImages(char *Path)
 	int nCams = 5, nTracks = 31;
 	GenerateHynSooData(Path, nCams, nTracks);
 	SimultaneousSyncReconcHyunSooData(Path);
-	visualizationDriver(Path, 5, 0, 269, false, false, false, true, false, 0);
+	visualizationDriver(Path, 5, 0, 269, false, false, false, true, false, false, 0);
 	return 0;
 }
 
@@ -9827,7 +9833,6 @@ int SimulateCamerasAnd2DPointsForMoCap(char *Path, int nCams, int n3DTracks, dou
 			int nMissingData = (int)(PMissingData*nf);
 			sort(randomNumber.begin(), randomNumber.begin() + nMissingData);
 
-			fprintf(fp, "%d %d ", trackID, nf - nMissingData);
 			for (int frameID = 0; frameID < nframes; frameID += Rate)
 			{
 				if (frameID + UnSyncFrameTimeStamp[camID] > allXYZ[trackID].size() - 1)
@@ -10000,19 +10005,19 @@ int SimulateCamerasAnd2DPointsForMoCap(char *Path, int nCams, int n3DTracks, dou
 	}
 	return 0;
 }
-int TestLeastActionOnSyntheticData(char *Path)
+int TestLeastActionOnSyntheticData(char *Path, int STCalibration)
 {
 	//General setup
 	const int nCams = 10, npts = 31, width = 1920, height = 1080, startFrame = 0, stopFrame = 55, rate = 10;
 	double Intrinsic[5] = { 1500, 1500, 0, 960, 540 }, distortion[7] = { 0, 0, 0, 0, 0, 0, 0 }, radius = 3000, PMissingData = 0.0, noise2D = 2.0;
 	int UnSyncFrameTimeStamp[] = { 0, 1, 29, 5, 16, 3, 27, 2, 18, 4 };
-	SimulateCamerasAnd2DPointsForMoCap(Path, nCams, npts, Intrinsic, distortion, width, height, radius, true, false, rate, PMissingData, noise2D, UnSyncFrameTimeStamp);
-
+	//SimulateCamerasAnd2DPointsForMoCap(Path, nCams, npts, Intrinsic, distortion, width, height, radius, true, false, rate, PMissingData, noise2D, UnSyncFrameTimeStamp);
+	
 	//Input Parameters
 	const int PriorOrder = 1, motionPriorPower = 2, SearchRange = 10;
 	double lamdaData = 0.80, lamdaPrior = 1.0 - lamdaData, SearchStep = 0.1;
 
-	int STCalibration = 4;
+	FILE *fp = 0; char Fname[200];
 	if (STCalibration == 1)
 	{
 		double startTime = omp_get_wtime();
@@ -10041,7 +10046,7 @@ int TestLeastActionOnSyntheticData(char *Path)
 
 		IncrementalLeastActionSyncDiscreteContinous2D(Path, SelectedCamera, startFrame, stopFrame, npts, TimeStampInfoVector, 0, 0, 0, lamdaData, motionPriorPower, false);
 
-		char Fname[200]; sprintf(Fname, "%s/MotionPriorSyncProgress.txt", Path);	FILE *fp = fopen(Fname, "w+");
+		sprintf(Fname, "%s/MotionPriorSyncProgress.txt", Path);	fp = fopen(Fname, "w+");
 		fprintf(fp, "%d %d %d %d %.4f %.4f %.4f \n", 3, SelectedCamera[0], SelectedCamera[1], SelectedCamera[2], TimeStampInfoVector[0], TimeStampInfoVector[1], TimeStampInfoVector[2]);
 
 		int orderingChangeTrials = 0;
@@ -10089,34 +10094,36 @@ int TestLeastActionOnSyntheticData(char *Path)
 		}
 		fclose(fp);
 
-		//Resort the time with the earliest camera placed first
-		vector<int> SortedSelectedCamera;
-		vector<double> SortedTimeStampInfoVector = TimeStampInfoVector;
-		sort(SortedTimeStampInfoVector.begin(), SortedTimeStampInfoVector.end());
+		//Resort the camera
+		double earliest = 9e9;
+		vector<int> SortedSelectedCamera = SelectedCamera;
+		vector<double> SortedTimeStampInfoVector;
+		sort(SortedSelectedCamera.begin(), SortedSelectedCamera.end());
 		for (int ii = 0; ii < (int)SelectedCamera.size(); ii++)
 		{
 			for (int jj = 0; jj < (int)SelectedCamera.size(); jj++)
 			{
-				if (TimeStampInfoVector[jj] == SortedTimeStampInfoVector[ii])
+				if (SortedSelectedCamera[ii] == SelectedCamera[jj])
 				{
-					SortedSelectedCamera.push_back(SelectedCamera[jj]);
+					SortedTimeStampInfoVector.push_back(TimeStampInfoVector[jj]);
+					if (earliest > TimeStampInfoVector[jj])
+						earliest = TimeStampInfoVector[jj];
 					break;
 				}
 			}
 		}
 		for (int ii = (int)SortedSelectedCamera.size() - 1; ii >= 0; ii--)
-			SortedTimeStampInfoVector[ii] -= SortedTimeStampInfoVector[0];
-
-		//Triangulate trajectories
-		TrajectoryTriangulation(Path, SortedSelectedCamera, SortedTimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
-		ResamplingOf3DTrajectorySplineDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, startFrame, stopFrame, npts, lamdaData);
-		ResamplingOf3DTrajectoryDCTDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, PriorOrder, startFrame, stopFrame, npts, lamdaData, lamdaPrior);
-
+			SortedTimeStampInfoVector[ii] -= earliest;
 		sprintf(Fname, "%s/FMotionPriorSync.txt", Path);	fp = fopen(Fname, "w+");
 		for (int ii = 0; ii < (int)SortedSelectedCamera.size(); ii++)
 			fprintf(fp, "%d %.4f\n", SortedSelectedCamera[ii], SortedTimeStampInfoVector[ii]);
 		fclose(fp);
 
+		//Triangulate trajectories
+		TrajectoryTriangulation(Path, SortedSelectedCamera, SortedTimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
+		ResamplingOf3DTrajectorySplineDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, startFrame, stopFrame, npts, lamdaData);
+		ResamplingOf3DTrajectoryDCTDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, PriorOrder, startFrame, stopFrame, npts, lamdaData, lamdaPrior);
+		
 		printf("Total time: %.2fs\n\n", omp_get_wtime() - startTime);
 	}
 	else if (STCalibration > 1)
@@ -10137,31 +10144,38 @@ int TestLeastActionOnSyntheticData(char *Path)
 			SelectedCamera.push_back(selected), TimeStampInfoVector.push_back(offsetValue);
 		fclose(fp);
 
+		int nCams = (int)SelectedCamera.size();
+		vector<int>  sortedSelectedCamera(nCams);
+		vector<double> sortedTimeStampInfoVector(nCams);
+		for (int ii = 0; ii < nCams; ii++)
+			sortedSelectedCamera[ii] = ii,
+			sortedTimeStampInfoVector[SelectedCamera[ii]] = TimeStampInfoVector[ii];
+
 		if (STCalibration == 2)
-			TrajectoryTriangulation(Path, SelectedCamera, TimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
+			TrajectoryTriangulation(Path, sortedSelectedCamera, sortedTimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
 		else if (STCalibration == 3)
-			ResamplingOf3DTrajectorySplineDriver(Path, SelectedCamera, TimeStampInfoVector, startFrame, stopFrame, npts, lamdaData);
+			ResamplingOf3DTrajectorySplineDriver(Path, sortedSelectedCamera, sortedTimeStampInfoVector, startFrame, stopFrame, npts, lamdaData);
 		else if (STCalibration == 4)
-			ResamplingOf3DTrajectoryDCTDriver(Path, SelectedCamera, TimeStampInfoVector, PriorOrder, startFrame, stopFrame, npts, lamdaData, lamdaPrior);
+			ResamplingOf3DTrajectoryDCTDriver(Path, sortedSelectedCamera, sortedTimeStampInfoVector, PriorOrder, startFrame, stopFrame, npts, lamdaData, lamdaPrior);
 		else if (STCalibration == 4)
-			Generate3DUncertaintyFromRandomSampling(Path, SelectedCamera, TimeStampInfoVector, startFrame, stopFrame, npts, 0, 100, motionPriorPower);
+			Generate3DUncertaintyFromRandomSampling(Path, sortedSelectedCamera, sortedTimeStampInfoVector, startFrame, stopFrame, npts, 0, 100, motionPriorPower);
 		else if (STCalibration == 6)
 		{
 			vector<int>DelayInfoVector;
 			for (int ii = 0; ii < nCams; ii++)
-				DelayInfoVector.push_back((int)(-(1.0*TimeStampInfoVector[ii] + 0.5)));
+				DelayInfoVector.push_back((int)(-(1.0*sortedTimeStampInfoVector[ii] + 0.5)));
 
 			double Rate = 10.0, ialpha = 1.0;
 			double GTFrameTimeStamp[10];
-			for (int ii = 0; ii < (int)TimeStampInfoVector.size(); ii++)
-				GTFrameTimeStamp[ii] = TimeStampInfoVector[ii];
+			for (int ii = 0; ii < (int)sortedTimeStampInfoVector.size(); ii++)
+				GTFrameTimeStamp[ii] = sortedTimeStampInfoVector[ii];
 
-			TriangulateFrameSync2DTrajectories(Path, SelectedCamera, DelayInfoVector, startFrame, stopFrame, npts, false, GTFrameTimeStamp, &ialpha, &Rate);
+			TriangulateFrameSync2DTrajectories(Path, sortedSelectedCamera, DelayInfoVector, startFrame, stopFrame, npts, false, GTFrameTimeStamp, &ialpha, &Rate);
 		}
 		printf("Total time: %.2fs\n\n", omp_get_wtime() - startTime);
 	}
 
-	visualizationDriver(Path, nCams, startFrame, stopFrame, false, false, true, false, false, 0);
+	visualizationDriver(Path, nCams, startFrame, stopFrame, false, false, true, false, false, false, 0);
 	return 0;
 }
 
@@ -10878,7 +10892,7 @@ int DomeSyncGroundTruth()
 
 	double Offset[2];;
 	DomeLeastActionSyncBruteForce3D(Path, 1, Offset);
-	visualizationDriver(Path, 510, -80, 80, true, false, false, true, false, 0);
+	visualizationDriver(Path, 510, -80, 80, true, false, false, true, false, false, 0);
 
 	return 0;
 }
@@ -11167,7 +11181,7 @@ int main(int argc, char** argv)
 {
 	srand(0);
 	srand(time(NULL));
-	char Path[] = "E:/SimMotionPrior", Fname[200], Fname2[200];
+	char Path[] = "E:/Sim", Fname[200], Fname2[200];
 
 	//TestRollingShutterCalibOnSyntheticData(Path, atoi(argv[1]));
 	//TestRollingShutterCalibOnSyntheticData(Path, 1);
@@ -11179,18 +11193,16 @@ int main(int argc, char** argv)
 	//TestMotionPrior3DDriver("D:/cmu_mocap");
 	//Pose_se_BSplineInterpolation("E:/SimRollingShutter/_CamPoseS_0.txt", "E:/SimRollingShutter/__CamPose_0.txt", 500, "E:/SimRollingShutter/CamPose_1.txt");
 	//visualizationDriver(Path, 2, 1, 500, true, false, true, false, false, 1);
-	//CheckerBoardMultiviewSpatialTemporalCalibration(Path, 7, 0, 300, 0);
+	//CheckerBoardMultiviewSpatialTemporalCalibration(Path, 7, 0, 300, -1);
 	//visualizationDriver(Path, 10, 0, 540, false, false, true, false, false, 0);
 	//visualizationDriver(Path, 10, 0, 519, false, false, true, true, false, 0);
-	TestLeastActionOnSyntheticData(Path);
+	//TestLeastActionOnSyntheticData(Path, atoi(argv[1]);
+	TestLeastActionOnSyntheticData(Path, 1);
 	//ShowSyncLoad(Path, "FMotionPriorSync", Path, 7);
 	//RenderSuperCameraFromMultipleUnSyncedCamerasA(Path, 0, 1200, 1, false);
-	//VisualSfm_Refine(Path, atoi(argv[1]), 10.0);
-	//ReCalibratedFromGroundTruthCorrespondences(Path, 1, 0, 161, 88, atoi(argv[1]));
-
 	return 0;
 
-	int mode = atoi(argv[1]);
+	int mode = 3;// atoi(argv[1]);
 	if (mode == 0) //Step 1: sync all sequences with audio
 	{
 #ifdef _WINDOWS
@@ -11270,6 +11282,10 @@ int main(int argc, char** argv)
 	}
 	else if (mode == 2) //Step 3: do BA of visSfM and rescale the result
 	{
+		int ShutterModel = atoi(argv[2]);
+		RefineVisualSfM(Path, ShutterModel, 10.0);
+		//ReCalibratedFromGroundTruthCorrespondences(Path, 1, 0, 161, 88, ShutterModel);
+
 		sprintf(Fname, "%s/Corpus", Path);
 		double SfMdistance = TriangulatePointsFromCalibratedCameras(Fname, 0, 2, 2.0);
 		printf("SfM measured distance: %.3f\nPlease input the physcial distance (mm): ", SfMdistance);
@@ -11281,25 +11297,25 @@ int main(int argc, char** argv)
 	}
 	else if (mode == 3) //step 4: generate corpus
 	{
-		int nviews = atoi(argv[2]),
-			NPplus = atoi(argv[3]),
-			runMatching = atoi(argv[4]),
-			distortionCorrected = atoi(argv[5]);
+		int nviews = 162,//atoi(argv[2]),
+			NPplus = 5,//atoi(argv[3]),
+			runMatching = 1,//atoi(argv[4]),
+			distortionCorrected = 0;// atoi(argv[5]);
 
 		vector<int> SharedIntrinsicCamID; //INPUT shared cameras if needed
 
 		sprintf(Fname, "%s/Corpus", Path);
 		if (runMatching == 1)
 		{
-			int HistogramEqual = atoi(argv[6]),
-				OulierRemoveTestMethod = atoi(argv[7]), //Fmat is more prefered. USAC is much faster then 5-pts :(
-				LensType = atoi(argv[8]);
-			double ratioThresh = atof(argv[9]);
+			int HistogramEqual = 0,//atoi(argv[6]),
+				OulierRemoveTestMethod = 2,//atoi(argv[7]), //Fmat is more prefered. USAC is much faster then 5-pts :(
+				LensType = 0;// atoi(argv[8]);
+			double ratioThresh = 0.8;// atof(argv[9]);
 
 			int nCams = nviews, cameraToScan = -1;
 			if (OulierRemoveTestMethod == 2)
-				nCams = atoi(argv[10]),
-				cameraToScan = atoi(argv[11]);
+				nCams = 1,//atoi(argv[10]),
+				cameraToScan = 0;// atoi(argv[11]);
 
 			int timeID = -1, ninlierThesh = 50;
 			GeneratePointsCorrespondenceMatrix_SiftGPU2(Fname, nviews, -1, HistogramEqual, ratioThresh);
@@ -11330,7 +11346,7 @@ int main(int argc, char** argv)
 				SharedIntrinsicCamID.push_back(ii);
 
 			BuildCorpus(Fname, -1, distortionCorrected, GlobalShutter, SharedIntrinsicCamID, NPplus, LossType);
-			visualizationDriver(Path, 1, -1, -1, true, false, false, false, false, -1);
+			visualizationDriver(Path, 1, -1, -1, true, false, false, false, false, false, -1);
 		}
 		return 0;
 	}
@@ -11360,12 +11376,12 @@ int main(int argc, char** argv)
 	else if (mode == 5) //Step 6: Localize test sequence wrst to corpus
 	{
 		int StartTime = 1,//atoi(argv[2]),
-			StopTime = 100,//atoi(argv[3]),
+			StopTime = 800,//atoi(argv[3]),
 			seletectedCam = 0,//atoi(argv[4]),
 			nCams = 1,//atoi(argv[5]),
-			module = 3,// atoi(argv[6]), //0: Matching, 1: Localize, 2+3: refine on video, -1: visualize
-			distortionCorrected = 1,//atoi(argv[7]),
-			GetIntrinsicFromCorpus = 1,//atoi(argv[8]),
+			module = 0,// atoi(argv[6]), //0: Matching, 1: Localize, 2+3: refine on video, -1: visualize
+			distortionCorrected = 0,//atoi(argv[7]),
+			GetIntrinsicFromCorpus = 0,//atoi(argv[8]),
 			sharedIntriniscOptim = 1,//atoi(argv[9]),
 			LensType = 0;// atoi(argv[10]);// RADIAL_TANGENTIAL_PRISM;// FISHEYE;
 
@@ -11394,7 +11410,7 @@ int main(int argc, char** argv)
 		}
 
 		if (module != 0)
-			visualizationDriver(Path, nCams, StartTime, StopTime, true, false, true, false, false, StartTime);
+			visualizationDriver(Path, nCams, StartTime, StopTime, true, false, true, false, false, false, StartTime);
 		return 0;
 	}
 	else if (mode == 6) //step 7: generate 3d data from test sequences
@@ -11440,7 +11456,7 @@ int main(int argc, char** argv)
 			bool save2DCorres = false;
 			double MaxDepthThresh = 99000; //mm
 			Build3DFromSyncedImages(Path, nviews, StartTime, StopTime, timeStep, LensType, distortionCorrected, NViewPlus, reprojectionThreshold, MaxDepthThresh, FrameOffset, save2DCorres, false, 10.0, false);
-			visualizationDriver(Path, nviews, 0, 600, true, false, true, false, true, StartTime);
+			visualizationDriver(Path, nviews, 0, 600, true, false, true, false, true, false, StartTime);
 		}
 
 		return 0;

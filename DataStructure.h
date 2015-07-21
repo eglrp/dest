@@ -181,6 +181,7 @@ struct Trajectory3D
 	vector<int>viewIDs;
 	vector<Point2d> uv;
 	Point3d WC, STD;
+	Point3f rgb;
 };
 struct TrajectoryData
 {

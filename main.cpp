@@ -3442,7 +3442,8 @@ struct LeastActionCostCeres {
 			cost = pow(difX*difX + difY*difY + difZ*difZ, 2) / abs(pow(t2 - t1, 3) + (T)epsilon); //mv4dt
 		else if (motionPriorPower == 2)
 			cost = (difX*difX + difY*difY + difZ*difZ) / abs(t2 - t1 + (T)epsilon);
-		residuals[0] = (T)lamda*sqrt(cost);
+		residuals[0] = sqrt(cost) / (T)lamda;
+
 		return true;
 	}
 	template <typename T>	bool operator()(const T* const xyz1, const T* const xyz2, const T* const timeStamp, T* residuals) 	const
@@ -3456,7 +3457,7 @@ struct LeastActionCostCeres {
 			cost = pow(difX*difX + difY*difY + difZ*difZ, 2) / abs(pow(t2 - t1, 3) + (T)epsilon); //mv4dt
 		else if (motionPriorPower == 2)
 			cost = (difX*difX + difY*difY + difZ*difZ) / abs(t2 - t1 + (T)epsilon);
-		residuals[0] = (T)lamda*sqrt(cost);
+		residuals[0] = sqrt(cost) / (T)lamda;
 
 		return true;
 	}
@@ -3616,7 +3617,7 @@ struct LeastActionCost3DCeres {
 			cost = pow(difX*difX + difY*difY + difZ*difZ, 2) / abs(pow(timeStamp2 - timeStamp1, 3) + (T)epsilon); //mv4dt
 		else if (motionPriorPower == 2)
 			cost = (difX*difX + difY*difY + difZ*difZ) / abs(timeStamp2 - timeStamp1 + (T)epsilon);
-		residuals[0] = (T)lamda*sqrt(cost);
+		residuals[0] = sqrt(cost) / (T)lamda;
 		return true;
 	}
 	static ceres::CostFunction* CreateAutoDiff(double Stamp1, double Stamp2, double epsilon, double lamda, int motionPriorPower)
@@ -3642,8 +3643,8 @@ struct IdealGeoProjectionCeres {
 		T numY = (T)P[4] * pt3D[0] + (T)P[5] * pt3D[1] + (T)P[6] * pt3D[2] + (T)P[7];
 		T denum = (T)P[8] * pt3D[0] + (T)P[9] * pt3D[1] + (T)P[10] * pt3D[2] + (T)P[11];
 
-		residuals[0] = (T)(lamda)*(numX / denum - T(observed_x));
-		residuals[1] = (T)(lamda)*(numY / denum - T(observed_y));
+		residuals[0] = (numX / denum - T(observed_x)) / (T)(lamda);
+		residuals[1] = (numY / denum - T(observed_y)) / (T)(lamda);
 
 		return true;
 	}
@@ -4696,7 +4697,45 @@ int TestMotionPrior3DDriver(char *Path)
 	return 0;
 }
 
-void LeastActionOptimXYZT_3D_NoSimulatenousPoints(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int ntracks, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true)
+void MotionPrior_ML_Weighting(vector<ImgPtEle> *PerCam_UV, int ntracks, int nCams)
+{
+	for (int trackID = 0; trackID < ntracks; trackID++)
+	{
+		for (int camID = 0; camID < nCams; camID++)
+		{
+			for (int kk = 0; kk < PerCam_UV[camID*ntracks + trackID].size(); kk++)
+			{
+				ImgPtEle ptEle = PerCam_UV[camID*ntracks + trackID][kk];
+				ptEle.K[2] = 0, ptEle.K[5] = 0;
+
+				double Scale = PerCam_UV[camID*ntracks + trackID][kk].scale, canonicalScale = PerCam_UV[camID*ntracks + trackID][kk].canonicalScale;
+				double std2d = PerCam_UV[camID*ntracks + trackID][kk].std2D;
+
+				if (Scale >= canonicalScale)
+				{
+					double sigmaRetina[9], sigma2d[9] = { std2d*Scale / canonicalScale, 0, 0, 0, std2d*Scale / canonicalScale, 0, 0, 0, 1 };
+
+					Map < Matrix < double, 3, 3, RowMajor > > eK(ptEle.K);
+					Map < Matrix < double, 3, 3, RowMajor > > esigma2d(sigma2d);
+					Map < Matrix < double, 3, 3, RowMajor > > esigmaRetina(sigmaRetina);
+					Matrix3d eiK = eK.inverse();
+					esigmaRetina = eiK*esigma2d*eiK.transpose();
+
+					double depth = sqrt(pow(ptEle.pt3D.x - ptEle.camcenter[0], 2) + pow(ptEle.pt3D.y - ptEle.camcenter[1], 2) + pow(ptEle.pt3D.z - ptEle.camcenter[2], 2));
+					PerCam_UV[camID*ntracks + trackID][kk].std3D = max(sigmaRetina[0], sigmaRetina[4]) * PerCam_UV[camID*ntracks + trackID][kk].pixelSizeToMm*depth;
+				}
+				else
+				{
+					PerCam_UV[camID*ntracks + trackID][kk].std2D = 0.0;
+					PerCam_UV[camID*ntracks + trackID][kk].std3D = 0.0; //disregard this point
+				}
+			}
+		}
+	}
+
+	return;
+}
+void MotionPrior_Optim_SpatialStructure_NoSimulatenousPoints(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int ntracks, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true)
 {
 	double ActionCost = 0.0, ProjCost = 0.0, costiX, costiY, costi;
 
@@ -4981,7 +5020,7 @@ void LeastActionOptimXYZT_3D_NoSimulatenousPoints(char *Path, vector<double*> &A
 
 	return;
 }
-double LeastActionOptimXYZT_3D_Algebraic(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int ntracks, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true)
+double MotionPrior_Optim_SpatialStructure_Algebraic(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int ntracks, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true)
 {
 	vector<double> *VectorTime = new vector<double>[ntracks];
 	vector<int> *VectorCamID = new vector<int>[ntracks], *VectorFrameID = new vector<int>[ntracks], *simulatneousPoints = new vector<int>[ntracks];
@@ -5327,7 +5366,7 @@ double LeastActionOptimXYZT_3D_Algebraic(char *Path, vector<double*> &Allpt3D, v
 
 	return CeresCost;
 }
-double LeastActionOptimXYZT_3D_Geometric(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int npts, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true)
+double MotionPrior_Optim_SpatialStructure_Geometric(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int npts, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true)
 {
 	vector<double> *VectorTime = new vector<double>[npts];
 	vector<int> *VectorCamID = new vector<int>[npts], *VectorFrameID = new vector<int>[npts], *simulatneousPoints = new vector<int>[npts];
@@ -5475,8 +5514,16 @@ double LeastActionOptimXYZT_3D_Geometric(char *Path, vector<double*> &Allpt3D, v
 				}
 				else
 				{
-					ceres::CostFunction* cost_function3 = IdealGeoProjectionCeres::Create(Traj2DAll[pid][ll + incre].P, Traj2DAll[pid][ll + incre].pt2D, sqrt(lamda));
-					problem.AddResidualBlock(cost_function3, NULL, Allpt3D[pid] + 3 * ll);
+					if (Traj2DAll[pid][ll + incre].std3D < 0.0)
+					{
+						ceres::CostFunction* cost_function = IdealGeoProjectionCeres::Create(Traj2DAll[pid][ll + incre].P, Traj2DAll[pid][ll + incre].pt2D, 1.0 / sqrt(lamda));
+						problem.AddResidualBlock(cost_function, NULL, Allpt3D[pid] + 3 * ll);
+					}
+					else
+					{
+						ceres::CostFunction* cost_function = IdealGeoProjectionCeres::Create(Traj2DAll[pid][ll + incre].P, Traj2DAll[pid][ll + incre].pt2D, Traj2DAll[pid][ll + incre].std2D);
+						problem.AddResidualBlock(cost_function, NULL, Allpt3D[pid] + 3 * ll);
+					}
 				}
 				incre++;
 			}
@@ -5502,15 +5549,29 @@ double LeastActionOptimXYZT_3D_Geometric(char *Path, vector<double*> &Allpt3D, v
 			double  t1 = (currentOffset[camID1] + VectorFrameID[pid][ll] + shutterOffset1) * ialpha*Tscale;
 			double  t2 = (currentOffset[camID2] + VectorFrameID[pid][ll + incre] + shutterOffset2) * ialpha*Tscale;
 
-			ceres::CostFunction* cost_function = LeastActionCost3DCeres::CreateAutoDiff(t1, t2, eps, sqrt(1.0 - lamda), motionPriorPower);
-			//ceres::CostFunction* cost_function = LeastActionCostCeres::CreateNumerDiffSame(VectorFrameID[pid][ll], VectorFrameID[pid][ll + incre], ialpha, Tscale, eps, motionPriorPower);
-			problem.AddResidualBlock(cost_function, NULL, &Allpt3D[pid][3 * ll], &Allpt3D[pid][3 * (ll + incre)]);
+			if (Traj2DAll[pid][ll + incre].std3D < 0.0)
+			{
+				ceres::CostFunction* cost_function = LeastActionCost3DCeres::CreateAutoDiff(t1, t2, eps, 1.0 / sqrt(1.0 - lamda), motionPriorPower);
+				//ceres::CostFunction* cost_function = LeastActionCostCeres::CreateNumerDiffSame(VectorFrameID[pid][ll], VectorFrameID[pid][ll + incre], ialpha, Tscale, eps, motionPriorPower);
+				problem.AddResidualBlock(cost_function, NULL, &Allpt3D[pid][3 * ll], &Allpt3D[pid][3 * (ll + incre)]);
 
-			ceres::CostFunction* cost_function2 = IdealGeoProjectionCeres::Create(Traj2DAll[pid][ll].P, Traj2DAll[pid][ll].pt2D, sqrt(lamda));
-			problem.AddResidualBlock(cost_function2, NULL, Allpt3D[pid] + 3 * ll);
+				ceres::CostFunction* cost_function2 = IdealGeoProjectionCeres::Create(Traj2DAll[pid][ll].P, Traj2DAll[pid][ll].pt2D, 1.0 / sqrt(lamda));
+				problem.AddResidualBlock(cost_function2, NULL, Allpt3D[pid] + 3 * ll);
 
-			ceres::CostFunction* cost_function3 = IdealGeoProjectionCeres::Create(Traj2DAll[pid][ll + incre].P, Traj2DAll[pid][ll + incre].pt2D, sqrt(lamda));
-			problem.AddResidualBlock(cost_function3, NULL, Allpt3D[pid] + 3 * (ll + incre));
+				ceres::CostFunction* cost_function3 = IdealGeoProjectionCeres::Create(Traj2DAll[pid][ll + incre].P, Traj2DAll[pid][ll + incre].pt2D, 1.0 / sqrt(lamda));
+				problem.AddResidualBlock(cost_function3, NULL, Allpt3D[pid] + 3 * (ll + incre));
+			}
+			else
+			{
+				ceres::CostFunction* cost_function = LeastActionCost3DCeres::CreateAutoDiff(t1, t2, eps, Traj2DAll[pid][ll].std3D, motionPriorPower);
+				problem.AddResidualBlock(cost_function, NULL, &Allpt3D[pid][3 * ll], &Allpt3D[pid][3 * (ll + incre)]);
+
+				ceres::CostFunction* cost_function2 = IdealGeoProjectionCeres::Create(Traj2DAll[pid][ll].P, Traj2DAll[pid][ll].pt2D, Traj2DAll[pid][ll].std2D);
+				problem.AddResidualBlock(cost_function2, NULL, Allpt3D[pid] + 3 * ll);
+
+				ceres::CostFunction* cost_function3 = IdealGeoProjectionCeres::Create(Traj2DAll[pid][ll + incre].P, Traj2DAll[pid][ll + incre].pt2D, Traj2DAll[pid][(ll + incre)].std2D);
+				problem.AddResidualBlock(cost_function3, NULL, Allpt3D[pid] + 3 * (ll + incre));
+			}
 
 			ll += incre - 1;
 		}
@@ -5680,7 +5741,7 @@ double LeastActionOptimXYZT_3D_Geometric(char *Path, vector<double*> &Allpt3D, v
 
 	return CeresCost;
 }
-double LeastActionOptimXYZT_JointGeometric(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int ntracks, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true)
+double MotionPrior_Optim_ST_Geometric(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int ntracks, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true)
 {
 	double ActionCost = 0.0, ProjCost = 0.0, costi;
 
@@ -5788,15 +5849,32 @@ double LeastActionOptimXYZT_JointGeometric(char *Path, vector<double*> &Allpt3D,
 
 			if (camID1 == camID2)
 			{
-				ceres::CostFunction* cost_function = LeastActionCostCeres::CreateAutoDiffSame(VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, eps, sqrt(1.0 - lamda), motionPriorPower);
-				//ceres::CostFunction* cost_function = LeastActionCostCeres::CreateNumerDiffSame(VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, rate, eps, motionPriorPower);
-				problem.AddResidualBlock(cost_function, NULL, &Allpt3D[trackID][3 * ll], &Allpt3D[trackID][3 * (ll + 1)], &currentOffset[camID1]);
+				if (Traj2DAll[trackID][ll].std3D < 0.0)
+				{
+					ceres::CostFunction* cost_function = LeastActionCostCeres::CreateAutoDiffSame(VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, eps, 1.0 / sqrt(1.0 - lamda), motionPriorPower);
+					//ceres::CostFunction* cost_function = LeastActionCostCeres::CreateNumerDiffSame(VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, rate, eps, motionPriorPower);
+					problem.AddResidualBlock(cost_function, NULL, &Allpt3D[trackID][3 * ll], &Allpt3D[trackID][3 * (ll + 1)], &currentOffset[camID1]);
+				}
+				else
+				{
+					ceres::CostFunction* cost_function = LeastActionCostCeres::CreateAutoDiffSame(VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, eps, Traj2DAll[trackID][ll].std3D, motionPriorPower);
+					problem.AddResidualBlock(cost_function, NULL, &Allpt3D[trackID][3 * ll], &Allpt3D[trackID][3 * (ll + 1)], &currentOffset[camID1]);
+				}
+
 			}
 			else
 			{
-				ceres::CostFunction* cost_function = LeastActionCostCeres::CreateAutoDiff(VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, eps, sqrt(1.0 - lamda), motionPriorPower);
-				//ceres::CostFunction* cost_function = LeastActionCostCeres::CreateNumerDiff(VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, rate, eps, motionPriorPower);
-				problem.AddResidualBlock(cost_function, NULL, &Allpt3D[trackID][3 * ll], &Allpt3D[trackID][3 * (ll + 1)], &currentOffset[camID1], &currentOffset[camID2]);
+				if (Traj2DAll[trackID][ll].std3D < 0.0)
+				{
+					ceres::CostFunction* cost_function = LeastActionCostCeres::CreateAutoDiff(VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, eps, 1.0 / sqrt(1.0 - lamda), motionPriorPower);
+					//ceres::CostFunction* cost_function = LeastActionCostCeres::CreateNumerDiff(VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, rate, eps, motionPriorPower);
+					problem.AddResidualBlock(cost_function, NULL, &Allpt3D[trackID][3 * ll], &Allpt3D[trackID][3 * (ll + 1)], &currentOffset[camID1], &currentOffset[camID2]);
+				}
+				else
+				{
+					ceres::CostFunction* cost_function = LeastActionCostCeres::CreateAutoDiff(VectorFrameID[trackID][ll], VectorFrameID[trackID][ll + 1], ialpha, Tscale, eps, Traj2DAll[trackID][ll].std3D, motionPriorPower);
+					problem.AddResidualBlock(cost_function, NULL, &Allpt3D[trackID][3 * ll], &Allpt3D[trackID][3 * (ll + 1)], &currentOffset[camID1], &currentOffset[camID2]);
+				}
 			}
 		}
 
@@ -5807,8 +5885,16 @@ double LeastActionOptimXYZT_JointGeometric(char *Path, vector<double*> &Allpt3D,
 			costi = PinholeReprojectionErrorSimpleDebug(Traj2DAll[trackID][ll].P, P3d, P2d);
 			ProjCost += costi;
 
-			ceres::CostFunction* cost_function = IdealGeoProjectionCeres::Create(Traj2DAll[trackID][ll].P, Traj2DAll[trackID][ll].pt2D, sqrt(lamda));
-			problem.AddResidualBlock(cost_function, NULL, Allpt3D[trackID] + 3 * ll);
+			if (Traj2DAll[trackID][ll].std3D < 0.0)
+			{
+				ceres::CostFunction* cost_function = IdealGeoProjectionCeres::Create(Traj2DAll[trackID][ll].P, Traj2DAll[trackID][ll].pt2D, 1.0 / sqrt(lamda));
+				problem.AddResidualBlock(cost_function, NULL, Allpt3D[trackID] + 3 * ll);
+			}
+			else
+			{
+				ceres::CostFunction* cost_function = IdealGeoProjectionCeres::Create(Traj2DAll[trackID][ll].P, Traj2DAll[trackID][ll].pt2D, Traj2DAll[trackID][ll].std2D);
+				problem.AddResidualBlock(cost_function, NULL, Allpt3D[trackID] + 3 * ll);
+			}
 		}
 	}
 	for (int trackID = 0; trackID < ntracks; trackID++)
@@ -5939,7 +6025,7 @@ double LeastActionOptimXYZT_JointGeometric(char *Path, vector<double*> &Allpt3D,
 
 	return CeresCost;
 }
-double LeastActionOptimXYZT_JointGeometricDynamic(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int ntracks, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true)
+double MotionPrior_Optim_ST_GeometricDynamic(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int ntracks, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true)
 {
 	double ActionCost = 0.0, ProjCost = 0.0;
 
@@ -6208,7 +6294,7 @@ double LeastActionOptimXYZT_JointGeometricDynamic(char *Path, vector<double*> &A
 
 	return CeresCost;
 }
-double LeastActionOptimXYZT_JointGeometricSpline(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int ntracks, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true)
+double MotionPrior_Optim_ST_GeometricSpline(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int ntracks, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true)
 {
 	const int UpsamplingRate = 2;
 	double ActionCost = 0.0, ProjCost = 0.0;
@@ -6536,7 +6622,7 @@ double LeastActionOptimXYZT_JointGeometricSpline(char *Path, vector<double*> &Al
 	return CeresCost;
 }
 
-double LeastActionSyncBruteForce2DStereo(char *Path, vector<int>SelectedCams, int startFrame, int stopFrame, int ntracks, vector<double> &OffsetInfo, int LowBound, int UpBound, double frameSize, double lamda, int motionPriorPower, int &totalPoints, bool silient = true)
+double LeastActionSyncBruteForce2DStereo(char *Path, vector<int> &SelectedCams, int startFrame, int stopFrame, int ntracks, vector<double> &OffsetInfo, int LowBound, int UpBound, double frameSize, double lamda, int motionPriorPower, int &totalPoints, bool silient = true)
 {
 	//Offset is in timestamp format
 	const double Tscale = 1000.0, fps = 60, ialpha = 1.0 / fps, eps = 1.0e-6;
@@ -6673,8 +6759,9 @@ double LeastActionSyncBruteForce2DStereo(char *Path, vector<int>SelectedCams, in
 		currentOffset[0] = OffsetInfo[0], currentOffset[1] = off *frameSize + OffsetInfo[1];
 
 		PointsPerTrack.clear();
-		ceresCost = LeastActionOptimXYZT_3D_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
-		ceresCost = LeastActionOptimXYZT_3D_Geometric(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
+		ceresCost = MotionPrior_Optim_SpatialStructure_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
+		MotionPrior_ML_Weighting(PerCam_UV, ntracks, nCams);
+		ceresCost = MotionPrior_Optim_SpatialStructure_Geometric(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
 
 		if (silient)
 			printf("@off %d (id: %d): C: %.5e Ac: %.5e Pc: %.5e Lc: %.5f Dc: %.5f\n", off, count, ceresCost, APLDCost[0], APLDCost[1], APLDCost[2], APLDCost[3]);
@@ -6710,7 +6797,7 @@ double LeastActionSyncBruteForce2DStereo(char *Path, vector<int>SelectedCams, in
 
 	return finalCost;
 }
-int LeastActionSyncBruteForce2DTriplet(char *Path, vector<int> SelectedCams, int startFrame, int stopFrame, int ntracks, vector<double> &OffsetInfo, int LowBound, int UpBound, double frameSize, double lamda, int motionPriorPower)
+int LeastActionSyncBruteForce2DTriplet(char *Path, vector<int> &SelectedCams, int startFrame, int stopFrame, int ntracks, vector<double> &OffsetInfo, int LowBound, int UpBound, double frameSize, double lamda, int motionPriorPower)
 {
 	//Offset is in timestamp format
 	const double Tscale = 1000.0, fps = 60, ialpha = 1.0 / fps, eps = 1.0e-6;
@@ -6735,7 +6822,7 @@ int LeastActionSyncBruteForce2DTriplet(char *Path, vector<int> SelectedCams, int
 	vector<double> AllError2D;
 	ImgPtEle ptEle;
 	vector<ImgPtEle> *PerCam_UV = new vector<ImgPtEle>[nCams*ntracks];
-	vector<XYZD> *PerCam_XYZ = new vector<XYZD>[nCams], *XYZ = new vector<XYZD>[ntracks], XYZBK;
+	vector<XYZD> *PerCam_XYZ = new vector<XYZD>[nCams], *XYZ = new vector<XYZD>[ntracks];
 
 	//Get 2D info
 	for (int camID = 0; camID < nCams; camID++)
@@ -6862,8 +6949,9 @@ int LeastActionSyncBruteForce2DTriplet(char *Path, vector<int> SelectedCams, int
 				currentOffset[0] = OffsetInfo[0], currentOffset[1] = off1*frameSize + OffsetInfo[1], currentOffset[2] = off2*frameSize + OffsetInfo[2];
 
 				PointsPerTrack.clear();
-				LeastActionOptimXYZT_3D_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
-				ceresCost = LeastActionOptimXYZT_3D_Geometric(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
+				MotionPrior_Optim_SpatialStructure_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
+				MotionPrior_ML_Weighting(PerCam_UV, ntracks, nCams);
+				ceresCost = MotionPrior_Optim_SpatialStructure_Geometric(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
 
 				/*for (int trackID = 0; trackID < ntracks; trackID++)
 				{
@@ -6922,7 +7010,7 @@ int LeastActionSyncBruteForce2DTriplet(char *Path, vector<int> SelectedCams, int
 
 	return 0;
 }
-int IncrementalLeastActionSyncDiscreteContinous2D(char *Path, vector<int> SelectedCams, int startFrame, int stopFrame, int npts, vector<double> &OffsetInfo, int LowBound, int UpBound, double frameSize, double lamda, int motionPriorPower, bool RefineConsiderOrdering = true)
+int IncrementalLeastActionSyncDiscreteContinous2D(char *Path, vector<int> &SelectedCams, int startFrame, int stopFrame, int npts, vector<double> &OffsetInfo, int LowBound, int UpBound, double frameSize, double lamda, int motionPriorPower, bool RefineConsiderOrdering = true)
 {
 	//Offset is in timestamp format
 	char Fname[200]; FILE *fp = 0;
@@ -6943,7 +7031,7 @@ int IncrementalLeastActionSyncDiscreteContinous2D(char *Path, vector<int> Select
 	vector<double> AllError2D;
 	ImgPtEle ptEle;
 	vector<ImgPtEle> *PerCam_UV = new vector<ImgPtEle>[nCams*npts];
-	vector<XYZD> *PerCam_XYZ = new vector<XYZD>[nCams], *XYZ = new vector<XYZD>[npts], XYZBK;
+	vector<XYZD> *PerCam_XYZ = new vector<XYZD>[nCams], *XYZ = new vector<XYZD>[npts];
 
 	for (int camID = 0; camID < nCams; camID++)
 	{
@@ -7079,7 +7167,7 @@ int IncrementalLeastActionSyncDiscreteContinous2D(char *Path, vector<int> Select
 
 				PointsPerTrack.clear();
 				printf("Trial %d (%.2f): ", off, off *frameSize + OffsetInfo[nCams - 1]);
-				LeastActionOptimXYZT_3D_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, npts, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
+				MotionPrior_Optim_SpatialStructure_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, npts, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
 				printf("Ac: %.5e Pc: %.5e Lc: %.5f Dc: %.5f\n", APLDCost[0], APLDCost[1], APLDCost[2], APLDCost[3]);
 
 				AllACost[count] = APLDCost[0], AllPCost[count] = APLDCost[1];
@@ -7132,8 +7220,9 @@ int IncrementalLeastActionSyncDiscreteContinous2D(char *Path, vector<int> Select
 				Quick_Sort_Double(subframeRemander, subframeRemanderID, 0, nCams - 1);
 
 				printf("Trial %d/%d (%.4f): ", ii + (kk - LowBound)*naddedCams, (UpBound - LowBound + 1)*naddedCams, currentOffset[nCams - 1]);
-				LeastActionOptimXYZT_3D_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, npts, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
-				CeresCost = LeastActionOptimXYZT_JointGeometric(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, npts, true, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
+				MotionPrior_Optim_SpatialStructure_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, npts, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
+				MotionPrior_ML_Weighting(PerCam_UV, npts, nCams);
+				CeresCost = MotionPrior_Optim_ST_Geometric(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, npts, true, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
 
 				printf("Cost: %.5e Ac: %.5e Pc: %.5e Lc: %.5f Dc: %.5f\nOffsets:", CeresCost, APLDCost[0], APLDCost[1], APLDCost[2], APLDCost[3]);
 				for (int jj = 0; jj < nCams; jj++)
@@ -7191,8 +7280,9 @@ int IncrementalLeastActionSyncDiscreteContinous2D(char *Path, vector<int> Select
 		for (int ii = 0; ii < nCams; ii++)
 			currentOffset[ii] = OffsetInfo[ii];
 
-		LeastActionOptimXYZT_3D_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, npts, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
-		LeastActionOptimXYZT_JointGeometric(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, npts, true, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
+		MotionPrior_Optim_SpatialStructure_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, npts, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
+		MotionPrior_ML_Weighting(PerCam_UV, npts, nCams);
+		MotionPrior_Optim_ST_Geometric(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, npts, true, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, true);
 
 		for (int jj = 0; jj < nCams; jj++)
 			OffsetInfo[jj] = currentOffset[jj];
@@ -7213,8 +7303,8 @@ int IncrementalLeastActionSyncDiscreteContinous2D(char *Path, vector<int> Select
 int TrajectoryTriangulation(char *Path, vector<int> &SelectedCams, vector<double> &TimeStampInfoVector, int npts, int startFrame, int stopFrame, double lamda, int motionPriorPower)
 {
 	char Fname[200]; FILE *fp = 0;
-	const double Tscale = 1000.0, fps = 60.0, ialpha = 1.0 / fps, eps = 1.0e-6;
-	//const double Tscale = 10.0, fps = 1.0, ialpha = 1.0 / fps, eps = 1.0e-6;
+	//const double Tscale = 1000.0, fps = 60.0, ialpha = 1.0 / fps, eps = 1.0e-6;
+	const double Tscale = 10.0, fps = 1.0, ialpha = 1.0 / fps, eps = 1.0e-6;
 
 	//Read calib info
 	int nCams = (int)SelectedCams.size();
@@ -7337,12 +7427,13 @@ int TrajectoryTriangulation(char *Path, vector<int> &SelectedCams, vector<double
 	for (int ii = 0; ii < nCams; ii++)
 		OffsetInfo[ii] = TimeStampInfoVector[ii];
 
-	//LeastActionOptimXYZT_3D_NoSimulatenousPoints(Path, All3D, PerCam_UV, PointsPerTrack, OffsetInfo, npts, false, nCams, Tscale, ialpha, eps, lamda, APLDCost, false, false);
+	//MotionPrior_Optim_SpatialStructure_NoSimulatenousPoints(Path, All3D, PerCam_UV, PointsPerTrack, OffsetInfo, npts, false, nCams, Tscale, ialpha, eps, lamda, APLDCost, false, false);
 	printf("Algrebraic triangulation:\n");
-	LeastActionOptimXYZT_3D_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, OffsetInfo, npts, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, false);
+	MotionPrior_Optim_SpatialStructure_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, OffsetInfo, npts, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, false);
 
 	printf("\nGeometric triangulation:\n");
-	LeastActionOptimXYZT_3D_Geometric(Path, All3D, PerCam_UV, PointsPerTrack, OffsetInfo, npts, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, false);
+	MotionPrior_ML_Weighting(PerCam_UV, npts, nCams);
+	MotionPrior_Optim_SpatialStructure_Geometric(Path, All3D, PerCam_UV, PointsPerTrack, OffsetInfo, npts, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, false);
 
 	for (int pid = 0; pid < npts; pid++)
 	{
@@ -7777,8 +7868,9 @@ int Generate3DUncertaintyFromRandomSampling(char *Path, vector<int> SelectedCams
 		for (int ii = 0; ii < nCams; ii++)
 			currentOffset[ii] = OffsetInfo[ii];
 
-		LeastActionOptimXYZT_3D_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, false);
-		//LeastActionOptimXYZT_3D_Geometric(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, false, nCams, Tscale, ialpha, eps, lamda, APLDCost, false, false);
+		MotionPrior_Optim_SpatialStructure_Algebraic(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, false, nCams, motionPriorPower, Tscale, ialpha, eps, lamda, APLDCost, false, false);
+		MotionPrior_ML_Weighting(PerCam_UV, ntracks, nCams);
+		//MotionPrior_Optim_SpatialStructure_Geometric(Path, All3D, PerCam_UV, PointsPerTrack, currentOffset, ntracks, false, nCams, Tscale, ialpha, eps, lamda, APLDCost, false, false);
 
 		for (int trackID = 0; trackID < ntracks; trackID++)
 		{
@@ -9568,8 +9660,9 @@ int SimultaneousSyncReconcHyunSooData(char *Path)
 
 	double rate = 8.3;
 	double Cost[4];
-	LeastActionOptimXYZT_3D_Algebraic(Path, PerTrack3D, PerCam_UV, PerPoint_nFrames, currentOffset, ntracks, non_monotonicDescent, nCams, 4, Tscale, ialpha, eps, lamda, Cost, true, false);
-	LeastActionOptimXYZT_3D_Geometric(Path, PerTrack3D, PerCam_UV, PerPoint_nFrames, currentOffset, ntracks, non_monotonicDescent, nCams, 4, Tscale, ialpha, eps, lamda, Cost, true, false);
+	MotionPrior_Optim_SpatialStructure_Algebraic(Path, PerTrack3D, PerCam_UV, PerPoint_nFrames, currentOffset, ntracks, non_monotonicDescent, nCams, 4, Tscale, ialpha, eps, lamda, Cost, true, false);
+	MotionPrior_ML_Weighting(PerCam_UV, ntracks, nCams);
+	MotionPrior_Optim_SpatialStructure_Geometric(Path, PerTrack3D, PerCam_UV, PerPoint_nFrames, currentOffset, ntracks, non_monotonicDescent, nCams, 4, Tscale, ialpha, eps, lamda, Cost, true, false);
 
 	for (int trackID = 0; trackID < ntracks; trackID++)
 	{
@@ -9586,9 +9679,10 @@ int SimultaneousSyncReconcHyunSooData(char *Path)
 	fclose(fp);
 
 	printf("Layer 2\n");
-	LeastActionOptimXYZT_3D_Algebraic(Path, PerTrack3D, PerCam_UV, PerPoint_nFrames, currentOffset, ntracks, non_monotonicDescent, nCams, 4, Tscale, ialpha, eps, lamda, Cost, true, false);
-	LeastActionOptimXYZT_3D_Geometric(Path, PerTrack3D, PerCam_UV, PerPoint_nFrames, currentOffset, ntracks, non_monotonicDescent, nCams, 4, Tscale, ialpha, eps, lamda, Cost, true, false);
-	LeastActionOptimXYZT_JointGeometric(Path, PerTrack3D, PerCam_UV, PerPoint_nFrames, currentOffset, ntracks, non_monotonicDescent, nCams, 4, Tscale, ialpha, eps, lamda, Cost, true, false);
+	MotionPrior_Optim_SpatialStructure_Algebraic(Path, PerTrack3D, PerCam_UV, PerPoint_nFrames, currentOffset, ntracks, non_monotonicDescent, nCams, 4, Tscale, ialpha, eps, lamda, Cost, true, false);
+	MotionPrior_ML_Weighting(PerCam_UV, ntracks, nCams);
+	MotionPrior_Optim_SpatialStructure_Geometric(Path, PerTrack3D, PerCam_UV, PerPoint_nFrames, currentOffset, ntracks, non_monotonicDescent, nCams, 4, Tscale, ialpha, eps, lamda, Cost, true, false);
+	MotionPrior_Optim_ST_Geometric(Path, PerTrack3D, PerCam_UV, PerPoint_nFrames, currentOffset, ntracks, non_monotonicDescent, nCams, 4, Tscale, ialpha, eps, lamda, Cost, true, false);
 
 	//printf("Saving results...\n");
 	for (int trackID = 0; trackID < ntracks; trackID++)
@@ -10012,12 +10106,11 @@ int TestLeastActionOnSyntheticData(char *Path, int STCalibration)
 	double Intrinsic[5] = { 1500, 1500, 0, 960, 540 }, distortion[7] = { 0, 0, 0, 0, 0, 0, 0 }, radius = 3000, PMissingData = 0.0, noise2D = 2.0;
 	int UnSyncFrameTimeStamp[] = { 0, 1, 29, 5, 16, 3, 27, 2, 18, 4 };
 	//SimulateCamerasAnd2DPointsForMoCap(Path, nCams, npts, Intrinsic, distortion, width, height, radius, true, false, rate, PMissingData, noise2D, UnSyncFrameTimeStamp);
-	
+
 	//Input Parameters
 	const int PriorOrder = 1, motionPriorPower = 2, SearchRange = 10;
-	double lamdaData = 0.80, lamdaPrior = 1.0 - lamdaData, SearchStep = 0.1;
+	double lamdaData = 0.85, lamdaPrior = 1.0 - lamdaData, SearchStep = 0.1;
 
-	FILE *fp = 0; char Fname[200];
 	if (STCalibration == 1)
 	{
 		double startTime = omp_get_wtime();
@@ -10046,7 +10139,7 @@ int TestLeastActionOnSyntheticData(char *Path, int STCalibration)
 
 		IncrementalLeastActionSyncDiscreteContinous2D(Path, SelectedCamera, startFrame, stopFrame, npts, TimeStampInfoVector, 0, 0, 0, lamdaData, motionPriorPower, false);
 
-		sprintf(Fname, "%s/MotionPriorSyncProgress.txt", Path);	fp = fopen(Fname, "w+");
+		char Fname[200]; sprintf(Fname, "%s/MotionPriorSyncProgress.txt", Path);	FILE *fp = fopen(Fname, "w+");
 		fprintf(fp, "%d %d %d %d %.4f %.4f %.4f \n", 3, SelectedCamera[0], SelectedCamera[1], SelectedCamera[2], TimeStampInfoVector[0], TimeStampInfoVector[1], TimeStampInfoVector[2]);
 
 		int orderingChangeTrials = 0;
@@ -10094,10 +10187,10 @@ int TestLeastActionOnSyntheticData(char *Path, int STCalibration)
 		}
 		fclose(fp);
 
-		//Resort the camera
 		double earliest = 9e9;
-		vector<int> SortedSelectedCamera = SelectedCamera;
+		vector<int> SortedSelectedCamera;
 		vector<double> SortedTimeStampInfoVector;
+		SortedSelectedCamera = SelectedCamera;
 		sort(SortedSelectedCamera.begin(), SortedSelectedCamera.end());
 		for (int ii = 0; ii < (int)SelectedCamera.size(); ii++)
 		{
@@ -10114,6 +10207,7 @@ int TestLeastActionOnSyntheticData(char *Path, int STCalibration)
 		}
 		for (int ii = (int)SortedSelectedCamera.size() - 1; ii >= 0; ii--)
 			SortedTimeStampInfoVector[ii] -= earliest;
+
 		sprintf(Fname, "%s/FMotionPriorSync.txt", Path);	fp = fopen(Fname, "w+");
 		for (int ii = 0; ii < (int)SortedSelectedCamera.size(); ii++)
 			fprintf(fp, "%d %.4f\n", SortedSelectedCamera[ii], SortedTimeStampInfoVector[ii]);
@@ -10123,7 +10217,7 @@ int TestLeastActionOnSyntheticData(char *Path, int STCalibration)
 		TrajectoryTriangulation(Path, SortedSelectedCamera, SortedTimeStampInfoVector, npts, startFrame, stopFrame, lamdaData, motionPriorPower);
 		ResamplingOf3DTrajectorySplineDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, startFrame, stopFrame, npts, lamdaData);
 		ResamplingOf3DTrajectoryDCTDriver(Path, SortedSelectedCamera, SortedTimeStampInfoVector, PriorOrder, startFrame, stopFrame, npts, lamdaData, lamdaPrior);
-		
+
 		printf("Total time: %.2fs\n\n", omp_get_wtime() - startTime);
 	}
 	else if (STCalibration > 1)
@@ -11181,7 +11275,10 @@ int main(int argc, char** argv)
 {
 	srand(0);
 	srand(time(NULL));
-	char Path[] = "E:/Sim", Fname[200], Fname2[200];
+	char Path[] = "E:/RollingShutter2", Fname[200], Fname2[200];
+
+	//TrackOpenCVLK(Path, 1, 100);
+	//return 0;
 
 	//TestRollingShutterCalibOnSyntheticData(Path, atoi(argv[1]));
 	//TestRollingShutterCalibOnSyntheticData(Path, 1);
@@ -11196,13 +11293,14 @@ int main(int argc, char** argv)
 	//CheckerBoardMultiviewSpatialTemporalCalibration(Path, 7, 0, 300, -1);
 	//visualizationDriver(Path, 10, 0, 540, false, false, true, false, false, 0);
 	//visualizationDriver(Path, 10, 0, 519, false, false, true, true, false, 0);
-	//TestLeastActionOnSyntheticData(Path, atoi(argv[1]);
-	TestLeastActionOnSyntheticData(Path, 1);
+	//TestLeastActionOnSyntheticData(Path, atoi(argv[1]));
 	//ShowSyncLoad(Path, "FMotionPriorSync", Path, 7);
 	//RenderSuperCameraFromMultipleUnSyncedCamerasA(Path, 0, 1200, 1, false);
-	return 0;
+	//RefineVisualSfMAndCreateCorpus(Path, 162, 0, 1, 5.0, false, false, false, true, false, true);
+	//visualizationDriver(Path, 1, -1, -1, true, false, false, false, false, false, -1);
+	//return 0;
 
-	int mode = 3;// atoi(argv[1]);
+	int mode = 5;// atoi(argv[1]);
 	if (mode == 0) //Step 1: sync all sequences with audio
 	{
 #ifdef _WINDOWS
@@ -11270,7 +11368,7 @@ int main(int argc, char** argv)
 		printf("This mode is not supported in Linux\n");
 #endif
 		return 0;
-		}
+			}
 	else if (mode == 1) //step 2: calibrate camera individually if needed
 	{
 		char *Path = argv[2],
@@ -11356,7 +11454,8 @@ int main(int argc, char** argv)
 			selectedView = atoi(argv[3]),
 			startF = atoi(argv[4]),
 			stopF = atoi(argv[5]),
-			HistogrameEqual = atoi(argv[6]);
+			increF = atoi(argv[6]),
+			HistogrameEqual = atoi(argv[7]);
 
 		vector<int> availViews;
 		if (selectedView < 0)
@@ -11369,54 +11468,55 @@ int main(int argc, char** argv)
 		//if (!ReadIntrinsicResults(Path, corpusData.camera))
 		//return 1;
 		//LensCorrectionImageSequenceDriver(Fname, corpusData.camera[selectedView].K, corpusData.camera[selectedView].distortion, corpusData.camera[selectedView].LensModel, startF, stopF, 1.0, 1.0, 5);
-		ExtractSiftGPUfromExtractedFrames(Path, availViews, startF, stopF, HistogrameEqual);
+		ExtractSiftGPUfromExtractedFrames(Path, availViews, startF, stopF, increF, HistogrameEqual);
 
 		return 0;
 	}
 	else if (mode == 5) //Step 6: Localize test sequence wrst to corpus
 	{
-		int StartTime = 1,//atoi(argv[2]),
-			StopTime = 800,//atoi(argv[3]),
-			seletectedCam = 0,//atoi(argv[4]),
-			nCams = 1,//atoi(argv[5]),
-			module = 0,// atoi(argv[6]), //0: Matching, 1: Localize, 2+3: refine on video, -1: visualize
-			distortionCorrected = 0,//atoi(argv[7]),
-			GetIntrinsicFromCorpus = 0,//atoi(argv[8]),
-			sharedIntriniscOptim = 1,//atoi(argv[9]),
-			LensType = 0;// atoi(argv[10]);// RADIAL_TANGENTIAL_PRISM;// FISHEYE;
+		int startFrame = 1,//atoi(argv[2]),
+			stopFrame = 450,//atoi(argv[3]),
+			IncreFrame = 1, //atoi(argv[4]),
+			seletectedCam = 0,//atoi(argv[5]),
+			nCams = 1,//atoi(argv[6]),
+			module =3,//atoi(argv[7]), //0: Matching, 1: Localize, 2+3: refine on video, -1: visualize
+			distortionCorrected = 1,//atoi(argv[8]), //Must set to 1 after corpus matching with calibrated caminfo
+			GetIntrinsicFromCorpus = 0,//atoi(argv[9]),
+			sharedIntriniscOptim = 1,//atoi(argv[10]),
+			LensType = 0;// atoi(argv[11]);// RADIAL_TANGENTIAL_PRISM;// FISHEYE;
 
-		if (StartTime == 1 && module == 1)
+		if (startFrame == 1 && module == 1)
 		{
 			sprintf(Fname, "%s/Intrinsic_%d.txt", Path, seletectedCam); FILE*fp = fopen(Fname, "w+");	fclose(fp);
 			sprintf(Fname, "%s/CamPose_%d.txt", Path, seletectedCam); fp = fopen(Fname, "w+"); fclose(fp);
 		}
 
 		if (module == 0 || module == 1)
-			LocalizeCameraFromCorpusDriver(Path, StartTime, StopTime, module, nCams, seletectedCam, distortionCorrected, GetIntrinsicFromCorpus, sharedIntriniscOptim, LensType);
+			LocalizeCameraFromCorpusDriver(Path, startFrame, stopFrame, IncreFrame, module, nCams, seletectedCam, distortionCorrected, GetIntrinsicFromCorpus, sharedIntriniscOptim, LensType);
 		if (module == 2)
 		{
 			bool fixIntrinisc = false, fixDistortion = false,
 				fixed3D = false; //Recomemded
 			if (distortionCorrected == 1)
 				fixIntrinisc = true, fixDistortion = true;
-			VideoPose_GSBA(Path, StartTime, StopTime, seletectedCam, distortionCorrected, LensType, fixIntrinisc, fixDistortion, fixed3D, 3.0);
+			VideoPose_GSBA(Path, startFrame, stopFrame, seletectedCam, distortionCorrected, LensType, fixIntrinisc, fixDistortion, fixed3D, 3.0);
 		}
 		if (module == 3)
 		{
 			int controlStep = 3;
-			VideoSplineRSBA(Path, StartTime, StopTime, seletectedCam, distortionCorrected, LensType, false, false, 3.0, controlStep);
+			VideoSplineRSBA(Path, startFrame, stopFrame, seletectedCam, distortionCorrected, LensType, false, false, 3.0, controlStep);
 
 			//Pose_se_BSplineInterpolation("E:/RollingShutter/_CamPoseS_0.txt", "E:/RollingShutter/__CamPose_0.txt", 100, "E:/RollingShutter/Pose.txt");
 		}
 
-		if (module != 0)
-			visualizationDriver(Path, nCams, StartTime, StopTime, true, false, true, false, false, false, StartTime);
+		if (module < 0)
+			visualizationDriver(Path, nCams, startFrame, stopFrame, true, false, true, false, false, false, startFrame);
 		return 0;
 	}
 	else if (mode == 6) //step 7: generate 3d data from test sequences
 	{
-		int StartTime = 1,//atoi(argv[2]),
-			StopTime = 120,//atoi(argv[3]),
+		int startFrame = 1,//atoi(argv[2]),
+			stopFrame = 120,//atoi(argv[3]),
 			timeStep = 1,// atoi(argv[4]),
 			module = 0;// atoi(argv[5]); 1: matching, 0 : triangulation
 
@@ -11431,7 +11531,7 @@ int main(int argc, char** argv)
 		int FrameOffset[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 		if (module == 1)
 		{
-			for (int timeID = StartTime; timeID <= StopTime; timeID += timeStep)
+			for (int timeID = startFrame; timeID <= stopFrame; timeID += timeStep)
 			{
 				GeneratePointsCorrespondenceMatrix_SiftGPU2(Path, nviews, timeID, HistogrameEqual, 0.6, FrameOffset);
 #pragma omp parallel
@@ -11455,8 +11555,8 @@ int main(int argc, char** argv)
 		{
 			bool save2DCorres = false;
 			double MaxDepthThresh = 99000; //mm
-			Build3DFromSyncedImages(Path, nviews, StartTime, StopTime, timeStep, LensType, distortionCorrected, NViewPlus, reprojectionThreshold, MaxDepthThresh, FrameOffset, save2DCorres, false, 10.0, false);
-			visualizationDriver(Path, nviews, 0, 600, true, false, true, false, true, false, StartTime);
+			Build3DFromSyncedImages(Path, nviews, startFrame, stopFrame, timeStep, LensType, distortionCorrected, NViewPlus, reprojectionThreshold, MaxDepthThresh, FrameOffset, save2DCorres, false, 10.0, false);
+			visualizationDriver(Path, nviews, 0, 600, true, false, true, false, true, false, startFrame);
 		}
 
 		return 0;
@@ -11464,16 +11564,16 @@ int main(int argc, char** argv)
 	else if (mode == 7)
 	{
 		int nVideoCams = 5,
-			startTime = 0, stopTime = 199,
+			startFrame = 0, stopFrame = 199,
 			LensModel = RADIAL_TANGENTIAL_PRISM;
 
 		int selectedCams[] = { 1, 2 }, selectedTime[2] = { 0, 0 }, ChooseCorpusView1 = -1, ChooseCorpusView2 = -1;
 
 		VideoData AllVideoInfo;
-		ReadVideoData(Path, AllVideoInfo, nVideoCams, startTime, stopTime);
+		ReadVideoData(Path, AllVideoInfo, nVideoCams, startFrame, stopFrame);
 
 		double Fmat[9];
-		int seletectedIDs[2] = { selectedCams[0] * max(MaxnFrames, stopTime) + selectedTime[0], selectedCams[1] * max(MaxnFrames, stopTime) + selectedTime[1] };
+		int seletectedIDs[2] = { selectedCams[0] * max(MaxnFrames, stopFrame) + selectedTime[0], selectedCams[1] * max(MaxnFrames, stopFrame) + selectedTime[1] };
 		computeFmatfromKRT(AllVideoInfo.VideoInfo, 5, seletectedIDs, Fmat);
 		return 0;
 	}
@@ -11523,9 +11623,9 @@ int main(int argc, char** argv)
 		TrajectoryData InfoTraj;
 		//CameraData CameraInfo[480 + nHDs];
 
-		int nviews = 8, startTime = 1, stopTime = 600, timeID = 450;// atoi(argv[2]);
+		int nviews = 8, startFrame = 1, stopFrame = 600, timeID = 450;// atoi(argv[2]);
 		VideoData AllVideoInfo;
-		if (ReadVideoData(Path, AllVideoInfo, nviews, startTime, stopTime) == 1)
+		if (ReadVideoData(Path, AllVideoInfo, nviews, startFrame, stopFrame) == 1)
 			return 1;
 
 		for (int timeID = 450; timeID <= 450; timeID += 10)
@@ -11582,7 +11682,7 @@ int main(int argc, char** argv)
 
 
 	return 0;
-	}
+		}
 
 /*// f(x,y) = (1-x)^2 + 100(y - x^2)^2;
 struct MyScalarCostFunctor {

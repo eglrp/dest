@@ -1885,14 +1885,14 @@ void Genrate2DTrajectoryBK(char *Path, int CurrentFrame, TrajectoryData InfoTraj
 		int ntracks = InfoTraj.cpVis[sTraj].size();
 		for (int jj = 0; jj < ntracks; jj++)
 		{
-			t3D = InfoTraj.cpThreeD[sTraj].at(jj);
-			n3D = InfoTraj.cpNormal[sTraj].at(jj);
+			t3D = InfoTraj.cpThreeD[sTraj][jj];
+			n3D = InfoTraj.cpNormal[sTraj][jj];
 			normNormal = sqrt(pow(n3D.x, 2) + pow(n3D.y, 2) + pow(n3D.z, 2));
-			int nvis = InfoTraj.cpVis[sTraj].at(jj).size();
+			int nvis = InfoTraj.cpVis[sTraj][jj].size();
 			fprintf(fp, "%d %d ", CurrentFrame - ntracks + jj, nvis);
 			for (int ii = 0; ii < nvis; ii++)
 			{
-				int viewID = InfoTraj.cpVis[sTraj].at(jj).at(ii);
+				int viewID = InfoTraj.cpVis[sTraj][jj][ii];
 				PtoC = Point3d(AllCamInfo[viewID].camCenter[0] - t3D.x, AllCamInfo[viewID].camCenter[1] - t3D.y, AllCamInfo[viewID].camCenter[2] - t3D.z);
 				normPtoC = sqrt(pow(PtoC.x, 2) + pow(PtoC.y, 2) + pow(PtoC.z, 2));
 				angle = (n3D.x*PtoC.x + n3D.y*PtoC.y + n3D.z*PtoC.z) / normNormal / normPtoC;
@@ -1907,14 +1907,14 @@ void Genrate2DTrajectoryBK(char *Path, int CurrentFrame, TrajectoryData InfoTraj
 
 		for (int jj = 0; jj < InfoTraj.fThreeD[sTraj].size(); jj++)
 		{
-			t3D = InfoTraj.fThreeD[sTraj].at(jj);
-			n3D = InfoTraj.fNormal[sTraj].at(jj);
+			t3D = InfoTraj.fThreeD[sTraj][jj];
+			n3D = InfoTraj.fNormal[sTraj][jj];
 			normNormal = sqrt(pow(n3D.x, 2) + pow(n3D.y, 2) + pow(n3D.z, 2));
-			int nvis = InfoTraj.fVis[sTraj].at(jj).size();
+			int nvis = InfoTraj.fVis[sTraj][jj].size();
 			fprintf(fp, "%d %d ", CurrentFrame + jj + 1, nvis);
 			for (int ii = 0; ii < nvis; ii++)
 			{
-				int viewID = InfoTraj.fVis[sTraj].at(jj).at(ii);
+				int viewID = InfoTraj.fVis[sTraj][jj][ii];
 				PtoC = Point3d(AllCamInfo[viewID].camCenter[0] - t3D.x, AllCamInfo[viewID].camCenter[1] - t3D.y, AllCamInfo[viewID].camCenter[2] - t3D.z);
 				normPtoC = sqrt(pow(PtoC.x, 2) + pow(PtoC.y, 2) + pow(PtoC.z, 2));
 				angle = (n3D.x*PtoC.x + n3D.y*PtoC.y + n3D.z*PtoC.z) / normNormal / normPtoC;
@@ -1971,8 +1971,8 @@ void Genrate2DTrajectory(char *Path, int CurrentFrame, TrajectoryData InfoTraj, 
 		int ntracks = InfoTraj.cpVis[sTraj].size();
 		for (int jj = 0; jj < ntracks; jj++)
 		{
-			t3D = InfoTraj.cpThreeD[sTraj].at(jj);
-			n3D = InfoTraj.cpNormal[sTraj].at(jj);
+			t3D = InfoTraj.cpThreeD[sTraj][jj];
+			n3D = InfoTraj.cpNormal[sTraj][jj];
 			normNormal = sqrt(pow(n3D.x, 2) + pow(n3D.y, 2) + pow(n3D.z, 2));
 			viewIDs.clear(), PtA.clear();
 			for (int ii = 0; ii < InfoTraj.nViews; ii++)
@@ -1997,8 +1997,8 @@ void Genrate2DTrajectory(char *Path, int CurrentFrame, TrajectoryData InfoTraj, 
 
 		for (int jj = 0; jj < InfoTraj.fThreeD[sTraj].size(); jj++)
 		{
-			t3D = InfoTraj.fThreeD[sTraj].at(jj);
-			n3D = InfoTraj.fNormal[sTraj].at(jj);
+			t3D = InfoTraj.fThreeD[sTraj][jj];
+			n3D = InfoTraj.fNormal[sTraj][jj];
 			normNormal = sqrt(pow(n3D.x, 2) + pow(n3D.y, 2) + pow(n3D.z, 2));
 
 			viewIDs.clear(), PtA.clear();
@@ -2064,8 +2064,8 @@ void Genrate2DTrajectory2(char *Path, int CurrentFrame, TrajectoryData InfoTraj,
 		int ntracks = InfoTraj.cpVis[sTraj].size();
 		for (int jj = 0; jj < ntracks; jj++)
 		{
-			t3D = InfoTraj.cpThreeD[sTraj].at(jj);
-			n3D = InfoTraj.cpNormal[sTraj].at(jj);
+			t3D = InfoTraj.cpThreeD[sTraj][jj];
+			n3D = InfoTraj.cpNormal[sTraj][jj];
 			normNormal = sqrt(pow(n3D.x, 2) + pow(n3D.y, 2) + pow(n3D.z, 2));
 			viewIDs.clear(), PtA.clear();
 			for (int ii = 0; ii < InfoTraj.nViews; ii++)
@@ -2090,8 +2090,8 @@ void Genrate2DTrajectory2(char *Path, int CurrentFrame, TrajectoryData InfoTraj,
 
 		for (int jj = 0; jj < InfoTraj.fThreeD[sTraj].size(); jj++)
 		{
-			t3D = InfoTraj.fThreeD[sTraj].at(jj);
-			n3D = InfoTraj.fNormal[sTraj].at(jj);
+			t3D = InfoTraj.fThreeD[sTraj][jj];
+			n3D = InfoTraj.fNormal[sTraj][jj];
 			normNormal = sqrt(pow(n3D.x, 2) + pow(n3D.y, 2) + pow(n3D.z, 2));
 
 			viewIDs.clear(), PtA.clear();
@@ -2168,8 +2168,8 @@ void Genrate2DTrajectory3(char *Path, int CurrentFrame, TrajectoryData InfoTraj,
 				int ntracks = InfoTraj.cpVis[sTraj].size();
 				for (int jj = 0; jj < ntracks; jj++)
 				{
-					t3D = InfoTraj.cpThreeD[sTraj].at(jj);
-					n3D = InfoTraj.cpNormal[sTraj].at(jj);
+					t3D = InfoTraj.cpThreeD[sTraj][jj];
+					n3D = InfoTraj.cpNormal[sTraj][jj];
 					normNormal = sqrt(pow(n3D.x, 2) + pow(n3D.y, 2) + pow(n3D.z, 2));
 					viewIDs.clear(), PtA.clear();
 					for (int ii = 0; ii < InfoTraj.nViews; ii++)
@@ -2194,8 +2194,8 @@ void Genrate2DTrajectory3(char *Path, int CurrentFrame, TrajectoryData InfoTraj,
 
 				for (int jj = 0; jj < InfoTraj.fThreeD[sTraj].size(); jj++)
 				{
-					t3D = InfoTraj.fThreeD[sTraj].at(jj);
-					n3D = InfoTraj.fNormal[sTraj].at(jj);
+					t3D = InfoTraj.fThreeD[sTraj][jj];
+					n3D = InfoTraj.fNormal[sTraj][jj];
 					normNormal = sqrt(pow(n3D.x, 2) + pow(n3D.y, 2) + pow(n3D.z, 2));
 
 					viewIDs.clear(), PtA.clear();
@@ -2333,13 +2333,13 @@ int GetImagePatchIntensityColorVar(char *Path, TrajectoryData infoTraj, int nTra
 			rgb1.clear(), rgb2.clear();
 			for (int kk = 0; kk < infoTraj.trajectoryUnit[ii].size(); kk++)
 			{
-				int timeID = infoTraj.trajectoryUnit[ii].at(kk).timeID, nvis = infoTraj.trajectoryUnit[ii].at(kk).nViews;
+				int timeID = infoTraj.trajectoryUnit[ii][kk].timeID, nvis = infoTraj.trajectoryUnit[ii][kk].nViews;
 
 				int count = 0, iu, iv;
 				for (int jj = 0; jj < nvis; jj++)
 				{
-					camID = infoTraj.trajectoryUnit[ii].at(kk).viewIDs.at(jj);
-					u = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y;
+					camID = infoTraj.trajectoryUnit[ii][kk].viewIDs[jj];
+					u = (float)infoTraj.trajectoryUnit[ii][kk].uv[jj].x, v = (float)infoTraj.trajectoryUnit[ii][kk].uv[jj].y;
 					panelID = camID / nCamsPerPanel,
 						camIDInPanel = camID%nCamsPerPanel;
 
@@ -2598,13 +2598,13 @@ int Compute3DTrajectoryErrorZNCC(char *Path, TrajectoryData infoTraj, int nTraj,
 			rgb1.clear(), rgb2.clear();
 			for (int kk = 0; kk < infoTraj.trajectoryUnit[ii].size(); kk++)
 			{
-				int timeID = infoTraj.trajectoryUnit[ii].at(kk).timeID, nvis = infoTraj.trajectoryUnit[ii].at(kk).nViews;
+				int timeID = infoTraj.trajectoryUnit[ii][kk].timeID, nvis = infoTraj.trajectoryUnit[ii][kk].nViews;
 
 				int count = 0;
 				for (int jj = 0; jj < nvis; jj++)
 				{
-					camID = infoTraj.trajectoryUnit[ii].at(kk).viewIDs.at(jj);
-					u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y, angle = infoTraj.trajectoryUnit[ii].at(kk).angle.at(jj);
+					camID = infoTraj.trajectoryUnit[ii][kk].viewIDs[jj];
+					u = infoTraj.trajectoryUnit[ii][kk].uv[jj].x, v = infoTraj.trajectoryUnit[ii][kk].uv[jj].y, angle = infoTraj.trajectoryUnit[ii][kk].angle[jj];
 					if (camID >= nHDs && (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset))
 						break;
 					if (camID < nHDs && (u<hsubset || v<hsubset || u>HDwidth - hsubset || v>HDheight - hsubset))
@@ -2632,7 +2632,7 @@ int Compute3DTrajectoryErrorZNCC(char *Path, TrajectoryData infoTraj, int nTraj,
 								continue;
 						}
 
-						u = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y;
+						u = (float)infoTraj.trajectoryUnit[ii][kk].uv[jj].x, v = (float)infoTraj.trajectoryUnit[ii][kk].uv[jj].y;
 						if (camID >= nHDs && (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset))
 							continue;
 						if (camID < nHDs && (u<hsubset || v<hsubset || u>HDwidth - hsubset || v>HDheight - hsubset))
@@ -2868,13 +2868,13 @@ int Compute3DTrajectoryErrorZNCC2(char *Path, TrajectoryData infoTraj, int nTraj
 			rgb1.clear(), rgb2.clear();
 			for (int kk = 0; kk < infoTraj.trajectoryUnit[ii].size(); kk++)
 			{
-				int timeID = infoTraj.trajectoryUnit[ii].at(kk).timeID, nvis = infoTraj.trajectoryUnit[ii].at(kk).nViews;
+				int timeID = infoTraj.trajectoryUnit[ii][kk].timeID, nvis = infoTraj.trajectoryUnit[ii][kk].nViews;
 
 				int count = 0;
 				for (int jj = 0; jj < nvis; jj++)
 				{
-					camID = infoTraj.trajectoryUnit[ii].at(kk).viewIDs.at(jj);
-					u = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y, angle = infoTraj.trajectoryUnit[ii].at(kk).angle.at(jj);
+					camID = infoTraj.trajectoryUnit[ii][kk].viewIDs[jj];
+					u = (float)infoTraj.trajectoryUnit[ii][kk].uv[jj].x, v = (float)infoTraj.trajectoryUnit[ii][kk].uv[jj].y, angle = infoTraj.trajectoryUnit[ii][kk].angle[jj];
 					if (camID >= nHDs && (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset))
 						break;
 					if (camID < nHDs && (u<hsubset || v<hsubset || u>HDwidth - hsubset || v>HDheight - hsubset))
@@ -2902,7 +2902,7 @@ int Compute3DTrajectoryErrorZNCC2(char *Path, TrajectoryData infoTraj, int nTraj
 								continue;
 						}
 
-						u = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = (float)infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y;
+						u = (float)infoTraj.trajectoryUnit[ii][kk].uv[jj].x, v = (float)infoTraj.trajectoryUnit[ii][kk].uv[jj].y;
 						if (camID >= nHDs && (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset))
 							continue;
 						if (camID < nHDs && (u<hsubset || v<hsubset || u>HDwidth - hsubset || v>HDheight - hsubset))
@@ -3135,13 +3135,13 @@ int Compute3DTrajectoryErrorZNCCDif(char *Path, TrajectoryData infoTraj, int nTr
 			int count = 0;
 			for (int kk = 0; kk < infoTraj.trajectoryUnit[ii].size() - 1; kk++)
 			{
-				int timeID = infoTraj.trajectoryUnit[ii].at(kk).timeID, nvis = infoTraj.trajectoryUnit[ii].at(kk).nViews;
+				int timeID = infoTraj.trajectoryUnit[ii][kk].timeID, nvis = infoTraj.trajectoryUnit[ii][kk].nViews;
 
 				int jj;
 				for (jj = 0; jj < nvis; jj++)
 				{
-					camID = infoTraj.trajectoryUnit[ii].at(kk).viewIDs.at(jj);
-					u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y, angle = infoTraj.trajectoryUnit[ii].at(kk).angle.at(jj);
+					camID = infoTraj.trajectoryUnit[ii][kk].viewIDs[jj];
+					u = infoTraj.trajectoryUnit[ii][kk].uv[jj].x, v = infoTraj.trajectoryUnit[ii][kk].uv[jj].y, angle = infoTraj.trajectoryUnit[ii][kk].angle[jj];
 					if (camID >= nHDs && (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset))
 						break;
 					if (camID < nHDs && (u<hsubset || v<hsubset || u>HDwidth - hsubset || v>HDheight - hsubset))
@@ -3167,7 +3167,7 @@ int Compute3DTrajectoryErrorZNCCDif(char *Path, TrajectoryData infoTraj, int nTr
 								continue;
 						}
 
-						u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y;
+						u = infoTraj.trajectoryUnit[ii][kk].uv[jj].x, v = infoTraj.trajectoryUnit[ii][kk].uv[jj].y;
 						if (camID >= nHDs && (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset))
 							continue;
 						if (camID < nHDs && (u<hsubset || v<hsubset || u>HDwidth - hsubset || v>HDheight - hsubset))
@@ -3327,20 +3327,20 @@ int Compute3DTrajectoryError2DTracking(char *Path, TrajectoryData infoTraj, int 
 			int kk;
 			for (kk = 0; kk < infoTraj.trajectoryUnit[ii].size(); kk++)
 			{
-				int timeID = infoTraj.trajectoryUnit[ii].at(kk).timeID;
-				for (int jj = 0; jj < infoTraj.trajectoryUnit[ii].at(kk).nViews; jj++)
+				int timeID = infoTraj.trajectoryUnit[ii][kk].timeID;
+				for (int jj = 0; jj < infoTraj.trajectoryUnit[ii][kk].nViews; jj++)
 				{
-					viewID = infoTraj.trajectoryUnit[ii].at(kk).viewIDs.at(jj);
+					viewID = infoTraj.trajectoryUnit[ii][kk].viewIDs[jj];
 					if (timeID + syncOff[viewID] > maxFrame || timeID + temporalOffset + syncOff[viewID] > maxFrame || timeID + temporalOffset + syncOff[viewID] < minFrame)
 						break;
 					if (viewID == SelectedViewID)
 					{
-						u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y, angle = infoTraj.trajectoryUnit[ii].at(kk).angle.at(jj);
+						u = infoTraj.trajectoryUnit[ii][kk].uv[jj].x, v = infoTraj.trajectoryUnit[ii][kk].uv[jj].y, angle = infoTraj.trajectoryUnit[ii][kk].angle[jj];
 						if (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset)
 							break;
 						if (angle < 0.5)
 							break;
-						Projected2DLoc.push_back(infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj));
+						Projected2DLoc.push_back(infoTraj.trajectoryUnit[ii][kk].uv[jj]);
 
 						VisImagePtr.push_back(AllImagePtr[timeID + temporalOffset + syncOff[viewID]]);
 						VisImageParaPtr.push_back(AllImageParaPtr[timeID + temporalOffset + syncOff[viewID]]);
@@ -3366,20 +3366,20 @@ int Compute3DTrajectoryError2DTracking(char *Path, TrajectoryData infoTraj, int 
 			for (kk; kk < infoTraj.trajectoryUnit[ii].size(); kk++)
 			{
 				//See if the required camera is visible
-				int timeID = infoTraj.trajectoryUnit[ii].at(kk).timeID;
-				for (int jj = 0; jj < infoTraj.trajectoryUnit[ii].at(kk).nViews; jj++)
+				int timeID = infoTraj.trajectoryUnit[ii][kk].timeID;
+				for (int jj = 0; jj < infoTraj.trajectoryUnit[ii][kk].nViews; jj++)
 				{
-					viewID = infoTraj.trajectoryUnit[ii].at(kk).viewIDs.at(jj);
+					viewID = infoTraj.trajectoryUnit[ii][kk].viewIDs[jj];
 					if (timeID + syncOff[viewID] > maxFrame || timeID + temporalOffset + syncOff[viewID] > maxFrame || timeID + temporalOffset + syncOff[viewID] < minFrame)
 						break;
 					if (viewID == SelectedViewID)
 					{
-						u = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).x, v = infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj).y, angle = infoTraj.trajectoryUnit[ii].at(kk).angle.at(jj);
+						u = infoTraj.trajectoryUnit[ii][kk].uv[jj].x, v = infoTraj.trajectoryUnit[ii][kk].uv[jj].y, angle = infoTraj.trajectoryUnit[ii][kk].angle[jj];
 						if (u<hsubset || v<hsubset || u>width - hsubset || v>height - hsubset)
 							break;
 						if (angle < 0.5)
 							break;
-						Projected2DLoc.push_back(infoTraj.trajectoryUnit[ii].at(kk).uv.at(jj));
+						Projected2DLoc.push_back(infoTraj.trajectoryUnit[ii][kk].uv[jj]);
 
 						VisImagePtr.push_back(AllImagePtr[timeID + temporalOffset + syncOff[viewID]]);
 						VisImageParaPtr.push_back(AllImageParaPtr[timeID + temporalOffset + syncOff[viewID]]);
@@ -4122,6 +4122,62 @@ Mat ReadDescriptorBinary(char *fn, int descriptorSize, bool silent)
 	}
 }
 
+int readVisualSFMSift(char *fn, vector<KeyPoint>&kpts, Mat &descriptors, bool silent)
+{
+	ifstream fin;
+	fin.open(fn, ios::binary);
+	if (!fin.is_open())
+	{
+		cout << "Cannot open: " << fn << endl;
+		return 1;
+	}
+	if (!silent)
+		cout << "Load " << fn << endl;
+
+	int dummy, npts, descriptorSize = SIFTBINS;
+	float val;
+
+	fin.read(reinterpret_cast<char *>(&dummy), sizeof(int));//SIFT
+	fin.read(reinterpret_cast<char *>(&dummy), sizeof(int));///V4.0
+	fin.read(reinterpret_cast<char *>(&npts), sizeof(int));//npts
+	fin.read(reinterpret_cast<char *>(&dummy), sizeof(int));//5numbers
+	fin.read(reinterpret_cast<char *>(&dummy), sizeof(int));//descriptorSize
+
+	kpts.reserve(npts);
+	KeyPoint kpt;
+	for (int ii = 0; ii < npts; ii++)
+	{
+		fin.read(reinterpret_cast<char *>(&kpt.pt.x), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&kpt.pt.y), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&val), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&kpt.size), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&kpt.angle), sizeof(float));
+		kpts.push_back(kpt);
+	}
+
+
+	uint8_t d;
+	float desci[SIFTBINS];
+	descriptors.create(npts, SIFTBINS, CV_32F);
+	for (int j = 0; j < npts; j++)
+	{
+		val = 0.0;
+		for (int i = 0; i < descriptorSize; i++)
+		{
+			fin.read(reinterpret_cast<char *>(&d), sizeof(uint8_t));
+			dummy = (int)d;
+			desci[i] = (float)(int)d;
+			val += desci[i] * desci[i];
+		}
+		val = sqrt(val);
+
+		for (int i = 0; i < descriptorSize; i++)
+			descriptors.at<float>(j, i) = desci[i] / val;
+	}
+	fin.close();
+
+	return 0;
+}
 bool WriteKPointsSIFTGPU(char *fn, vector<SiftKeypoint>kpts, bool silent)
 {
 	FILE *fp = fopen(fn, "w+");
@@ -4987,7 +5043,7 @@ int PickStaticImagesFromImages(char *PATH, int SaveFrameDif, int redetectInterva
 
 	FILE *fp = fopen("C:/temp/distance.txt", "w+");
 	for (int ii = 0; ii < distance.size(); ii++)
-		fprintf(fp, "%.3f\n", distance.at(ii));
+		fprintf(fp, "%.3f\n", distance[ii]);
 	fclose(fp);
 
 	return 0;
@@ -5269,13 +5325,13 @@ int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, v
 
 	for (int ii = 0; ii < pair.size(); ii += 2)
 	{
-		int x1 = keypoints1.at(pair.at(ii)).pt.x, y1 = keypoints1.at(pair.at(ii)).pt.y;
+		int x1 = keypoints1.at(pair[ii]).pt.x, y1 = keypoints1.at(pair[ii]).pt.y;
 		int x2 = keypoints2.at(pair.at(ii + 1)).pt.x + offsetX, y2 = keypoints2.at(pair.at(ii + 1)).pt.y + offsetY;
 	}
 
 	for (int ii = 0; ii < pair.size(); ii += step)
 	{
-		int x1 = keypoints1.at(pair.at(ii)).pt.x, y1 = keypoints1.at(pair.at(ii)).pt.y;
+		int x1 = keypoints1.at(pair[ii]).pt.x, y1 = keypoints1.at(pair[ii]).pt.y;
 		int x2 = keypoints2.at(pair.at(ii + 1)).pt.x + offsetX, y2 = keypoints2.at(pair.at(ii + 1)).pt.y + offsetY;
 
 		cvCircle(correspond, cvPoint(x1, y1), 2, colors[ii % 9], 2), cvCircle(correspond, cvPoint(x2, y2), 2, colors[ii % 9], 2);
@@ -5308,13 +5364,13 @@ int DisplayImageCorrespondence(IplImage* correspond, int offsetX, int offsetY, v
 
 	for (int ii = 0; ii < pair.size(); ii += 2)
 	{
-		int x1 = keypoints1.at(pair.at(ii)).x, y1 = keypoints1.at(pair.at(ii)).y;
+		int x1 = keypoints1.at(pair[ii]).x, y1 = keypoints1.at(pair[ii]).y;
 		int x2 = keypoints2.at(pair.at(ii + 1)).x + offsetX, y2 = keypoints2.at(pair.at(ii + 1)).y + offsetY;
 	}
 
 	for (int ii = 0; ii < pair.size(); ii += step)
 	{
-		int x1 = keypoints1.at(pair.at(ii)).x, y1 = keypoints1.at(pair.at(ii)).y;
+		int x1 = keypoints1.at(pair[ii]).x, y1 = keypoints1.at(pair[ii]).y;
 		int x2 = keypoints2.at(pair.at(ii + 1)).x + offsetX, y2 = keypoints2.at(pair.at(ii + 1)).y + offsetY;
 		cvLine(correspond, cvPoint(x1, y1), cvPoint(x2, y2), colors[ii % 9], 1, 4);
 	}
@@ -5454,7 +5510,7 @@ void SaveCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>AvailVi
 	FILE *fp = fopen(Fname, "w+");
 	for (int ii = 0; ii < AvailViews.size(); ii++)
 	{
-		int viewID = AvailViews.at(ii);
+		int viewID = AvailViews[ii];
 		fprintf(fp, "%d: ", viewID);
 		for (int jj = 0; jj < 5; jj++)
 			fprintf(fp, "%.16f ", AllViewParas[viewID].intrinsic[jj]);
@@ -5619,7 +5675,7 @@ void GenerateMergePointCorrespondences(vector<int> *MergePointCorres, vector<int
 			{
 				for (int ii = 0; ii < PointCorres[jj].size(); ii++) //look into all of that previous point matches
 				{
-					if (PointCorres[jj].at(ii) == kk) //if it has the same ID as the current point-->merge points
+					if (PointCorres[jj][ii] == kk) //if it has the same ID as the current point-->merge points
 					{
 						//printf("Merging %d (%d matches) to %d (%d matches)\n", kk, PointCorres[kk].size(), jj, PointCorres[jj].size());
 						for (int i = 0; i < PointCorres[kk].size(); i++)
@@ -5640,8 +5696,8 @@ void GenerateMergePointCorrespondences(vector<int> *MergePointCorres, vector<int
 		{
 			if (jj == 0)
 				MergePointCorres[kk].push_back(PointCorres[kk].at(0));
-			else if (jj> 0 && PointCorres[kk].at(jj) != PointCorres[kk].at(jj - 1))
-				MergePointCorres[kk].push_back(PointCorres[kk].at(jj));
+			else if (jj> 0 && PointCorres[kk][jj] != PointCorres[kk].at(jj - 1))
+				MergePointCorres[kk].push_back(PointCorres[kk][jj]);
 		}
 	}
 	return;
@@ -5653,7 +5709,7 @@ void GenerateViewandPointCorrespondences(vector<int> *ViewCorres, vector<int> *P
 	{
 		for (int ii = 0; ii < PointCorres[jj].size(); ii++)
 		{
-			curPID = PointCorres[jj].at(ii);
+			curPID = PointCorres[jj][ii];
 			for (int j = 0; j < CumIDView.size() - 1; j++)
 			{
 				if (curPID >= CumIDView.at(j) && curPID < CumIDView.at(j + 1))
@@ -5677,7 +5733,7 @@ void Save3DPoints(char *Path, Point3d *All3D, vector<int>Selected3DIndex)
 	FILE *fp = fopen(Fname, "w+");
 	for (int ii = 0; ii < Selected3DIndex.size(); ii++)
 	{
-		int pID = Selected3DIndex.at(ii);
+		int pID = Selected3DIndex[ii];
 		fprintf(fp, "%.3f %.3f %.3f\n", All3D[pID].x, All3D[pID].y, All3D[pID].z);
 	}
 	fclose(fp);
@@ -5852,7 +5908,7 @@ void GetIntrinsicFromK(CameraData *AllViewsParas, vector<int> AvailViews)
 {
 	for (int ii = 0; ii < AvailViews.size(); ii++)
 	{
-		int viewID = AvailViews.at(ii);
+		int viewID = AvailViews[ii];
 		AllViewsParas[viewID].intrinsic[0] = AllViewsParas[viewID].K[0];
 		AllViewsParas[viewID].intrinsic[1] = AllViewsParas[viewID].K[4];
 		AllViewsParas[viewID].intrinsic[2] = AllViewsParas[viewID].K[1];
@@ -5877,7 +5933,7 @@ void GetKFromIntrinsic(CameraData *AllViewsParas, vector<int> AvailViews)
 {
 	for (int ii = 0; ii < AvailViews.size(); ii++)
 	{
-		int viewID = AvailViews.at(ii);
+		int viewID = AvailViews[ii];
 		AllViewsParas[viewID].K[0] = AllViewsParas[viewID].intrinsic[0];
 		AllViewsParas[viewID].K[4] = AllViewsParas[viewID].intrinsic[1];
 		AllViewsParas[viewID].K[1] = AllViewsParas[viewID].intrinsic[2];
@@ -5920,7 +5976,7 @@ void GetrtFromRT(CameraData *AllViewsParas, vector<int> AvailViews)
 
 	for (int ii = 0; ii < AvailViews.size(); ii++)
 	{
-		int viewID = AvailViews.at(ii);
+		int viewID = AvailViews[ii];
 		for (int jj = 0; jj < 9; jj++)
 			R.at<double>(jj) = AllViewsParas[viewID].R[jj];
 
@@ -6111,7 +6167,7 @@ void GetRTFromrt(CameraData *AllViewsParas, vector<int> AvailViews)
 
 	for (int ii = 0; ii < AvailViews.size(); ii++)
 	{
-		int viewID = AvailViews.at(ii);
+		int viewID = AvailViews[ii];
 		for (int jj = 0; jj < 3; jj++)
 			r.at<double>(jj) = AllViewsParas[viewID].rt[jj];
 
@@ -6936,12 +6992,12 @@ bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics,
 
 	return true;
 }
-bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize, int sharedIntrinsics)
+bool loadNVM(const char *Fname, Corpus &CorpusData, vector<Point2i> &ImgSize, int sharedIntrinsics, vector<KeyPoint> *AllKeyPts, Mat *AllDesc)
 {
-	ifstream ifs(filepath);
+	ifstream ifs(Fname);
 	if (ifs.fail())
 	{
-		cerr << "Cannot load " << filepath << endl;
+		cerr << "Cannot load " << Fname << endl;
 		return false;
 	}
 
@@ -7032,30 +7088,50 @@ bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize,
 	}
 
 	cout << "Loading nvm points" << endl;
-	//loading 2D and 3D points
 	int nPoints, viewID, pid;
 	ifs >> nPoints;
 	CorpusData.n3dPoints = nPoints;
 	CorpusData.xyz.reserve(nPoints);
 	CorpusData.viewIdAll3D.reserve(nPoints);
+	CorpusData.pointIdAll3D.reserve(nPoints);
 	CorpusData.uvAll3D.reserve(nPoints);
 	CorpusData.scaleAll3D.reserve(nPoints);
 
 	Point2d uv;
 	Point3d xyz;
 	Point3i rgb;
-	vector<int>viewID3D;
+	vector<int>viewID3D, pid3D;
 	vector<Point2d> uv3D;
 	vector<double> scale3D;
+
+	FeatureDesc desci;
+	if (AllDesc != NULL)
+	{
+		CorpusData.scaleAllViews2 = new vector<double>[CorpusData.nCameras];
+		CorpusData.uvAllViews2 = new vector<Point2d>[CorpusData.nCameras];
+		CorpusData.threeDIdAllViews2 = new vector<int>[CorpusData.nCameras];
+		CorpusData.DescAllViews2 = new vector<FeatureDesc>[CorpusData.nCameras];
+		for (int ii = 0; ii < CorpusData.nCameras; ii++)
+		{
+			CorpusData.scaleAllViews2[ii].reserve(5000);
+			CorpusData.uvAllViews2[ii].reserve(5000);
+			CorpusData.threeDIdAllViews2[ii].reserve(5000);
+			CorpusData.DescAllViews2[ii].reserve(5000);
+		}
+	}
+
 	for (int i = 0; i < nPoints; i++)
 	{
-		viewID3D.clear(), uv3D.clear(), scale3D.clear();
+		viewID3D.clear(), pid3D.clear(), uv3D.clear(), scale3D.clear();
 		ifs >> xyz.x >> xyz.y >> xyz.z >> rgb.x >> rgb.y >> rgb.z;
 
 		CorpusData.xyz.push_back(xyz);
 		CorpusData.rgb.push_back(rgb);
 
 		ifs >> nviews;
+		//if (AllDesc != NULL) Desc3Di.create(nviews, 128, CV_32F);
+
+		int cur3DID = CorpusData.viewIdAll3D.size();
 		for (int ii = 0; ii < nviews; ii++)
 		{
 			ifs >> viewID >> pid >> uv.x >> uv.y;
@@ -7063,18 +7139,36 @@ bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize,
 			uv.y += 0.5*(CorpusData.camera[CameraOrder[viewID]].height - 1.0);
 
 			viewID3D.push_back(CameraOrder[viewID]);
+			pid3D.push_back((pid));
 			uv3D.push_back(uv);
 			scale3D.push_back(1.0);
+
+			if (AllDesc != NULL)
+			{
+				//for (int jj = 0; jj < 128; jj++)  Desc3Di.at<float>(ii, jj) = AllDesc[viewID].at<float>(pid, jj);
+				for (int jj = 0; jj < 128; jj++)
+					desci.desc[jj] = AllDesc[CameraOrder[viewID]].at<float>(pid, jj);
+
+				CorpusData.uvAllViews2[CameraOrder[viewID]].push_back(uv);
+				CorpusData.scaleAllViews2[CameraOrder[viewID]].push_back(AllKeyPts[CameraOrder[viewID]][pid].size);
+				CorpusData.threeDIdAllViews2[CameraOrder[viewID]].push_back(cur3DID);
+				CorpusData.DescAllViews2[CameraOrder[viewID]].push_back(desci);
+			}
 		}
+
 		CorpusData.viewIdAll3D.push_back(viewID3D);
 		CorpusData.uvAll3D.push_back(uv3D);
 		CorpusData.scaleAll3D.push_back(scale3D);
+		CorpusData.pointIdAll3D.push_back(pid3D);
+		//if (AllDesc != NULL) 	CorpusData.DescAll3D.push_back(Desc3Di);
 	}
 
 	printf("Done with nvm\n");
 
 	return true;
 }
+
+
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData)
 {
 	const int nHDs = 30, nVGAs = 24, nPanels = 20;
@@ -7437,23 +7531,23 @@ int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool saveDesc
 	{
 		fprintf(fp, "0\n");
 		for (jj = 0; jj < CorpusData.xyz.size(); jj++)
-			fprintf(fp, "%lf %lf %lf \n", CorpusData.xyz.at(jj).x, CorpusData.xyz.at(jj).y, CorpusData.xyz.at(jj).z);
+			fprintf(fp, "%lf %lf %lf \n", CorpusData.xyz[jj].x, CorpusData.xyz[jj].y, CorpusData.xyz[jj].z);
 	}
 	else
 	{
 		fprintf(fp, "1\n");
 		for (jj = 0; jj < CorpusData.xyz.size(); jj++)
-			fprintf(fp, "%lf %lf %lf %d %d %d\n", CorpusData.xyz.at(jj).x, CorpusData.xyz.at(jj).y, CorpusData.xyz.at(jj).z, CorpusData.rgb.at(jj).x, CorpusData.rgb.at(jj).y, CorpusData.rgb.at(jj).z);
+			fprintf(fp, "%lf %lf %lf %d %d %d\n", CorpusData.xyz[jj].x, CorpusData.xyz[jj].y, CorpusData.xyz[jj].z, CorpusData.rgb[jj].x, CorpusData.rgb[jj].y, CorpusData.rgb[jj].z);
 	}
 	fclose(fp);
 
 	sprintf(Fname, "%s/Corpus_viewIdAll3D.txt", Path); fp = fopen(Fname, "w+");
 	for (jj = 0; jj < CorpusData.n3dPoints; jj++)
 	{
-		int nviews = CorpusData.viewIdAll3D.at(jj).size();
+		int nviews = CorpusData.viewIdAll3D[jj].size();
 		fprintf(fp, "%d ", nviews);
 		for (ii = 0; ii < nviews; ii++)
-			fprintf(fp, "%d ", CorpusData.viewIdAll3D.at(jj).at(ii));
+			fprintf(fp, "%d ", CorpusData.viewIdAll3D[jj][ii]);
 		fprintf(fp, "\n");
 	}
 	fclose(fp);
@@ -7461,10 +7555,10 @@ int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool saveDesc
 	sprintf(Fname, "%s/Corpus_pointIdAll3D.txt", Path); fp = fopen(Fname, "w+");
 	for (jj = 0; jj < CorpusData.n3dPoints; jj++)
 	{
-		int npts = CorpusData.pointIdAll3D.at(jj).size();
+		int npts = CorpusData.pointIdAll3D[jj].size();
 		fprintf(fp, "%d ", npts);
 		for (ii = 0; ii < npts; ii++)
-			fprintf(fp, "%d ", CorpusData.pointIdAll3D.at(jj).at(ii));
+			fprintf(fp, "%d ", CorpusData.pointIdAll3D[jj][ii]);
 		fprintf(fp, "\n");
 	}
 	fclose(fp);
@@ -7481,28 +7575,50 @@ int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool saveDesc
 	fclose(fp);
 
 	sprintf(Fname, "%s/Corpus_threeDIdAllViews.txt", Path); fp = fopen(Fname, "w+");
-	for (jj = 0; jj < CorpusData.nCameras; jj++)
+	if (CorpusData.threeDIdAllViews.size() != 0)
 	{
-		int n3D = CorpusData.threeDIdAllViews.at(jj).size();
-		fprintf(fp, "%d\n", n3D);
-		for (ii = 0; ii < n3D; ii++)
-			fprintf(fp, "%d ", CorpusData.threeDIdAllViews.at(jj).at(ii));
-		fprintf(fp, "\n");
+		for (jj = 0; jj < CorpusData.nCameras; jj++)
+		{
+			int n3D = CorpusData.threeDIdAllViews[jj].size();
+			fprintf(fp, "%d\n", n3D);
+			for (ii = 0; ii < n3D; ii++)
+				fprintf(fp, "%d ", CorpusData.threeDIdAllViews[jj][ii]);
+			fprintf(fp, "\n");
+		}
+	}
+	else
+	{
+		for (jj = 0; jj < CorpusData.nCameras; jj++)
+		{
+			int n3D = CorpusData.threeDIdAllViews2[jj].size();
+			fprintf(fp, "%d\n", n3D);
+			for (ii = 0; ii < n3D; ii++)
+				fprintf(fp, "%d ", CorpusData.threeDIdAllViews2[jj][ii]);
+			fprintf(fp, "\n");
+		}
 	}
 	fclose(fp);
 
 	sprintf(Fname, "%s/Corpus_cum.txt", Path); fp = fopen(Fname, "w+");
 	for (int ii = 0; ii < CorpusData.IDCumView.size(); ii++)
-		fprintf(fp, "%d ", CorpusData.IDCumView.at(ii));
+		fprintf(fp, "%d ", CorpusData.IDCumView[ii]);
 	fclose(fp);
 
 	for (ii = 0; ii < CorpusData.nCameras; ii++)
 	{
-		sprintf(Fname, "%s/CorpusK_%d.txt", Path, ii);
-		FILE *fp = fopen(Fname, "w+");
-		int npts = CorpusData.uvAllViews.at(ii).size();
-		for (int jj = 0; jj < npts; jj++)
-			fprintf(fp, "%.4f %.4f %.2f\n", CorpusData.uvAllViews.at(ii).at(jj).x, CorpusData.uvAllViews.at(ii).at(jj).y, CorpusData.scaleAllViews[ii][jj]);
+		sprintf(Fname, "%s/CorpusK_%d.txt", Path, ii); FILE *fp = fopen(Fname, "w+");
+		if (CorpusData.uvAllViews.size() != 0)
+		{
+			int npts = CorpusData.uvAllViews[ii].size();
+			for (int jj = 0; jj < npts; jj++)
+				fprintf(fp, "%.4f %.4f %.2f\n", CorpusData.uvAllViews[ii][jj].x, CorpusData.uvAllViews[ii][jj].y, CorpusData.scaleAllViews[ii][jj]);
+		}
+		else
+		{
+			int npts = CorpusData.uvAllViews2[ii].size();
+			for (int jj = 0; jj < npts; jj++)
+				fprintf(fp, "%.4f %.4f %.2f\n", CorpusData.uvAllViews2[ii][jj].x, CorpusData.uvAllViews2[ii][jj].y, CorpusData.scaleAllViews2[ii][jj]);
+		}
 		fclose(fp);
 	}
 
@@ -7550,35 +7666,66 @@ int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool saveDesc
 	{
 		for (kk = 0; kk < CorpusData.nCameras; kk++)
 		{
-			sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk);	fp = fopen(Fname, "w+");
-			int npts = CorpusData.threeDIdAllViews.at(kk).size(), curPid = CorpusData.IDCumView.at(kk);
-			fprintf(fp, "%d\n", npts);
-			for (jj = 0; jj < npts; jj++)
+			if (CorpusData.SiftDesc.rows != 0)
 			{
-				fprintf(fp, "%d ", CorpusData.threeDIdAllViews.at(kk).at(jj));
-				for (ii = 0; ii < SIFTBINS; ii++)
-					fprintf(fp, "%.5f ", CorpusData.SiftDesc.at<float>(curPid + jj, ii));
-				fprintf(fp, "\n");
+				sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk);	fp = fopen(Fname, "w+");
+				int npts = CorpusData.threeDIdAllViews[kk].size(), curPid = CorpusData.IDCumView[kk];
+				fprintf(fp, "%d\n", npts);
+				for (jj = 0; jj < npts; jj++)
+				{
+					fprintf(fp, "%d ", CorpusData.threeDIdAllViews[kk][jj]);
+					for (ii = 0; ii < SIFTBINS; ii++)
+						fprintf(fp, "%.5f ", CorpusData.SiftDesc.at<float>(curPid + jj, ii));
+					fprintf(fp, "\n");
+				}
+				fclose(fp);
 			}
-			fclose(fp);
+			else
+			{
+				sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk);	fp = fopen(Fname, "w+");
+				int npts = CorpusData.threeDIdAllViews2[kk].size();
+				fprintf(fp, "%d\n", npts);
+				for (jj = 0; jj < npts; jj++)
+				{
+					fprintf(fp, "%d ", CorpusData.threeDIdAllViews2[kk][jj]);
+					for (ii = 0; ii < SIFTBINS; ii++)
+						fprintf(fp, "%.5f ", CorpusData.DescAllViews2[kk][jj].desc[ii]);
+					fprintf(fp, "\n");
+				}
+				fclose(fp);
+			}
 		}
 	}
 	else
 	{
 		for (kk = 0; kk < CorpusData.nCameras; kk++)
 		{
-			sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk);
-			ofstream fout; fout.open(Fname, ios::binary);
-
-			int npts = CorpusData.threeDIdAllViews.at(kk).size(), curPid = CorpusData.IDCumView.at(kk);
-			fout.write(reinterpret_cast<char *>(&npts), sizeof(int));
-			for (jj = 0; jj < npts; jj++)
+			if (CorpusData.threeDIdAllViews.size() != 0)
 			{
-				fout.write(reinterpret_cast<char *>(&CorpusData.threeDIdAllViews.at(kk).at(jj)), sizeof(int));
-				for (ii = 0; ii < SIFTBINS; ii++)
-					fout.write(reinterpret_cast<char *>(&CorpusData.SiftDesc.at<float>(curPid + jj, ii)), sizeof(float));
+				sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk); ofstream fout; fout.open(Fname, ios::binary);
+				int npts = CorpusData.threeDIdAllViews[kk].size(), curPid = CorpusData.IDCumView[kk];
+				fout.write(reinterpret_cast<char *>(&npts), sizeof(int));
+				for (jj = 0; jj < npts; jj++)
+				{
+					fout.write(reinterpret_cast<char *>(&CorpusData.threeDIdAllViews[kk][jj]), sizeof(int));
+					for (ii = 0; ii < SIFTBINS; ii++)
+						fout.write(reinterpret_cast<char *>(&CorpusData.SiftDesc.at<float>(curPid + jj, ii)), sizeof(float));
+				}
+				fout.close();
 			}
-			fout.close();
+			else
+			{
+				sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk); ofstream fout; fout.open(Fname, ios::binary);
+				int npts = CorpusData.threeDIdAllViews2[kk].size();
+				fout.write(reinterpret_cast<char *>(&npts), sizeof(int));
+				for (jj = 0; jj < npts; jj++)
+				{
+					fout.write(reinterpret_cast<char *>(&CorpusData.threeDIdAllViews2[kk][jj]), sizeof(int));
+					for (ii = 0; ii < SIFTBINS; ii++)
+						fout.write(reinterpret_cast<char *>(&CorpusData.DescAllViews2[kk][jj].desc[ii]), sizeof(float));
+				}
+				fout.close();
+			}
 		}
 	}
 
@@ -8187,7 +8334,7 @@ void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailVi
 	double iR[9], center[3];
 	for (int ii = 0; ii < AvailViews.size(); ii++)
 	{
-		int viewID = AvailViews.at(ii);
+		int viewID = AvailViews[ii];
 		if (viewID < 0)
 			continue;
 		mat_invert(AllViewParas[viewID].R, iR);
@@ -8205,7 +8352,7 @@ void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailVi
 	FILE *fp = fopen(Fname, "w+");
 	for (int ii = 0; ii < AvailViews.size(); ii++)
 	{
-		int viewID = AvailViews.at(ii);
+		int viewID = AvailViews[ii];
 		fprintf(fp, "%d ", viewID);
 		for (int jj = 0; jj < 16; jj++)
 			fprintf(fp, "%.16f ", AllViewParas[viewID].Rgl[jj]);
@@ -8217,7 +8364,7 @@ void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailVi
 
 	return;
 }
-void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime)
+void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>&AvailTime, int camID, int StartTime)
 {
 	char Fname[200];
 
@@ -8225,7 +8372,7 @@ void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>Ava
 	double iR[9], center[3];
 	for (int ii = 0; ii < AvailTime.size(); ii++)
 	{
-		int timeID = AvailTime.at(ii);
+		int timeID = AvailTime[ii];
 		if (timeID < 0)
 			continue;
 		mat_invert(AllViewParas[timeID].R, iR);
@@ -8243,7 +8390,7 @@ void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>Ava
 	FILE *fp = fopen(Fname, "a+");
 	for (int ii = 0; ii < AvailTime.size(); ii++)
 	{
-		int timeID = AvailTime.at(ii);
+		int timeID = AvailTime[ii];
 		fprintf(fp, "%d ", timeID + StartTime);
 		for (int jj = 0; jj < 16; jj++)
 			fprintf(fp, "%.16f ", AllViewParas[timeID].Rgl[jj]);
@@ -8614,7 +8761,7 @@ void ExportCalibDatatoHanFormat(char *Path, VideoData &AllVideoInfo, int nVideoV
 				nx2, ny2, nz2);
 			fprintf(fp, "\n%d ", AllVis[ii].size());
 			for (int jj = 0; jj < AllVis[ii].size(); jj++)
-				fprintf(fp, "%d 0.0 0.0 ", AllVis[ii].at(jj) - 1);
+				fprintf(fp, "%d 0.0 0.0 ", AllVis[ii][jj] - 1);
 			fprintf(fp, "\n");
 		}
 		fclose(fp);
@@ -8654,7 +8801,7 @@ void GenerateViewAll_3D_2DInliers(char *Path, int viewID, int startID, int stopI
 	{
 		fprintf(fp, "%d\n", All3DviewIDper3D[ii].size());
 		for (int jj = 0; jj < All3DviewIDper3D[ii].size(); jj++)
-			fprintf(fp, "%d %f %f %f", All3DviewIDper3D[ii].at(jj), Alluvper3D[ii].at(jj).x, Alluvper3D[ii].at(jj).y, AllscalePer3D[ii][jj]);
+			fprintf(fp, "%d %f %f %f", All3DviewIDper3D[ii][jj], Alluvper3D[ii][jj].x, Alluvper3D[ii][jj].y, AllscalePer3D[ii][jj]);
 		if (All3DviewIDper3D[ii].size() != 0)
 			fprintf(fp, "\n");
 	}
@@ -10742,8 +10889,7 @@ int TrackOpenCVLK(char *Path, int startFrame, int stopFrame)
 
 	for (int frameID = startFrame; frameID <= stopFrame; frameID++)
 	{
-		sprintf(Fname, "%s/%d.png", Path, frameID);
-		colorImg = imread(Fname, 1);
+		sprintf(Fname, "%s/%d.png", Path, frameID); colorImg = imread(Fname, 1);
 		if (colorImg.empty())
 			break;
 
@@ -10752,7 +10898,7 @@ int TrackOpenCVLK(char *Path, int startFrame, int stopFrame)
 
 		if (frameID == startFrame) // automatic initialization
 		{
-			goodFeaturesToTrack(gray, points[1], MAX_COUNT, 0.01, 10, Mat(), 3, 0, 0.04);
+			goodFeaturesToTrack(gray, points[1], MAX_COUNT, 0.05, 50, Mat(), 21, 0, 0.04);
 			cornerSubPix(gray, points[1], subPixWinSize, Size(-1, -1), termcrit);
 			for (int jj = 0; jj < points[1].size(); jj++)
 				circle(backGround, points[1][jj], 5, Scalar(83, 185, 255), -1, 8);
@@ -10797,13 +10943,15 @@ int TrackOpenCVLK(char *Path, int startFrame, int stopFrame)
 
 		needToInit = false;
 		imshow("Static Image detection with LK", backGround);
-		char c = (char)waitKey(-1);
+		char c = (char)waitKey(10);
 		if (c == 27)
 			break;
 
+		sprintf(Fname, "%s/_%d.png", Path, frameID);
+		imwrite(Fname, backGround);
+
 		std::swap(points[1], points[0]);
 		swap(prevGray, gray);
-		frameID++;
 	}
 
 	return 0;
@@ -10864,7 +11012,7 @@ void DetectCornersCorrelation(double *img, int width, int height, int nchannels,
 	double trans[9], temp[9], iH1[9], H1[9] = { 1, 0, -PatternSize / 2, 0, 1, -PatternSize / 2, 0, 0, 1 };
 	for (ii = 1; ii < PatternAngles.size(); ii++)
 	{
-		double c = cos(PatternAngles.at(ii)*3.14159265359 / 180), s = sin(PatternAngles.at(ii)*3.14159265359 / 180);
+		double c = cos(PatternAngles[ii] * 3.14159265359 / 180), s = sin(PatternAngles[ii] * 3.14159265359 / 180);
 		double H2[9] = { c, -s, 0, s, c, 0, 0, 0, 1 };
 		mat_invert(H1, iH1, 3);
 		mat_mul(H2, H1, temp, 3, 3, 3);
@@ -10966,7 +11114,7 @@ void RefineCorners(double *Para, int width, int height, int nchannels, Point2d *
 	double trans[9], temp[9], iH1[9], H1[9] = { 1, 0, -PatternSize / 2, 0, 1, -PatternSize / 2, 0, 0, 1 };
 	for (ii = 1; ii < PatternAngles.size(); ii++)
 	{
-		double c = cos(PatternAngles.at(ii)*3.14159265359 / 180), s = sin(PatternAngles.at(ii)*3.14159265359 / 180);
+		double c = cos(PatternAngles[ii] * 3.14159265359 / 180), s = sin(PatternAngles[ii] * 3.14159265359 / 180);
 		double H2[9] = { c, -s, 0, s, c, 0, 0, 0, 1 };
 		mat_invert(H1, iH1, 3), mat_mul(H2, H1, temp, 3, 3, 3), mat_mul(iH1, temp, trans, 3, 3, 3);
 		TransformImage(maskSmooth + 2 * ii*PatternLength, PatternSize, PatternSize, maskSmooth, PatternSize, PatternSize, trans, 1, 1, NULL);
@@ -11185,7 +11333,7 @@ void RefineCornersFromInit(double *Para, int width, int height, int nchannels, P
 	double trans[9], temp[9], iH1[9], H1[9] = { 1, 0, -PatternSize / 2, 0, 1, -PatternSize / 2, 0, 0, 1 };
 	for (int ii = 1; ii < numPatterns; ii++)
 	{
-		double c = cos(PatternAngles.at(ii)*3.14159265359 / 180), s = sin(PatternAngles.at(ii)*3.14159265359 / 180);
+		double c = cos(PatternAngles[ii] * 3.14159265359 / 180), s = sin(PatternAngles[ii] * 3.14159265359 / 180);
 		double H2[9] = { c, -s, 0, s, c, 0, 0, 0, 1 };
 		mat_invert(H1, iH1, 3), mat_mul(H2, H1, temp, 3, 3, 3), mat_mul(iH1, temp, trans, 3, 3, 3);
 		TransformImage(maskSmooth + ii*PatternLength, PatternSize, PatternSize, maskSmooth, PatternSize, PatternSize, trans, 1, 1, NULL);

@@ -25,6 +25,7 @@
 #include <Eigen/Dense>
 #include "Eigen/Sparse"
 
+#include "Visualization.h"
 #include "DataStructure.h"
 #include "ImagePro.h"
 
@@ -139,6 +140,7 @@ bool ReadKPointsBinary(char *fn, vector<KeyPoint> &kpts, bool silent = false);
 bool WriteDescriptorBinary(char *fn, Mat descriptor, bool silent = false);
 Mat ReadDescriptorBinary(char *fn, int descriptorSize, bool silent = false);
 
+int readVisualSFMSift(char *fn, vector<KeyPoint>&kpts, Mat &descriptors, bool silent = true);
 bool WriteKPointsSIFTGPU(char *fn, vector<SiftKeypoint>kpts, bool silent);
 bool WriteKPointsBinarySIFTGPU(char *fn, vector<SiftGPU::SiftKeypoint>kpts, bool silent = false);
 bool ReadKPointsBinarySIFTGPU(char *fn, vector<SiftGPU::SiftKeypoint> &kpts, bool silent = false);
@@ -157,6 +159,7 @@ bool WriteKPointsRGBBinarySIFTGPU(char *fn, vector<KeyPoint>kpts, vector<Point3i
 bool ReadKPointsRGBBinarySIFTGPU(char *fn, vector<KeyPoint> &kpts, vector<Point3i> &rgb, bool silent = false);
 
 int siftgpu(char *Fname1, char *Fname2, const float nndrRatio = 0.8, const double fractionMatchesDisplayed = 0.5);
+
 
 //Math
 void dec2bin(int dec, int*bin, int num_bin);
@@ -627,7 +630,7 @@ void BlurDetectionDriver(char *Path, int nimages, int width, int height, float b
 
 int GenerateVisualSFMinput(char *path, int startFrame, int stopFrame, int npts);
 bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics, int nHDs = 30, int nVGAs = 24, int nPanels = 20);
-bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize, int sharedIntrinsics);
+bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize, int sharedIntrinsics, vector<KeyPoint> *AllKeyPts  = 0, Mat *AllDesc = 0);
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool saveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor = 1.0);
@@ -642,7 +645,7 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 int WriteVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime);
 void GettPosesGL(double *R, double *T, double *poseGL);
 void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID);
-void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailTime, int camID, int StartTime = 0);
+void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>&AvailTime, int camID, int StartTime = 0);
 int DownSampleSpatialCalib(char *Path, int nviews, int startFrame, int stopFrame, int Factor);
 
 void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker, int &npts, double sigma, int search_area, int NMS_BW, double thresh);

@@ -101,16 +101,32 @@ void SelectionFunction(int x, int y, bool append_rightClick = false)
 
 				bool already = false;
 				for (int ii = 0; ii < PickedPoints.size(); ii++)
+				{
 					if (pickedID == PickedPoints[ii])
 					{
 						already = true; break;
 					}
-
+				}
 				if (!already)
 					PickedPoints.push_back(pickedID);
 			}
 		}
-		else if (pickedID >= g_vis.CorpusPointPosition.size() + MaxnCams)//if(pickedID<MaxnCams)  //which means camera
+		else if (pickedID>=0 && pickedID < MaxnCams)  //which means camera
+		{
+			printf("Pick camera #%d\n", pickedID);
+
+			bool already = false;
+			for (int ii = 0; ii < PickCams.size(); ii++)
+			{
+				if (pickedID == PickCams[ii])
+				{
+					already = true; break;
+				}
+			}
+			if (!already)
+				PickCams.push_back(pickedID);
+		}
+		else if (pickedID >= g_vis.CorpusPointPosition.size() + MaxnCams)
 		{
 			pickedID -= g_vis.CorpusPointPosition.size() + MaxnCams;
 			if (pickedID<0 || pickedID>g_vis.Track3DLength.size())
@@ -120,11 +136,12 @@ void SelectionFunction(int x, int y, bool append_rightClick = false)
 
 			bool already = false;
 			for (int ii = 0; ii < PickedTraject.size(); ii++)
+			{
 				if (pickedID == PickedTraject[ii])
 				{
 					already = true; break;
 				}
-
+			}
 			if (!already)
 				PickedTraject.push_back(pickedID);
 		}
@@ -259,8 +276,11 @@ void Keyboard(unsigned char key, int x, int y)
 		printf("New pointSize: %f\n", pointSize);
 		break;
 	case 'P':
-		printf("Toggle Picking mode\n ");
 		PickingMode = !PickingMode;
+		if (PickingMode)
+			printf("Picking Mode: ON\n ");
+		else
+			printf("Picking Mode: OFF\n ");
 		break;
 	case 'g':
 		printf("Toggle ground plane display\n ");
@@ -388,7 +408,7 @@ void SpecialInput(int key, int x, int y)
 		break;
 	case GLUT_KEY_RIGHT:
 		timeID++;
-		if (timeID > TimeInstancesStack.back() - 1)
+		if (TimeInstancesStack.size() >0 && timeID > TimeInstancesStack.back() - 1)
 			timeID = TimeInstancesStack.back() - 1;
 		printf("Current time: %d\n", timeID);
 		break;
@@ -436,7 +456,10 @@ void MouseButton(int button, int state, int x, int y)
 			SelectionFunction(x, y, false);
 		}
 		if (glutGetModifiers() == GLUT_ACTIVE_ALT)//Deselect
+		{
+			printf("Deselect all points\n");
 			PickedPoints.clear(), PickCams.clear(), PickedTraject.clear(), PickPoint3D.clear();
+		}
 	}
 	else if (button == GLUT_MIDDLE_BUTTON)
 	{
@@ -463,7 +486,7 @@ void MouseMotion(int x, int y)
 		else if (g_camMode == CAM_PAN)
 		{
 			showAxis = true;
-			float dX = -(x - g_xClick), dY = (y - g_yClick);
+			float dX = -(x - g_xClick)*UnitScale, dY = (y - g_yClick)*UnitScale;
 
 			float cphi = cos(-Pi*g_mouseYRotate / 180), sphi = sin(-Pi*g_mouseYRotate / 180);
 			float Rx[9] = { 1, 0, 0, 0, cphi, -sphi, 0, sphi, cphi };
@@ -512,12 +535,14 @@ void Draw_Axes(void)
 
 	glPopMatrix();
 }
-void DrawCamera()
+void DrawCamera(bool highlight)
 {
-	//glPushMatrix();
 	glColorMaterial(GL_FRONT, GL_DIFFUSE);
 	glEnable(GL_COLOR_MATERIAL);
-	glColor3fv(Red);
+	if (!highlight)
+		glColor3fv(Red);
+	else
+		glColor3fv(Blue);
 
 	glBegin(GL_LINES);
 	glVertex3f(0, 0, 0); //
@@ -530,8 +555,12 @@ void DrawCamera()
 	glVertex3f(-0.5*CameraSize, -0.5*CameraSize, 1 * CameraSize); //
 	glEnd();
 
+	if (!highlight)
+		glColor3fv(Green);
+	else
+		glColor3fv(Blue);
+
 	// we also has to draw a square for the bottom of the pyramid so that as it rotates we wont be able see inside of it but all a square is is two triangle put together
-	glColor3fv(Green);
 	glBegin(GL_LINE_STRIP);
 	glVertex3f(0.5*CameraSize, 0.5*CameraSize, 1 * CameraSize);
 	glVertex3f(-0.5*CameraSize, 0.5*CameraSize, 1 * CameraSize);
@@ -540,7 +569,6 @@ void DrawCamera()
 	glVertex3f(0.5*CameraSize, 0.5*CameraSize, 1 * CameraSize);
 	glEnd();
 	glDisable(GL_COLOR_MATERIAL);
-	//glPopMatrix();
 }
 void Arrow(GLdouble x1, GLdouble y1, GLdouble z1, GLdouble x2, GLdouble y2, GLdouble z2, GLdouble D)
 {
@@ -756,7 +784,7 @@ void RenderObjects()
 		Read3DTrajectory(Path, TrialID, colorVisibility);
 		oTrialID = TrialID;
 	}
-	if (TimeInstancesStack.back() - 1 < timeID)
+	if (TimeInstancesStack.size() >0 && TimeInstancesStack.back() - 1 < timeID)
 		timeID = TimeInstancesStack.back() - 1;
 	if (EndTime)
 		timeID = TimeInstancesStack.back() - 1;
@@ -766,47 +794,46 @@ void RenderObjects()
 	{
 		for (unsigned int i = 0; i < g_vis.CorpusPointPosition.size(); ++i)
 		{
+			glLoadName(i + MaxnCams);//for picking purpose
+
 			bool picked = false;
 			for (unsigned int j = 0; j < PickedPoints.size(); j++)
 				if (i == PickedPoints[j])
 					picked = true;
-			if (picked)
-				continue;
 
-			glLoadName(i + MaxnCams);//for picking purpose
-			glPushMatrix();
-			glTranslatef(g_vis.CorpusPointPosition[i].x - PointsCentroid[0], g_vis.CorpusPointPosition[i].y - PointsCentroid[1], g_vis.CorpusPointPosition[i].z - PointsCentroid[2]);
-			if (drawPointColor)
-				glColor3f(g_vis.CorpusPointColor[i].x, g_vis.CorpusPointColor[i].y, g_vis.CorpusPointColor[i].z);
-			else
-				glColor3fv(Red);
-			glutSolidSphere(pointSize / 1.25, 4, 4);
-			glPopMatrix();
-
-			if (drawPatchNormal)
-			{
-				glColor4f(0, 1, 0, 0.5f);
-				Point3d newHeadPt = normalSize *g_vis.PointNormal[i] + g_vis.CorpusPointPosition[i];
 				glPushMatrix();
-				Arrow(g_vis.CorpusPointPosition[i].x - PointsCentroid[0], g_vis.CorpusPointPosition[i].y - PointsCentroid[1], g_vis.CorpusPointPosition[i].z - PointsCentroid[2],
-					newHeadPt.x - PointsCentroid[0], newHeadPt.y - PointsCentroid[1], newHeadPt.z - PointsCentroid[2], arrowThickness);
+				glTranslatef(g_vis.CorpusPointPosition[i].x - PointsCentroid[0], g_vis.CorpusPointPosition[i].y - PointsCentroid[1], g_vis.CorpusPointPosition[i].z - PointsCentroid[2]);
+				if (!picked&&drawPointColor)
+					glColor3f(g_vis.CorpusPointColor[i].x, g_vis.CorpusPointColor[i].y, g_vis.CorpusPointColor[i].z);
+				else
+					glColor3fv(Red);
+				glutSolidSphere(pointSize / 1.25, 4, 4);
 				glPopMatrix();
-			}
+
+				if (drawPatchNormal)
+				{
+					glColor4f(0, 1, 0, 0.5f);
+					Point3d newHeadPt = normalSize *g_vis.PointNormal[i] + g_vis.CorpusPointPosition[i];
+					glPushMatrix();
+					Arrow(g_vis.CorpusPointPosition[i].x - PointsCentroid[0], g_vis.CorpusPointPosition[i].y - PointsCentroid[1], g_vis.CorpusPointPosition[i].z - PointsCentroid[2],
+						newHeadPt.x - PointsCentroid[0], newHeadPt.y - PointsCentroid[1], newHeadPt.z - PointsCentroid[2], arrowThickness);
+					glPopMatrix();
+				}
+			
 		}
 
 		for (unsigned int i = 0; i < g_vis.CorpusPointPosition2.size(); ++i)
 		{
+			glLoadName(i + g_vis.CorpusPointPosition.size() + MaxnCams);//for picking purpose
+
 			bool picked = false;
 			for (unsigned int j = 0; j < PickedPoints.size(); j++)
 				if (i == PickedPoints[j])
 					picked = true;
-			if (picked)
-				continue;
-
-			glLoadName(i + g_vis.CorpusPointPosition.size() + MaxnCams);//for picking purpose
+		
 			glPushMatrix();
 			glTranslatef(g_vis.CorpusPointPosition2[i].x - PointsCentroid[0], g_vis.CorpusPointPosition2[i].y - PointsCentroid[1], g_vis.CorpusPointPosition2[i].z - PointsCentroid[2]);
-			if (drawPointColor)
+			if (!picked&&drawPointColor)
 				glColor3f(g_vis.CorpusPointColor2[i].x, g_vis.CorpusPointColor2[i].y, g_vis.CorpusPointColor2[i].z);
 			else
 				glColor3fv(Green);
@@ -824,27 +851,6 @@ void RenderObjects()
 			}
 		}
 		//RenderSkeleton2(g_vis.CorpusPointPosition, Red);
-
-		//Draw picked 3D points red
-		for (unsigned int i = 0; i < PickedPoints.size(); i++)
-		{
-			int id = PickedPoints[i];
-			glPushMatrix();
-			glTranslatef(g_vis.CorpusPointPosition[id].x - PointsCentroid[0], g_vis.CorpusPointPosition[id].y - PointsCentroid[1], g_vis.CorpusPointPosition[id].z - PointsCentroid[2]);
-			glColor3fv(Red);
-			glutSolidSphere(pointSize, 4, 4);
-			glPopMatrix();
-
-			if (drawPatchNormal)
-			{
-				glColor4f(0, 1, 0, 0.5f);
-				Point3d newHeadPt = normalSize *g_vis.PointNormal[id] + g_vis.CorpusPointPosition[id];
-				glPushMatrix();
-				Arrow(g_vis.CorpusPointPosition[id].x - PointsCentroid[0], g_vis.CorpusPointPosition[id].y - PointsCentroid[1], g_vis.CorpusPointPosition[id].z - PointsCentroid[2],
-					newHeadPt.x - PointsCentroid[0], newHeadPt.y - PointsCentroid[1], newHeadPt.z - PointsCentroid[2], arrowThickness);
-				glPopMatrix();
-			}
-		}
 	}
 
 	if (drawTimeVaryingCorpusPoints)//if the corpus 3D is some how kind of time varying
@@ -898,16 +904,27 @@ void RenderObjects()
 	//draw Corpus camera 
 	if (drawCorpusCameras)
 	{
-		for (int j = 0; j < g_vis.glCorpusCameraInfo.size(); j++)
+		for (int ii = 0; ii < g_vis.glCorpusCameraInfo.size(); ii++)
 		{
-			float* centerPt = g_vis.glCorpusCameraInfo[j].camCenter;
-			GLfloat* R = g_vis.glCorpusCameraInfo[j].Rgl;
+			float* centerPt = g_vis.glCorpusCameraInfo[ii].camCenter;
+			GLfloat* R = g_vis.glCorpusCameraInfo[ii].Rgl;
+			glLoadName(ii);//for picking purpose
 
-			glLoadName(j);//for picking purpose
+			bool found = false;
+			for (int jj = 0; jj < PickCams.size(); jj++)
+				if (ii == PickCams[jj])
+				{
+					found = true;
+					break;
+				}
+
 			glPushMatrix();
 			glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
 			glMultMatrixf(R);
-			DrawCamera();
+			if (found)
+				DrawCamera(true);
+			else
+				DrawCamera();
 			glPopMatrix();
 		}
 	}
@@ -1384,7 +1401,7 @@ int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, b
 	//PointsCentroid[0] = 919, PointsCentroid[1] = 154, PointsCentroid[2] = 894;
 	//PointsCentroid[0] = -108, PointsCentroid[1] = -1356, PointsCentroid[2] = 5228;
 
-	UnitScale = sqrt(pow(PointVar[0], 2) + pow(PointVar[1], 2) + pow(PointVar[2], 2)) / 500.0;
+	UnitScale = sqrt(pow(PointVar[0], 2) + pow(PointVar[1], 2) + pow(PointVar[2], 2)) / 750.0;
 	g_coordAxisLength = 200.f*UnitScale, g_fViewDistance = 5000 * UnitScale* VIEWING_DISTANCE_MIN;
 	g_nearPlane = 1.0*UnitScale, g_farPlane = 30000 * UnitScale;
 	CameraSize = 100.0f*UnitScale, pointSize = 5.0f*UnitScale, normalSize = 20.f*UnitScale, arrowThickness = .1f*UnitScale;

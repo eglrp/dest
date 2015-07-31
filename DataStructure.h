@@ -16,7 +16,8 @@ using namespace std;
 #define LIMIT3D 1e-6
 #define Pi 3.1415926535897932
 #define MaxnFrames 7000
-#define MaxnCams 500
+#define MaxnCams 10000
+#define MaxSharedIntrinsicGroup 20
 #define OPTICALFLOW_BIDIRECT_DIST_THRESH 3.0
 
 #define MOTION_TRANSLATION 0

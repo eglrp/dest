@@ -24,7 +24,7 @@ using namespace std;
 #define VIEWING_DISTANCE_MIN  1.0
 
 void Draw_Axes();
-void DrawCamera();
+void DrawCamera(bool highlight = false);
 void RenderObjects();
 void display(void);
 void InitGraphics(void);

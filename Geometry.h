@@ -116,9 +116,9 @@ int IncrementalBA(char *Path, int nviews, int timeID, CameraData *AllViewsParas,
 
 double PinholeReprojectionErrorSimpleDebug(double *P, Point3d Point, Point2d uv);
 void PinholeDistortionReprojectionDebug(double *intrinsic, double* distortion, double* rt, Point2d observed, Point3d Point, double *residuals);
-int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<vector<double> >scaleAll3D, vector<int> AvailViews, vector<int> SharedIntrinsicCamID, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, bool fixFirstCamPose, int distortionCorrected, int LossType, bool debug = false, bool silent = true);
+int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<vector<double> >scaleAll3D, vector<int> SharedIntrinsicCamID, int nviews, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, bool fixFirstCamPose, int distortionCorrected, int LossType, bool debug = false, bool silent = true);
 int ProjectionCayLeyReProjection(double *intrinsic, double* distortion, double* rt, double *wt, Point2d &predicted, Point3d Point, int width, int height);
-int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<vector<double> >scaleAll3D, vector<int> AvailViews, vector<int> SharedIntrinsicCamID, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, bool fixFirstCamPose, bool fixLocalPose, int distortionCorrected, int LossType, bool debug = false, bool silent = true);
+int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<vector<double> >scaleAll3D, vector<int> SharedIntrinsicCamID, int nviews, bool fixIntrinsicHD, bool fixDistortion, bool fixPose, bool fixFirstCamPose, bool fixLocalPose, int distortionCorrected, int LossType, bool debug = false, bool silent = true);
 
 void IncrementalBundleAdjustment(char *Path, int nviews, int timeID, int maxKeypoints);
 int GlobalShutterBundleAdjustmentDriver(char *Path, int nViews, int distortionCorrected, vector< int> SharedIntrinsicCamID, int LossType = 0);
@@ -139,7 +139,7 @@ int BundleAdjustDomeTableCorres(char *Path, int startF_HD, int stopF_HD, int sta
 int BundleAdjustDomeMultiNVM(char *Path, int nNvm, int maxPtsPerNvM, bool fixIntrinsic, bool fixDistortion, bool fixPose, bool debug);
 int ReCalibratedFromGroundTruthCorrespondences(char *Path, int camID, int startFrame, int stopFrame, int Allnpts, int ShutterModel = 0);
 int RefineVisualSfM(char *Path, int ShutterModel = 0, double threshold = 5.0, bool fixedIntrinsc = false, bool fixedDistortion = false, bool fixedPose = false, bool fixedfirstCamPose = true, bool distortionCorrected = false, bool doubleRefinement = true);
-int RefineVisualSfMAndCreateCorpus(char *Path, int nimages, int VisSfMsharedIntrinsics, int ShutterModel = 0, double threshold = 5.0, bool fixedIntrinsc = false, bool fixedDistortion = false, bool fixedPose = false, bool fixedfirstCamPose = true, bool distortionCorrected = false, bool doubleRefinement = true);
+int RefineVisualSfMAndCreateCorpus(char *Path, int nimages, int nplus, int ShutterModel = 0, double threshold = 5.0, bool sharedInstrinsic = true, bool fixedIntrinsc = false, bool fixedDistortion = false, bool fixedPose = false, bool fixedfirstCamPose = true, bool distortionCorrected = false, bool doubleRefinement = true);
 
 int SparsePointTrackingDriver(char *Path, vector<Point2d> &Tracks, vector<float*> &ImgPara, int viewID, int startF, int stopF, LKParameters LKArg, int &width, int &height, int nchannels);
 #endif

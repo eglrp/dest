@@ -305,6 +305,7 @@ void GenerateiDCTBasis(double *Basis, int nsamples, double t)
 }
 
 //BSpline
+/*
 void GenerateSplineBasisWithBreakPts(double *Basis, double *DBasis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder, int DerivativeOrder)
 {
 	if (ResampledPts[nResamples - 1] > BreakPts[nbreaks - 1])
@@ -341,23 +342,6 @@ void GenerateSplineBasisWithBreakPts(double *Basis, double *DBasis, double *Resa
 				DBasis[jj + ii*ncoeffs] = gsl_matrix_get(dBi, jj, 1);
 	}
 
-	/*FILE	*fp = fopen("C:/temp/gsl_B.txt", "w + ");
-	for (int jj = 0; jj < nResamples; jj++)
-	{
-	for (int ii = 0; ii < ncoeffs; ii++)
-	fprintf(fp, "%.16f ", Basis[ii + jj*ncoeffs]);
-	fprintf(fp, "\n");
-	}
-	fclose(fp);
-
-	fp = fopen("C:/temp/gsl_dB.txt", "w + ");
-	for (int jj = 0; jj < nResamples; jj++)
-	{
-	for(int ii = 0; ii < ncoeffs; ii++)
-	fprintf(fp, "%.16f ", DBasis[ii + jj*ncoeffs]);
-	fprintf(fp, "\n");
-	}
-	fclose(fp);*/
 
 	gsl_bspline_free(bw);
 	gsl_bspline_deriv_free(dw);
@@ -398,30 +382,6 @@ void GenerateResamplingSplineBasisWithBreakPts(double *Basis, double *ResampledP
 		for (int jj = 0; jj < ncoeffs; jj++)
 			Basis[jj + ii*ncoeffs] = gsl_vector_get(Bi, jj);
 	}
-
-	/*FILE *fp = fopen("C:/temp/gsl_breakpts.txt", "w + ");
-	for (int ii = 0; ii < nbreaks; ii++)
-	fprintf(fp, "%.16f \n", gsl_vector_get(gsl_BreakPts, ii));
-	fclose(fp);
-
-	fp = fopen("C:/temp/gsl_resampled.txt", "w + ");
-	for (int ii = 0; ii < nResamples; ii++)
-	fprintf(fp, "%.16f \n", gsl_vector_get(gsl_ResampledPts, ii));
-	fclose(fp);
-
-	fp = fopen("C:/temp/gsl_knots.txt", "w + ");
-	for (int ii = 0; ii < nbreaks + 2 * SplineOrder - 2; ii++)
-	fprintf(fp, "%.16f \n", gsl_vector_get(bw->knots, ii));
-	fclose(fp);
-
-	fp = fopen("C:/temp/gsl_B.txt", "w + ");
-	for (int jj = 0; jj < nResamples; jj++)
-	{
-	for (int ii = 0; ii < nbreaks + 2; ii++)
-	fprintf(fp, "%.16f ", gsl_matrix_get(gsl_Basis, jj, ii));
-	fprintf(fp, "\n");
-	}
-	fclose(fp);*/
 
 	gsl_bspline_free(bw);
 	gsl_vector_free(Bi);
@@ -464,29 +424,6 @@ void GenerateResamplingSplineBasisWithBreakPts(double *Basis, vector<double> Res
 		for (int ii = 0; ii < nbreaks + 2; ii++)
 			Basis[ii + jj*(nbreaks + 2)] = gsl_matrix_get(gsl_Basis, jj, ii);
 
-	/*FILE *fp = fopen("C:/temp/gsl_breakpts.txt", "w + ");
-	for (int ii = 0; ii < nbreaks; ii++)
-	fprintf(fp, "%.16f \n", gsl_vector_get(gsl_BreakPts, ii));
-	fclose(fp);
-
-	fp = fopen("C:/temp/gsl_resampled.txt", "w + ");
-	for (int ii = 0; ii < nResamples; ii++)
-	fprintf(fp, "%.16f \n", gsl_vector_get(gsl_ResampledPts, ii));
-	fclose(fp);
-
-	fp = fopen("C:/temp/gsl_knots.txt", "w + ");
-	for (int ii = 0; ii < nbreaks + 2 * SplineOrder - 2; ii++)
-	fprintf(fp, "%.16f \n", gsl_vector_get(bw->knots, ii));
-	fclose(fp);
-
-	fp = fopen("C:/temp/gsl_B.txt", "w + ");
-	for (int jj = 0; jj < nResamples; jj++)
-	{
-	for (int ii = 0; ii < nbreaks + 2; ii++)
-	fprintf(fp, "%.16f ", gsl_matrix_get(gsl_Basis, jj, ii));
-	fprintf(fp, "\n");
-	}
-	fclose(fp);*/
 	gsl_bspline_free(bw);
 	gsl_vector_free(Bi);
 	gsl_matrix_free(gsl_Basis);
@@ -545,6 +482,7 @@ int FindActingControlPts(double t, int *ActingID, int ncontrols, gsl_bspline_wor
 
 	return 0;
 }
+*/
 
 static void BSplineLVB(const double * t, const int jhigh, const int index, const double x, const int left, int * j, double * deltal, double * deltar, double * biatx)
 {
@@ -744,7 +682,7 @@ int BSplineGetKnots(double *knots, double *BreakLoc, int nbreaks, int nControls,
 		knots[i] = BreakLoc[nPolyPieces];
 	return 0;
 }
-int BSplineGetNonZeroBasis(const double x, double * dB, int * istart, int * iend, double *knots, int nbreaks, int nControls, int SplineOrder, const int nderiv)
+int BSplineGetNonZeroBasis(const double x, double * dB, int * istart, int * iend, double *knots, int nbreaks, int nControls, int SplineOrder, int nderiv)
 {
 	int flag = 0;
 
@@ -761,7 +699,7 @@ int BSplineGetNonZeroBasis(const double x, double * dB, int * istart, int * iend
 
 	return 0;
 }
-int BSplineGetBasis(const double x, double * B, double *knots, int nbreaks, int nControls, int SplineOrder, const int nderiv)
+int BSplineGetBasis(const double x, double * B, double *knots, int nbreaks, int nControls, int SplineOrder, int nderiv)
 {
 	int i, j, istart, iend, error;
 	double Bi[4 * 3];//up to 2nd der of cubic spline
@@ -780,6 +718,36 @@ int BSplineGetBasis(const double x, double * B, double *knots, int nbreaks, int 
 			B[i + j*nControls] = 0.0;
 	}
 
+	return 0;
+}
+int BSplineGetAllBasis(double *AllB, double *samples, double *BreakPts, int nsamples, int nbreaks, int SplineOrder, const int nderiv, double *AlldB, double *Alld2B)
+{
+	int nCoeffs = nbreaks + SplineOrder - 2;
+	double *B = new double[nCoeffs*(nderiv+1)];
+	double *knots = new double[nCoeffs + SplineOrder];
+
+	BSplineGetKnots(knots, BreakPts, nbreaks, nCoeffs, SplineOrder);
+
+	for (int ii = 0; ii < nsamples; ii++)
+	{
+		int error = BSplineGetBasis(samples[ii], B, knots, nbreaks, nCoeffs, SplineOrder, nderiv);
+		if (error != 0)
+		{
+			printf("Abort with error %d\n", error);
+			abort();
+		}
+
+		for (int jj = 0; jj < nCoeffs; jj++)
+		{
+			AllB[ii*nCoeffs + jj] = B[jj];
+			if (nderiv >=1)
+				AlldB[ii*nCoeffs + jj] = B[jj + nCoeffs];
+			if (nderiv==2)
+				Alld2B[ii*nCoeffs + jj] = B[jj + 2*nCoeffs];
+		}
+	}
+
+	delete[]B, delete []knots;
 	return 0;
 }
 
@@ -6339,13 +6307,17 @@ int Pose_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsamples, char 
 	fclose(fp);
 
 	//Bspline generator
-	gsl_bspline_workspace *bw = gsl_bspline_alloc(SplineOrder, nbreaks);
+	/*gsl_bspline_workspace *bw = gsl_bspline_alloc(SplineOrder, nbreaks);
 	gsl_vector *Bi = gsl_vector_alloc(nControls);
 	gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
 
 	for (int ii = 0; ii < nbreaks; ii++)
 		gsl_vector_set(gsl_BreakPts, ii, BreakLoc[ii]);
-	gsl_bspline_knots(gsl_BreakPts, bw);
+	gsl_bspline_knots(gsl_BreakPts, bw);*/
+
+	double *Bi = new double[nControls];
+	double *knots = new double[nControls + SplineOrder];
+	BSplineGetKnots(knots, BreakLoc, nbreaks, nControls, SplineOrder);
 
 	//Start interpolation pose
 	double *SampleLoc = new double[nsamples];
@@ -6359,22 +6331,25 @@ int Pose_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsamples, char 
 	fp = fopen(Fname2, "w+");
 	for (int ii = 0; ii < nsamples; ii++)
 	{
-		FindActingControlPts(SampleLoc[ii], ActingID, nControls, bw, Bi, SplineOrder, 0);
+		//FindActingControlPts(SampleLoc[ii], ActingID, nControls, bw, Bi, SplineOrder, 0);
+		//gsl_bspline_eval(SampleLoc[ii], Bi, bw);
 
-		gsl_bspline_eval(SampleLoc[ii], Bi, bw);
+		BSplineFindActiveCtrl(ActingID, SampleLoc[ii], knots, nbreaks, nControls, SplineOrder, 0);
+		BSplineGetBasis(SampleLoc[ii], Bi, knots, nbreaks, nControls, SplineOrder);
+		
 		for (int jj = 0; jj < 6; jj++)
 		{
 			if (se3 == 1)
 			{
 				twist[jj] = 0.0;
 				for (int kk = 0; kk < 4; kk++)
-					twist[jj] += ControlPose[jj + 6 * ActingID[kk]] * gsl_vector_get(Bi, ActingID[kk]);
+					twist[jj] += ControlPose[jj + 6 * ActingID[kk]] * Bi[ActingID[kk]];// gsl_vector_get(Bi, ActingID[kk]);
 			}
 			else
 			{
 				tr[jj] = 0;
 				for (int kk = 0; kk < 4; kk++)
-					tr[jj] += ControlPose[jj + 6 * ActingID[kk]] * gsl_vector_get(Bi, ActingID[kk]);
+					tr[jj] += ControlPose[jj + 6 * ActingID[kk]] * Bi[ActingID[kk]];// gsl_vector_get(Bi, ActingID[kk]);
 			}
 		}
 
@@ -6417,6 +6392,7 @@ int Pose_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsamples, char 
 	}
 	fclose(fp);
 
+	delete[]SampleLoc, delete[]knots, delete[]Bi;
 	return 0;
 }
 int Pose_se_DCTInterpolation(char *FnameIn, char *FnameOut, int nsamples)
@@ -6992,7 +6968,7 @@ bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics,
 
 	return true;
 }
-bool loadNVM(const char *Fname, Corpus &CorpusData, vector<Point2i> &ImgSize, int sharedIntrinsics, vector<KeyPoint> *AllKeyPts, Mat *AllDesc)
+bool loadNVM(const char *Fname, Corpus &CorpusData, vector<Point2i> &ImgSize, vector<KeyPoint> *AllKeyPts, Mat *AllDesc, int nplus)
 {
 	ifstream ifs(Fname);
 	if (ifs.fail())
@@ -7007,12 +6983,6 @@ bool loadNVM(const char *Fname, Corpus &CorpusData, vector<Point2i> &ImgSize, in
 	{
 		cerr << "Can only load NVM_V3" << endl;
 		return false;
-	}
-
-	if (sharedIntrinsics == 1)
-	{
-		double fx, fy, u0, v0, radial1;
-		ifs >> token >> fx >> u0 >> fy >> v0 >> radial1;
 	}
 
 	//loading camera parameters
@@ -7124,13 +7094,8 @@ bool loadNVM(const char *Fname, Corpus &CorpusData, vector<Point2i> &ImgSize, in
 	{
 		viewID3D.clear(), pid3D.clear(), uv3D.clear(), scale3D.clear();
 		ifs >> xyz.x >> xyz.y >> xyz.z >> rgb.x >> rgb.y >> rgb.z;
-
-		CorpusData.xyz.push_back(xyz);
-		CorpusData.rgb.push_back(rgb);
-
 		ifs >> nviews;
-		//if (AllDesc != NULL) Desc3Di.create(nviews, 128, CV_32F);
-
+		
 		int cur3DID = CorpusData.viewIdAll3D.size();
 		for (int ii = 0; ii < nviews; ii++)
 		{
@@ -7138,30 +7103,40 @@ bool loadNVM(const char *Fname, Corpus &CorpusData, vector<Point2i> &ImgSize, in
 			uv.x += 0.5*(CorpusData.camera[CameraOrder[viewID]].width - 1.0);
 			uv.y += 0.5*(CorpusData.camera[CameraOrder[viewID]].height - 1.0);
 
-			viewID3D.push_back(CameraOrder[viewID]);
-			pid3D.push_back((pid));
-			uv3D.push_back(uv);
-			scale3D.push_back(1.0);
-
-			if (AllDesc != NULL)
+			if (nplus < nviews)
 			{
-				//for (int jj = 0; jj < 128; jj++)  Desc3Di.at<float>(ii, jj) = AllDesc[viewID].at<float>(pid, jj);
-				for (int jj = 0; jj < 128; jj++)
-					desci.desc[jj] = AllDesc[CameraOrder[viewID]].at<float>(pid, jj);
+				viewID3D.push_back(CameraOrder[viewID]);
+				pid3D.push_back((pid));
+				uv3D.push_back(uv);
+				scale3D.push_back(1.0);
 
-				CorpusData.uvAllViews2[CameraOrder[viewID]].push_back(uv);
-				CorpusData.scaleAllViews2[CameraOrder[viewID]].push_back(AllKeyPts[CameraOrder[viewID]][pid].size);
-				CorpusData.threeDIdAllViews2[CameraOrder[viewID]].push_back(cur3DID);
-				CorpusData.DescAllViews2[CameraOrder[viewID]].push_back(desci);
+				if (AllDesc != NULL)
+				{
+					//for (int jj = 0; jj < 128; jj++)  Desc3Di.at<float>(ii, jj) = AllDesc[viewID].at<float>(pid, jj);
+					for (int jj = 0; jj < 128; jj++)
+						desci.desc[jj] = AllDesc[CameraOrder[viewID]].at<float>(pid, jj);
+
+					CorpusData.uvAllViews2[CameraOrder[viewID]].push_back(uv);
+					CorpusData.scaleAllViews2[CameraOrder[viewID]].push_back(AllKeyPts[CameraOrder[viewID]][pid].size);
+					CorpusData.threeDIdAllViews2[CameraOrder[viewID]].push_back(cur3DID);
+					CorpusData.DescAllViews2[CameraOrder[viewID]].push_back(desci);
+				}
 			}
 		}
 
-		CorpusData.viewIdAll3D.push_back(viewID3D);
-		CorpusData.uvAll3D.push_back(uv3D);
-		CorpusData.scaleAll3D.push_back(scale3D);
-		CorpusData.pointIdAll3D.push_back(pid3D);
+		if (nplus < nviews)
+		{
+			CorpusData.xyz.push_back(xyz);
+			CorpusData.rgb.push_back(rgb);
+			CorpusData.viewIdAll3D.push_back(viewID3D);
+			CorpusData.uvAll3D.push_back(uv3D);
+			CorpusData.scaleAll3D.push_back(scale3D);
+			CorpusData.pointIdAll3D.push_back(pid3D);
+		}
+		
 		//if (AllDesc != NULL) 	CorpusData.DescAll3D.push_back(Desc3Di);
 	}
+	CorpusData.n3dPoints = (int)CorpusData.xyz.size();
 
 	printf("Done with nvm\n");
 
@@ -10898,7 +10873,7 @@ int TrackOpenCVLK(char *Path, int startFrame, int stopFrame)
 
 		if (frameID == startFrame) // automatic initialization
 		{
-			goodFeaturesToTrack(gray, points[1], MAX_COUNT, 0.05, 50, Mat(), 21, 0, 0.04);
+			goodFeaturesToTrack(gray, points[1], MAX_COUNT, 0.05, 40, Mat(), 21, 0, 0.04);
 			cornerSubPix(gray, points[1], subPixWinSize, Size(-1, -1), termcrit);
 			for (int jj = 0; jj < points[1].size(); jj++)
 				circle(backGround, points[1][jj], 5, Scalar(83, 185, 255), -1, 8);

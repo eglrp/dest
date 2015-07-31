@@ -29,7 +29,7 @@
 #include "DataStructure.h"
 #include "ImagePro.h"
 
-#include <gsl/gsl_bspline.h>
+//#include <gsl/gsl_bspline.h>
 
 #include "SiftGPU/src/SiftGPU/SiftGPU.h"
 
@@ -54,15 +54,16 @@ void GenerateDCTBasis(int nsamples, double *Basis, double *Weight = NULL);
 void GenerateiDCTBasis(double *Basis, int nsamples, double t);
 
 //Bspline basis resampling
-void GenerateSplineBasisWithBreakPts(double *Basis, double *DBasis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder, int DerivativeOrder);
+/*void GenerateSplineBasisWithBreakPts(double *Basis, double *DBasis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder, int DerivativeOrder);
 void GenerateResamplingSplineBasisWithBreakPts(double *Basis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder);
 void GenerateResamplingSplineBasisWithBreakPts(double *Basis, vector<double> ResampledPts, vector<double>BreakPts, int SplineOrder);
-int FindActingControlPts(double t, int *ActingID, int ncontrols, gsl_bspline_workspace *bw, gsl_vector *Bi, int splineOrder, int extraNControls = 2);
+int FindActingControlPts(double t, int *ActingID, int ncontrols, gsl_bspline_workspace *bw, gsl_vector *Bi, int splineOrder, int extraNControls = 2);*/
 
 void BSplineFindActiveCtrl(int *ActingID, const double x, double *knots, int nbreaks, int nControls, int SplineOrder, int extraNControls = 2);
 int BSplineGetKnots(double *knots, double *BreakLoc, int nbreaks, int nControls, int SplineOrder);
-int BSplineGetNonZeroBasis(const double x, double * dB, int * istart, int * iend, double *knots, int nbreaks, int nControls, int SplineOrder, const int nderiv);
-int BSplineGetBasis(const double x, double * B, double *knots, int nbreaks, int nControls, int SplineOrder, const int nderiv = 0);
+int BSplineGetNonZeroBasis(const double x, double * dB, int * istart, int * iend, double *knots, int nbreaks, int nControls, int SplineOrder, int nderiv);
+int BSplineGetBasis(const double x, double * B, double *knots, int nbreaks, int nControls, int SplineOrder, int nderiv = 0);
+int BSplineGetAllBasis(double *AllB, double *samples, double *BreakPts, int nsamples, int nbreaks, int SplineOrder, int nderiv = 0, double *AlldB = 0, double *Alld2B = 0);
 
 //Image processing
 bool RoateImage180(char *fname, char *Img, int &width, int &height, int nchannels, bool silent = false);
@@ -630,7 +631,7 @@ void BlurDetectionDriver(char *Path, int nimages, int width, int height, float b
 
 int GenerateVisualSFMinput(char *path, int startFrame, int stopFrame, int npts);
 bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics, int nHDs = 30, int nVGAs = 24, int nPanels = 20);
-bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize, int sharedIntrinsics, vector<KeyPoint> *AllKeyPts  = 0, Mat *AllDesc = 0);
+bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize, vector<KeyPoint> *AllKeyPts = 0, Mat *AllDesc = 0, int nplus = 0);
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool saveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor = 1.0);

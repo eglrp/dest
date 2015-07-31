@@ -6985,17 +6985,17 @@ void IncrementalBundleAdjustment(char *Path, int nviews, int timeID, int maxKeyp
 
 	return;
 }
-int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<vector<double> > scaleAll3D, vector<int> AvailViews, vector<int> SharedIntrinsicCamID, bool fixIntrinsic, bool fixDistortion, bool fixPose, bool fixFirstCamPose, int distortionCorrected, int LossType, bool debug, bool silent)
+int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<vector<double> > scaleAll3D, vector<int> SharedIntrinsicCamID, int nviews, bool fixIntrinsic, bool fixDistortion, bool fixPose, bool fixFirstCamPose, int distortionCorrected, int LossType, bool debug, bool silent)
 {
 	char Fname[200]; FILE *fp = 0;
-	int viewID, nviews = AvailViews.size(), npts = Vxyz.size();
+	int viewID, npts = Vxyz.size();
 	double residuals[2];
 
 	double *xyz = new double[npts * 3];
 	for (int ii = 0; ii < npts; ii++)
 		xyz[3 * ii] = Vxyz[ii].x, xyz[3 * ii + 1] = Vxyz[ii].y, xyz[3 * ii + 2] = Vxyz[ii].z;
 
-	printf("Set up BA (%d views) ...", (int)AvailViews.size());
+	printf("Set up BA (%d views) ...\n", nviews);
 	ceres::Problem problem;
 
 	ceres::LossFunction *loss_funcion = 0;
@@ -7015,6 +7015,11 @@ int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d
 	vector<double> ReProjectionErrorY; ReProjectionErrorY.reserve(npts);
 	double maxOutlierX = 0.0, maxOutlierY = 0.0;
 
+	int firstCameraInSharedIntrinsicGroup[MaxSharedIntrinsicGroup];
+	bool SharedIntrinsicGroup[MaxSharedIntrinsicGroup];
+	for (int ii = 0; ii < MaxSharedIntrinsicGroup; ii++)
+		SharedIntrinsicGroup[ii] = false;
+
 	int refCam = -1, nProjections = 0, nPossibleProjections = 0;
 	for (int jj = 0; jj < npts; jj++)
 	{
@@ -7028,10 +7033,12 @@ int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d
 				Good[jj].push_back(false);
 			else
 			{
-				vector<int>::iterator it;
-				it = find(SharedIntrinsicCamID.begin(), SharedIntrinsicCamID.end(), viewID);
-				if (refCam != -1 && it != SharedIntrinsicCamID.end())
+				//vector<int>::iterator it;
+				//it = find(SharedIntrinsicCamID.begin(), SharedIntrinsicCamID.end(), viewID);		
+				//if (refCam != -1 && it != SharedIntrinsicCamID.end())
+				if (SharedIntrinsicCamID.size() > 0 && SharedIntrinsicGroup[SharedIntrinsicCamID[viewID]])
 				{
+					refCam = firstCameraInSharedIntrinsicGroup[SharedIntrinsicCamID[viewID]];
 					if (distortionCorrected == 1)
 						PinholeReprojectionDebug(camera[refCam].intrinsic, camera[viewID].rt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
 					else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
@@ -7062,10 +7069,12 @@ int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d
 				else
 				{
 					Good[jj].push_back(true);
-					if (SharedIntrinsicCamID.size() > 0 && refCam == -1)
+					//if (SharedIntrinsicCamID.size() > 0 && refCam == -1)
+					if (SharedIntrinsicCamID.size() > 0 && !SharedIntrinsicGroup[SharedIntrinsicCamID[viewID]])
 					{
-						refCam = viewID;
-						printf("\nSet master camera to %d:\n", refCam);
+						SharedIntrinsicGroup[SharedIntrinsicCamID[viewID]] = true;
+						firstCameraInSharedIntrinsicGroup[SharedIntrinsicCamID[viewID]] = viewID;
+						printf("Set group %d master camera to %d\n", SharedIntrinsicCamID[viewID], firstCameraInSharedIntrinsicGroup[SharedIntrinsicCamID[viewID]]);
 					}
 					goodCount++;
 				}
@@ -7097,49 +7106,12 @@ int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d
 			nPossibleProjections++;
 			viewID = viewIdAll3D[jj][ii];
 
-			vector<int>::iterator it;
-			it = find(SharedIntrinsicCamID.begin(), SharedIntrinsicCamID.end(), viewID);
-			if (it == SharedIntrinsicCamID.end()) //not shared cameras
+			//vector<int>::iterator it;
+			//it = find(SharedIntrinsicCamID.begin(), SharedIntrinsicCamID.end(), viewID);
+			//if (it == SharedIntrinsicCamID.end()) //not shared cameras
+			if (SharedIntrinsicCamID.size() > 0 && SharedIntrinsicGroup[SharedIntrinsicCamID[viewID]])
 			{
-				if (distortionCorrected == 1)
-				{
-					ceres::CostFunction* cost_function = PinholeReprojectionError::Create(uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, scaleAll3D[jj][ii]);
-					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].intrinsic, camera[viewID].rt, &xyz[3 * jj]);
-				}
-				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
-				{
-					ceres::CostFunction* cost_function = PinholeDistortionReprojectionError::Create(uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, scaleAll3D[jj][ii]);
-					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
-				}
-				else
-				{
-					ceres::CostFunction* cost_function = FOVReprojectionError::Create(uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, scaleAll3D[jj][ii]);
-					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
-				}
-
-				if (fixIntrinsic)
-					problem.SetParameterBlockConstant(camera[viewID].intrinsic);
-				//problem.SetParameterLowerBound(camera[viewID].intrinsic, 2, -1.0); problem.SetParameterUpperBound(camera[viewID].intrinsic, 2, 1.0);
-				if (distortionCorrected == 0 && fixDistortion)
-				{
-					problem.SetParameterBlockConstant(camera[viewID].distortion);
-					//problem.SetParameterLowerBound(camera[viewID].distortion, 5, 0.0); problem.SetParameterUpperBound(camera[viewID].distortion, 5, 1.0e-16);
-					//problem.SetParameterLowerBound(camera[viewID].distortion, 6, 0.0); problem.SetParameterUpperBound(camera[viewID].distortion, 6, 1.0e-16);
-				}
-				if (fixPose)
-					problem.SetParameterBlockConstant(camera[viewID].rt);
-				if (fixFirstCamPose && viewID == AvailViews[0])
-					problem.SetParameterBlockConstant(camera[AvailViews[0]].rt);
-
-				if (distortionCorrected == 1)
-					PinholeReprojectionDebug(camera[viewID].intrinsic, camera[viewID].rt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
-					PinholeDistortionReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-				else
-					FOVReprojectionDistortionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
-			}
-			else
-			{
+				refCam = firstCameraInSharedIntrinsicGroup[SharedIntrinsicCamID[viewID]];
 				if (distortionCorrected == 1)
 				{
 					ceres::CostFunction* cost_function = PinholeReprojectionError::Create(uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, scaleAll3D[jj][ii]);
@@ -7162,8 +7134,8 @@ int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d
 					problem.SetParameterBlockConstant(camera[refCam].distortion);
 				if (fixPose)
 					problem.SetParameterBlockConstant(camera[viewID].rt);
-				if (fixFirstCamPose && viewID == AvailViews[0])
-					problem.SetParameterBlockConstant(camera[AvailViews[0]].rt);
+				if (fixFirstCamPose && viewID == 0)
+					problem.SetParameterBlockConstant(camera[0].rt);
 
 				if (distortionCorrected == 1)
 					PinholeReprojectionDebug(camera[refCam].intrinsic, camera[viewID].rt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
@@ -7171,6 +7143,40 @@ int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d
 					PinholeDistortionReprojectionDebug(camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
 				else
 					FOVReprojectionDistortionDebug(camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
+			}
+			else
+			{
+				if (distortionCorrected == 1)
+				{
+					ceres::CostFunction* cost_function = PinholeReprojectionError::Create(uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, scaleAll3D[jj][ii]);
+					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].intrinsic, camera[viewID].rt, &xyz[3 * jj]);
+				}
+				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
+				{
+					ceres::CostFunction* cost_function = PinholeDistortionReprojectionError::Create(uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, scaleAll3D[jj][ii]);
+					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
+				}
+				else
+				{
+					ceres::CostFunction* cost_function = FOVReprojectionError::Create(uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, scaleAll3D[jj][ii]);
+					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, &xyz[3 * jj]);
+				}
+
+				if (fixIntrinsic)
+					problem.SetParameterBlockConstant(camera[viewID].intrinsic);
+				if (distortionCorrected == 0 && fixDistortion)
+					problem.SetParameterBlockConstant(camera[viewID].distortion);
+				if (fixPose)
+					problem.SetParameterBlockConstant(camera[viewID].rt);
+				if (fixFirstCamPose && viewID == 0)
+					problem.SetParameterBlockConstant(camera[0].rt);
+
+				if (distortionCorrected == 1)
+					PinholeReprojectionDebug(camera[viewID].intrinsic, camera[viewID].rt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
+				else if (camera[viewID].LensModel == RADIAL_TANGENTIAL_PRISM)
+					PinholeDistortionReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
+				else
+					FOVReprojectionDistortionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), residuals);
 			}
 
 			validViewcount++;
@@ -7240,19 +7246,17 @@ int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d
 		std::cout << summary.FullReport() << "\n";
 
 	//Store refined parameters
-	for (int ii = 0; ii < nviews; ii++)
+	for (int ii = 0; ii < nviews && SharedIntrinsicCamID.size()>0; ii++)
 	{
-		vector<int>::iterator it;
-		it = find(SharedIntrinsicCamID.begin(), SharedIntrinsicCamID.end(), viewID);
-		if (it != SharedIntrinsicCamID.end()) //shared cameras
-			CopyCamereInfo(camera[refCam], camera[AvailViews[ii]], false);
+		refCam = firstCameraInSharedIntrinsicGroup[SharedIntrinsicCamID[ii]];
+		CopyCamereInfo(camera[refCam], camera[ii], false);
 	}
 
 	for (int ii = 0; ii < nviews; ii++)
 	{
-		GetKFromIntrinsic(camera[AvailViews[ii]]);
-		GetRTFromrt(camera[AvailViews[ii]]);
-		AssembleP(camera[AvailViews[ii]].K, camera[AvailViews[ii]].R, camera[AvailViews[ii]].T, camera[AvailViews[ii]].P);
+		GetKFromIntrinsic(camera[ii]);
+		GetRTFromrt(camera[ii]);
+		AssembleP(camera[ii].K, camera[ii].R, camera[ii].T, camera[ii].P);
 	}
 	for (int ii = 0; ii < npts; ii++)
 		Vxyz[ii] = Point3d(xyz[3 * ii], xyz[3 * ii + 1], xyz[3 * ii + 2]);
@@ -7315,7 +7319,7 @@ int GlobalShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d
 	delete[]Good;
 	return 0;
 }
-int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<vector<double> > scaleAll3D, vector<int> AvailViews, vector<int> SharedIntrinsicCamID, bool fixIntrinsic, bool fixDistortion, bool fixPose, bool fixFirstCamPose, bool fixLocalPose, int distortionCorrected, int LossType, bool debug, bool silent)
+int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<Point3d>  &Vxyz, vector < vector<int> > viewIdAll3D, vector<vector<Point2d> > uvAll3D, vector<vector<double> > scaleAll3D, vector<int> SharedIntrinsicCamID, int nviews, bool fixIntrinsic, bool fixDistortion, bool fixPose, bool fixFirstCamPose, bool fixLocalPose, int distortionCorrected, int LossType, bool debug, bool silent)
 {
 	if (camera[0].LensModel != RADIAL_TANGENTIAL_PRISM)
 	{
@@ -7323,14 +7327,14 @@ int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<
 	}
 
 	char Fname[200]; FILE *fp = 0;
-	int viewID, nviews = AvailViews.size(), npts = Vxyz.size();
+	int viewID, npts = Vxyz.size();
 	double residuals[2];
 
 	double *xyz = new double[npts * 3];
 	for (int ii = 0; ii < npts; ii++)
 		xyz[3 * ii] = Vxyz[ii].x, xyz[3 * ii + 1] = Vxyz[ii].y, xyz[3 * ii + 2] = Vxyz[ii].z;
 
-	printf("set up Cayley RS-BA (%d views) ...", (int)AvailViews.size());
+	printf("set up Cayley RS-BA (%d views) ...\n", nviews);
 	ceres::Problem problem;
 
 	ceres::LossFunction *loss_funcion = 0;
@@ -7350,6 +7354,11 @@ int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<
 	for (int ii = 0; ii < npts; ii++)
 		discard3Dpoint[ii] = false, Good[ii].reserve(viewIdAll3D[ii].size());
 
+	int firstCameraInSharedIntrinsicGroup[MaxSharedIntrinsicGroup];
+	bool SharedIntrinsicGroup[MaxSharedIntrinsicGroup];
+	for (int ii = 0; ii < MaxSharedIntrinsicGroup; ii++)
+		SharedIntrinsicGroup[ii] = false;
+
 	int nBadCounts = 0, goodCount = 0;
 	int refCam = -1, nProjections = 0, nPossibleProjections = 0;
 	for (int jj = 0; jj < npts; jj++)
@@ -7363,18 +7372,21 @@ int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<
 				Good[jj].push_back(false);
 			else
 			{
-				vector<int>::iterator it;
-				it = find(SharedIntrinsicCamID.begin(), SharedIntrinsicCamID.end(), viewID);
-				if (refCam != -1 && it != SharedIntrinsicCamID.end())
+				if (SharedIntrinsicCamID.size() > 0 && SharedIntrinsicGroup[SharedIntrinsicCamID[viewID]])
+				{
+					refCam = firstCameraInSharedIntrinsicGroup[SharedIntrinsicCamID[viewID]];
 					if (distortionCorrected == 0)
 						CayleyDistortionReprojectionDebug(camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, camera[viewID].wt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), camera[refCam].width, camera[refCam].height, residuals);
 					else
 						CayleyReprojectionDebug(camera[refCam].intrinsic, camera[viewID].rt, camera[viewID].wt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), camera[refCam].width, camera[refCam].height, residuals);
+				}
 				else
+				{
 					if (distortionCorrected == 0)
 						CayleyDistortionReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, camera[viewID].wt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), camera[viewID].width, camera[viewID].height, residuals);
 					else
 						CayleyReprojectionDebug(camera[viewID].intrinsic, camera[viewID].rt, camera[viewID].wt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), camera[viewID].width, camera[viewID].height, residuals);
+				}
 
 				if (abs(residuals[0]) > camera[0].threshold || abs(residuals[1]) > camera[0].threshold)//because they are not corrected for rolling shutter yet
 				{
@@ -7389,10 +7401,11 @@ int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<
 				else
 				{
 					Good[jj].push_back(true);
-					if (SharedIntrinsicCamID.size() > 0 && refCam == -1)
+					if (SharedIntrinsicCamID.size() > 0 && !SharedIntrinsicGroup[SharedIntrinsicCamID[viewID]])
 					{
-						refCam = viewID;
-						printf("\nSet master camera to %d:\n", refCam);
+						SharedIntrinsicGroup[SharedIntrinsicCamID[viewID]] = true;
+						firstCameraInSharedIntrinsicGroup[SharedIntrinsicCamID[viewID]] = viewID;
+						printf("Set group %d master camera to %d\n", SharedIntrinsicCamID[viewID], firstCameraInSharedIntrinsicGroup[SharedIntrinsicCamID[viewID]]);
 					}
 					goodCount++;
 				}
@@ -7424,39 +7437,9 @@ int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<
 			nPossibleProjections++;
 			viewID = viewIdAll3D[jj][ii];
 
-			vector<int>::iterator it;
-			it = find(SharedIntrinsicCamID.begin(), SharedIntrinsicCamID.end(), viewID);
-			if (it == SharedIntrinsicCamID.end()) //not shared cameras
+			if (SharedIntrinsicCamID.size() > 0 && SharedIntrinsicGroup[SharedIntrinsicCamID[viewID]])
 			{
-				if (distortionCorrected == 0)
-				{
-					ceres::CostFunction* cost_function = CayleyDistortionReprojectionError::Create(uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, scaleAll3D[jj][ii], camera[0].width, camera[0].height);
-					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, camera[viewID].wt, &xyz[3 * jj]);
-
-					if (fixIntrinsic)
-						problem.SetParameterBlockConstant(camera[viewID].intrinsic);
-					if (distortionCorrected == 0 && fixDistortion)
-						problem.SetParameterBlockConstant(camera[viewID].distortion);
-
-					CayleyDistortionReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, camera[viewID].wt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), camera[viewID].width, camera[viewID].height, residuals);
-				}
-				else
-				{
-					ceres::CostFunction* cost_function = CayleyReprojectionError::Create(camera[viewID].intrinsic, uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, scaleAll3D[jj][ii], camera[0].width, camera[0].height);
-					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].rt, camera[viewID].wt, &xyz[3 * jj]);
-
-					CayleyReprojectionDebug(camera[viewID].intrinsic, camera[viewID].rt, camera[viewID].wt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), camera[viewID].width, camera[viewID].height, residuals);
-				}
-
-				if (fixPose)
-					problem.SetParameterBlockConstant(camera[viewID].rt);
-				if (fixLocalPose)
-					problem.SetParameterBlockConstant(camera[viewID].wt);
-				if (fixFirstCamPose && viewID == AvailViews[0])
-					problem.SetParameterBlockConstant(camera[AvailViews[0]].rt);
-			}
-			else
-			{
+				refCam = firstCameraInSharedIntrinsicGroup[SharedIntrinsicCamID[viewID]];
 				if (distortionCorrected == 0)
 				{
 					ceres::CostFunction* cost_function = CayleyDistortionReprojectionError::Create(uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, scaleAll3D[jj][ii], camera[0].width, camera[0].height);
@@ -7464,7 +7447,7 @@ int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<
 
 					if (fixIntrinsic)
 						problem.SetParameterBlockConstant(camera[refCam].intrinsic);
-					if (distortionCorrected == 0 && fixDistortion)
+					if (fixDistortion)
 						problem.SetParameterBlockConstant(camera[refCam].distortion);
 
 					CayleyDistortionReprojectionDebug(camera[refCam].intrinsic, camera[refCam].distortion, camera[viewID].rt, camera[viewID].wt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), camera[viewID].width, camera[viewID].height, residuals);
@@ -7481,8 +7464,37 @@ int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<
 					problem.SetParameterBlockConstant(camera[viewID].rt);
 				if (fixLocalPose)
 					problem.SetParameterBlockConstant(camera[viewID].wt);
-				if (fixFirstCamPose && viewID == AvailViews[0])
-					problem.SetParameterBlockConstant(camera[AvailViews[0]].rt);
+				if (fixFirstCamPose && viewID == 0)
+					problem.SetParameterBlockConstant(camera[0].rt);
+			}
+			else
+			{
+				if (distortionCorrected == 0)
+				{
+					ceres::CostFunction* cost_function = CayleyDistortionReprojectionError::Create(uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, scaleAll3D[jj][ii], camera[0].width, camera[0].height);
+					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, camera[viewID].wt, &xyz[3 * jj]);
+
+					if (fixIntrinsic)
+						problem.SetParameterBlockConstant(camera[viewID].intrinsic);
+					if (fixDistortion)
+						problem.SetParameterBlockConstant(camera[viewID].distortion);
+
+					CayleyDistortionReprojectionDebug(camera[viewID].intrinsic, camera[viewID].distortion, camera[viewID].rt, camera[viewID].wt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), camera[viewID].width, camera[viewID].height, residuals);
+				}
+				else
+				{
+					ceres::CostFunction* cost_function = CayleyReprojectionError::Create(camera[viewID].intrinsic, uvAll3D[jj][ii].x, uvAll3D[jj][ii].y, scaleAll3D[jj][ii], camera[0].width, camera[0].height);
+					problem.AddResidualBlock(cost_function, loss_funcion, camera[viewID].rt, camera[viewID].wt, &xyz[3 * jj]);
+
+					CayleyReprojectionDebug(camera[viewID].intrinsic, camera[viewID].rt, camera[viewID].wt, uvAll3D[jj][ii], Point3d(xyz[3 * jj], xyz[3 * jj + 1], xyz[3 * jj + 2]), camera[viewID].width, camera[viewID].height, residuals);
+				}
+
+				if (fixPose)
+					problem.SetParameterBlockConstant(camera[viewID].rt);
+				if (fixLocalPose)
+					problem.SetParameterBlockConstant(camera[viewID].wt);
+				if (fixFirstCamPose && viewID == 0)
+					problem.SetParameterBlockConstant(camera[0].rt);
 			}
 
 			validViewcount++;
@@ -7552,19 +7564,16 @@ int CayleyRollingShutterBundleAdjustment(char *Path, CameraData *camera, vector<
 		std::cout << summary.FullReport() << "\n";
 
 	//Store refined parameters
-	for (int ii = 0; ii < nviews; ii++)
+	for (int ii = 0; ii < nviews && SharedIntrinsicCamID.size()>0; ii++)
 	{
-		vector<int>::iterator it;
-		it = find(SharedIntrinsicCamID.begin(), SharedIntrinsicCamID.end(), viewID);
-		if (it != SharedIntrinsicCamID.end()) //shared cameras
-			CopyCamereInfo(camera[refCam], camera[AvailViews[ii]], false);
+		refCam = firstCameraInSharedIntrinsicGroup[SharedIntrinsicCamID[ii]];
+		CopyCamereInfo(camera[refCam], camera[ii], false);
 	}
-
 	for (int ii = 0; ii < nviews; ii++)
 	{
-		GetKFromIntrinsic(camera[AvailViews[ii]]);
-		GetRTFromrt(camera[AvailViews[ii]]);
-		AssembleP(camera[AvailViews[ii]].K, camera[AvailViews[ii]].R, camera[AvailViews[ii]].T, camera[AvailViews[ii]].P);
+		GetKFromIntrinsic(camera[ii]);
+		GetRTFromrt(camera[ii]);
+		AssembleP(camera[ii].K, camera[ii].R, camera[ii].T, camera[ii].P);
 	}
 	for (int ii = 0; ii < npts; ii++)
 		Vxyz[ii] = Point3d(xyz[3 * ii], xyz[3 * ii + 1], xyz[3 * ii + 2]);
@@ -7636,15 +7645,13 @@ int GlobalShutterBundleAdjustmentDriver(char *Path, int nViews, int distortionCo
 	char Fname[200]; sprintf(Fname, "%s/Corpus", Path);
 	ReadCorpusInfo(Fname, corpusData, false, false);
 
-	vector<int> AvailViews;
 	for (int ii = 0; ii < nViews; ii++)
 	{
-		AvailViews.push_back(ii);
 		corpusData.camera[ii].threshold = 5.0;
-		SharedIntrinsicCamID.push_back(ii);
+		SharedIntrinsicCamID.push_back(0);
 	}
 
-	GlobalShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, AvailViews, SharedIntrinsicCamID, true, true, true, false, distortionCorrected, LossType, true, false);
+	GlobalShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, SharedIntrinsicCamID, nViews, true, true, true, false, distortionCorrected, LossType, true, false);
 
 	SaveCorpusInfo(Path, corpusData);
 
@@ -7658,12 +7665,10 @@ int CayleyRollingShutterBundleAdjustmentDriver(char *Path, int nViews, int disto
 	char Fname[200]; sprintf(Fname, "%s/Corpus", Path);
 	ReadCorpusInfo(Fname, corpusData, false, true);
 
-	vector<int> AvailViews;
 	for (int ii = 0; ii < nViews; ii++)
 	{
-		AvailViews.push_back(ii);
 		corpusData.camera[ii].threshold = 5.0;
-		SharedIntrinsicCamID.push_back(ii);
+		SharedIntrinsicCamID.push_back(0);
 	}
 
 	//Get back the distorted 2d points
@@ -7734,7 +7739,7 @@ int CayleyRollingShutterBundleAdjustmentDriver(char *Path, int nViews, int disto
 	}
 	//sprintf(Fname, "%s/Corpus", Path);/SaveCorpusInfo(Fname, corpusData, false, false);*/
 
-	CayleyRollingShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, AvailViews, SharedIntrinsicCamID, true, true, true, false, false, distortionCorrected, LossType, true, false);
+	CayleyRollingShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, SharedIntrinsicCamID, nViews, true, true, true, false, false, distortionCorrected, LossType, true, false);
 
 	SaveCorpusInfo(Path, corpusData, false, false);
 
@@ -7958,10 +7963,6 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int Globa
 	printf("Found %d (%d+) points.\n\n", goodNDplus, NDplus);
 
 	printf("Runing BA on the triangulated points...");
-	vector<int> AvailViews; AvailViews.reserve(nviews);
-	for (int ii = 0; ii < nviews; ii++)
-		AvailViews.push_back(ii);
-
 	//Let's reoptimize verything
 	bool fixIntrinsic = 0, fixDistortion = 0, fixPose = 0, fix1stCamPose = 1;
 	if (fixIntrinsic == 0 || fixDistortion == 0)
@@ -7978,9 +7979,9 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int Globa
 	}
 
 	if (GlobalShutter == 1)
-		GlobalShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, AvailViews, SharedIntrinsicCamID, fixIntrinsic, fixDistortion, fixPose, fix1stCamPose, distortionCorrected, LossType);
+		GlobalShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, SharedIntrinsicCamID, nviews, fixIntrinsic, fixDistortion, fixPose, fix1stCamPose, distortionCorrected, LossType);
 	else
-		CayleyRollingShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, AvailViews, SharedIntrinsicCamID, fixIntrinsic, fixDistortion, fixPose, fix1stCamPose, false, distortionCorrected, LossType, true);
+		CayleyRollingShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, SharedIntrinsicCamID, nviews, fixIntrinsic, fixDistortion, fixPose, fix1stCamPose, false, distortionCorrected, LossType, true);
 
 	//Now, can undistort points again
 	if (fixIntrinsic == 0 || fixDistortion == 0)
@@ -8010,6 +8011,9 @@ int BuildCorpus(char *Path, int CameraToScan, int distortionCorrected, int Globa
 		rgb = AllRGB[viewi][pi];
 		corpusData.rgb.push_back(rgb);
 	}
+	vector<int> AvailViews; AvailViews.reserve(nviews);
+	for (int ii = 0; ii < nviews; ii++)
+		AvailViews.push_back(ii);
 	SaveCurrentSfmGL(Path, corpusData.camera, AvailViews, corpusData.xyz, corpusData.rgb); // OK for visualization
 
 	//Prune corpus for bad points
@@ -8529,7 +8533,7 @@ int MatchCameraToCorpus(char *Path, Corpus &corpusData, CameraData *camera, int 
 	//Match extracted features with Corpus
 	const bool useBFMatcher = false;
 	const int knn = 2, ntrees = 4, maxLeafCheck = 128;
-	
+
 	vector<float>Scale; Scale.reserve(5000);
 	vector<Point2f> twoD; twoD.reserve(5000);
 	vector<int> threeDiD; threeDiD.reserve(5000);
@@ -9477,9 +9481,9 @@ void RollingShutterSplineProjection(double *intrinsic, int *ActingID, double *Ac
 
 	BSplineGetBasis(subframeLoc, Bi, KnotLoc, nBreak, nCtrl, SplineOrder);
 
+	int nlocalControls = SplineOrder + 2;
 	for (int jj = 0; jj < 6; jj++)
 	{
-
 		/*for (int ii = 0; ii < nCtrl; ii++)
 		{
 		double bi = Bi[ii];
@@ -9501,14 +9505,14 @@ void RollingShutterSplineProjection(double *intrinsic, int *ActingID, double *Ac
 		if (se3)
 		{
 			twist[jj] = 0.0;
-			for (int ii = 0; ii < 6; ii++)
-				twist[jj] += ActingControlPose[jj + 6 * ii] * Bi[ActingID[ii]];
+			for (int ii = 0; ii < nlocalControls; ii++)
+				twist[jj] += ActingControlPose[jj + nlocalControls * ii] * Bi[ActingID[ii]];
 		}
 		else
 		{
 			tr[jj] = 0;
-			for (int ii = 0; ii < 6; ii++)
-				tr[jj] += ActingControlPose[jj + 6 * ii] * Bi[ActingID[ii]];
+			for (int ii = 0; ii < nlocalControls; ii++)
+				tr[jj] += ActingControlPose[jj + nlocalControls * ii] * Bi[ActingID[ii]];
 		}
 	}
 
@@ -9544,14 +9548,14 @@ void RollingShutterSplineProjection(double *intrinsic, int *ActingID, double *Ac
 			if (se3)
 			{
 				twist[jj] = 0.0;
-				for (int ii = 0; ii < 6; ii++)
-					twist[jj] += ActingControlPose[jj + 6 * ii] * Bi[ActingID[ii]];
+				for (int ii = 0; ii < nlocalControls; ii++)
+					twist[jj] += ActingControlPose[jj + nlocalControls * ii] * Bi[ActingID[ii]];
 			}
 			else
 			{
 				tr[jj] = 0;
-				for (int ii = 0; ii < 6; ii++)
-					tr[jj] += ActingControlPose[jj + 6 * ii] * Bi[ActingID[ii]];
+				for (int ii = 0; ii < nlocalControls; ii++)
+					tr[jj] += ActingControlPose[jj + nlocalControls * ii] * Bi[ActingID[ii]];
 			}
 		}
 
@@ -9603,7 +9607,7 @@ struct RollingShutterSplineReprojectionError {
 	{
 		KnotLoc = KnotLocIn;
 		Intrinsic = IntrinsicIn;
-		for (int ii = 0; ii < 6; ii++)
+		for (int ii = 0; ii < SplineOrder + 2; ii++)
 			ActingID[ii] = ActingIDIn[ii];
 	}
 
@@ -9655,11 +9659,12 @@ void RollingShutterDistortionSplineProjection(double *intrinsic, double *distort
 
 	BSplineGetBasis(subframeLoc, Bi, KnotLoc, nBreak, nCtrl, SplineOrder);
 
+	int nlocalControls = SplineOrder + 2;
 	for (int jj = 0; jj < 6; jj++)
 	{
 		twist[jj] = 0.0;
-		for (int ii = 0; ii < 6; ii++)
-			twist[jj] += ActingControlPose[jj + 6 * ii] * Bi[ActingID[ii]];
+		for (int ii = 0; ii < nlocalControls; ii++)
+			twist[jj] += ActingControlPose[jj + nlocalControls * ii] * Bi[ActingID[ii]];
 	}
 
 	convertTwistToRT(twist, R, T);
@@ -9682,8 +9687,8 @@ void RollingShutterDistortionSplineProjection(double *intrinsic, double *distort
 		for (int jj = 0; jj < 6; jj++)
 		{
 			twist[jj] = 0.0;
-			for (int ii = 0; ii < 6; ii++)
-				twist[jj] += ActingControlPose[jj + 6 * ii] * Bi[ActingID[ii]];
+			for (int ii = 0; ii < nlocalControls; ii++)
+				twist[jj] += ActingControlPose[jj + nlocalControls* ii] * Bi[ActingID[ii]];
 		}
 
 		convertTwistToRT(twist, R, T);
@@ -9720,7 +9725,7 @@ struct RollingShutterDistortionSplineReprojectionError {
 		nBreak(nBreak), nCtrl(nCtrl), SplineOrder(SplineOrder), observed2D(observed2D), scale(scale), pid(pid), frameID(frameID), width(width), height(height)
 	{
 		KnotLoc = KnotLocIn;
-		for (int ii = 0; ii < 6; ii++)
+		for (int ii = 0; ii < SplineOrder + 2; ii++)
 			ActingID[ii] = ActingIDIn[ii];
 	}
 
@@ -10021,18 +10026,18 @@ int VideoSplineRSBA(char *Path, int startFrame, int stopFrame, int selectedCams,
 			if (!setReferenceflag)
 			{
 				if (distortionCorrected == 1)
-					RollingShutterSplineReprojectionDebug(VideoInfoI.VideoInfo[frameID].intrinsic, ActingID, ControlPose + ActingID[0] * 6, KnotLoc, nbreaks, nCtrls, SplineOrder, se3,
+					RollingShutterSplineReprojectionDebug(VideoInfoI.VideoInfo[frameID].intrinsic, ActingID, ControlPose + ActingID[0] * (SplineOrder + extraNControls), KnotLoc, nbreaks, nCtrls, SplineOrder, se3,
 					uv, P3d, frameID, VideoInfoI.VideoInfo[frameID].width, VideoInfoI.VideoInfo[frameID].height, residuals);
 				else
-					RollingShutterDistortionSplineReprojectionDebug(VideoInfoI.VideoInfo[frameID].intrinsic, VideoInfoI.VideoInfo[frameID].distortion, ActingID, ControlPose + ActingID[0] * 6, KnotLoc, nbreaks, nCtrls, SplineOrder,
+					RollingShutterDistortionSplineReprojectionDebug(VideoInfoI.VideoInfo[frameID].intrinsic, VideoInfoI.VideoInfo[frameID].distortion, ActingID, ControlPose + ActingID[0] * (SplineOrder + extraNControls), KnotLoc, nbreaks, nCtrls, SplineOrder,
 					uv, P3d, frameID, VideoInfoI.VideoInfo[frameID].width, VideoInfoI.VideoInfo[frameID].height, residuals);
 			}
 			else
 				if (distortionCorrected == 1)
-					RollingShutterSplineReprojectionDebug(VideoInfoI.VideoInfo[RefFrameID].intrinsic, ActingID, ControlPose + ActingID[0] * 6, KnotLoc, nbreaks, nCtrls, SplineOrder, se3,
+					RollingShutterSplineReprojectionDebug(VideoInfoI.VideoInfo[RefFrameID].intrinsic, ActingID, ControlPose + ActingID[0] * (SplineOrder + extraNControls), KnotLoc, nbreaks, nCtrls, SplineOrder, se3,
 					uv, P3d, frameID, VideoInfoI.VideoInfo[frameID].width, VideoInfoI.VideoInfo[frameID].height, residuals);
 				else
-					RollingShutterDistortionSplineReprojectionDebug(VideoInfoI.VideoInfo[RefFrameID].intrinsic, VideoInfoI.VideoInfo[RefFrameID].distortion, ActingID, ControlPose + ActingID[0] * 6, KnotLoc, nbreaks, nCtrls, SplineOrder,
+					RollingShutterDistortionSplineReprojectionDebug(VideoInfoI.VideoInfo[RefFrameID].intrinsic, VideoInfoI.VideoInfo[RefFrameID].distortion, ActingID, ControlPose + ActingID[0] * (SplineOrder + extraNControls), KnotLoc, nbreaks, nCtrls, SplineOrder,
 					uv, P3d, frameID, VideoInfoI.VideoInfo[frameID].width, VideoInfoI.VideoInfo[frameID].height, residuals);
 
 			if (abs(residuals[0]) > 10.0*threshold || abs(residuals[1]) > 10.0*threshold)
@@ -10146,10 +10151,10 @@ int VideoSplineRSBA(char *Path, int startFrame, int stopFrame, int selectedCams,
 			BSplineFindActiveCtrl(ActingID, subframeLoc, KnotLoc, nbreaks, nCtrls, SplineOrder, extraNControls);
 
 			if (distortionCorrected == 1)
-				RollingShutterSplineReprojectionDebug(VideoInfoI.VideoInfo[frameID].intrinsic, ActingID, ControlPose + ActingID[0] * 6, KnotLoc, nbreaks, nCtrls, SplineOrder, se3,
+				RollingShutterSplineReprojectionDebug(VideoInfoI.VideoInfo[frameID].intrinsic, ActingID, ControlPose + ActingID[0] * (SplineOrder + extraNControls), KnotLoc, nbreaks, nCtrls, SplineOrder, se3,
 				uv, P3d, frameID, VideoInfoI.VideoInfo[frameID].width, VideoInfoI.VideoInfo[frameID].height, residuals);
 			else
-				RollingShutterDistortionSplineReprojectionDebug(VideoInfoI.VideoInfo[frameID].intrinsic, VideoInfoI.VideoInfo[frameID].distortion, ActingID, ControlPose + 6 * ActingID[0], KnotLoc, nbreaks, nCtrls, SplineOrder,
+				RollingShutterDistortionSplineReprojectionDebug(VideoInfoI.VideoInfo[frameID].intrinsic, VideoInfoI.VideoInfo[frameID].distortion, ActingID, ControlPose + ActingID[0] * (SplineOrder + extraNControls), KnotLoc, nbreaks, nCtrls, SplineOrder,
 				uv, P3d, frameID, VideoInfoI.VideoInfo[frameID].width, VideoInfoI.VideoInfo[frameID].height, residuals);
 
 			validPtsCount++;
@@ -11074,7 +11079,7 @@ int LocalizeCameraFromCorpusDriver(char *Path, int startFrame, int stopFrame, in
 	{
 		vector<int> computedTime; computedTime.reserve(stopFrame - startFrame + 1);
 		CameraData *SelectedCameraInfo = new CameraData[stopFrame - startFrame + 1];
-		for (int frameID = startFrame; frameID <= stopFrame; frameID+= IncreFrame)
+		for (int frameID = startFrame; frameID <= stopFrame; frameID += IncreFrame)
 		{
 			computedTime.clear();
 			CopyCamereInfo(AllCamsInfo[selectedCams], SelectedCameraInfo[frameID - startFrame]);
@@ -11851,13 +11856,13 @@ int ReCalibratedFromGroundTruthCorrespondences(char *Path, int camID, int startF
 	//Re-adjust the bundle
 	vector<int>sharedCam;
 	for (int ii = 0; ii < nframes; ii++)
-		sharedCam.push_back(ii);
+		sharedCam.push_back(0);
 	vector<bool>GoodPoints;
 
 	if (ShutterModel == 0)
-		GlobalShutterBundleAdjustment(Path, corpusData.camera, P3D, viewIdAll3D, uvAll3D, scaleAll3D, AvailableViews, sharedCam, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, distortionCorrected, 0, false, false);
+		GlobalShutterBundleAdjustment(Path, corpusData.camera, P3D, viewIdAll3D, uvAll3D, scaleAll3D, sharedCam, AvailableViews.size(), fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, distortionCorrected, 0, false, false);
 	else
-		CayleyRollingShutterBundleAdjustment(Path, corpusData.camera, P3D, viewIdAll3D, uvAll3D, scaleAll3D, AvailableViews, sharedCam, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, true, distortionCorrected, 0, false, false);
+		CayleyRollingShutterBundleAdjustment(Path, corpusData.camera, P3D, viewIdAll3D, uvAll3D, scaleAll3D, sharedCam, AvailableViews.size(), fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, true, distortionCorrected, 0, false, false);
 
 	//sprintf(Fname, "%s/rBA_Camera_AllParams_after.txt", Path);
 	//ReSaveBundleAdjustedNVMResults(Fname, corpusData);
@@ -11877,15 +11882,14 @@ int RefineVisualSfM(char *Path, int ShutterModel, double threshold, bool fixedIn
 	for (int ii = 0; ii < MaxnCams; ii++)
 		ImgSize.push_back(Point2i(1920, 1080));
 
-	int VisSfm_SharedIntrinsic = 0;
 	Corpus corpusData;
 	sprintf(Fname, "%s/Corpus/corpus.nvm", Path);
-	if (!loadNVM(Fname, corpusData, ImgSize, VisSfm_SharedIntrinsic))
+	if (!loadNVM(Fname, corpusData, ImgSize))
 		return 1;
 
 	vector<int>Refinement_SharedIntrinsic;
 	for (int ii = 0; ii < corpusData.nCameras; ii++)
-		Refinement_SharedIntrinsic.push_back(ii);
+		Refinement_SharedIntrinsic.push_back(0);
 
 	vector<int>AvailableViews;
 	for (int ii = 0; ii < corpusData.nCameras; ii++)
@@ -11897,9 +11901,9 @@ int RefineVisualSfM(char *Path, int ShutterModel, double threshold, bool fixedIn
 
 	vector<bool>GoodPoints;
 	if (ShutterModel == 0)
-		GlobalShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, AvailableViews, Refinement_SharedIntrinsic, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, distortionCorrected, 0, false, false);
+		GlobalShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, Refinement_SharedIntrinsic, AvailableViews.size(), fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, distortionCorrected, 0, false, false);
 	else
-		CayleyRollingShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, AvailableViews, Refinement_SharedIntrinsic, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, false, distortionCorrected, 0, false, false);
+		CayleyRollingShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, Refinement_SharedIntrinsic, AvailableViews.size(), fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, false, distortionCorrected, 0, false, false);
 
 
 	if (doubleRefinement)
@@ -11908,9 +11912,9 @@ int RefineVisualSfM(char *Path, int ShutterModel, double threshold, bool fixedIn
 			corpusData.camera[ii].threshold = threshold;
 
 		if (ShutterModel == 0)
-			GlobalShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, AvailableViews, Refinement_SharedIntrinsic, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, distortionCorrected, 0, false, false);
+			GlobalShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, Refinement_SharedIntrinsic, AvailableViews.size(), fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, distortionCorrected, 0, false, false);
 		else
-			CayleyRollingShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, AvailableViews, Refinement_SharedIntrinsic, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, false, distortionCorrected, 0, false, false);
+			CayleyRollingShutterBundleAdjustment(Path, corpusData.camera, corpusData.xyz, corpusData.viewIdAll3D, corpusData.uvAll3D, corpusData.scaleAll3D, Refinement_SharedIntrinsic, AvailableViews.size(), fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, false, distortionCorrected, 0, false, false);
 	}
 
 	sprintf(Fname, "%s/Corpus/BA_Camera_AllParams_after.txt", Path);
@@ -11921,13 +11925,29 @@ int RefineVisualSfM(char *Path, int ShutterModel, double threshold, bool fixedIn
 	visualizationDriver(Path, corpusData.nCameras, 0, 1, true, false, false, false, false, false, 0);
 	return 0;
 }
-int RefineVisualSfMAndCreateCorpus(char *Path, int nimages, int VisSfMsharedIntrinsics, int ShutterModel, double threshold, bool fixedIntrinsc, bool fixedDistortion, bool fixedPose, bool fixedfirstCamPose, bool distortionCorrected, bool doubleRefinement)
+int RefineVisualSfMAndCreateCorpus(char *Path, int nimages, int nplus, int ShutterModel, double threshold, bool sharedInstrinsic, bool fixedIntrinsc, bool fixedDistortion, bool fixedPose, bool fixedfirstCamPose, bool distortionCorrected, bool doubleRefinement)
 {
 	char Fname[512];
 
 	vector<Point2i> ImgSize; //should read from data
 	for (int ii = 0; ii < nimages; ii++)
-		ImgSize.push_back(Point2i(1920, 1080));
+	{
+		sprintf(Fname, "%s/%d.png", Path, ii);
+		Mat img = imread(Fname, 0);
+		if (img.empty())
+		{
+			sprintf(Fname, "%s/%d.jpg", Path, ii); img = imread(Fname, 0);
+			if (img.empty())
+				ImgSize.push_back(Point2i(img.cols, img.rows));
+			else
+			{
+				printf("Cannot load %s. Abort()", Fname); 
+				abort();
+			}
+		}
+		else
+			ImgSize.push_back(Point2i(img.cols, img.rows));
+	}
 
 	//read all visualsfm sift. Assume all cameras are reconstructed
 	printf("Reading sift points ...");
@@ -11941,10 +11961,11 @@ int RefineVisualSfMAndCreateCorpus(char *Path, int nimages, int VisSfMsharedIntr
 	printf("\n");
 
 	//Fill up the visSfm corpus data. Assume all cameras are reconstructed
-	printf("Reading corpus info ....");
+	printf("Reading corpus info ....\n");
 	Corpus CorpusData;
 	sprintf(Fname, "%s/Corpus.nvm", Path);
-	loadNVM(Fname, CorpusData, ImgSize, VisSfMsharedIntrinsics, AllKeyPts, AllDesc);
+	loadNVM(Fname, CorpusData, ImgSize, AllKeyPts, AllDesc, nplus);
+	printf("%d %d+ 3D points", CorpusData.n3dPoints, nplus);
 
 	int nSift, totalSift = 0;
 	CorpusData.IDCumView.reserve(nimages + 1);
@@ -11957,25 +11978,36 @@ int RefineVisualSfMAndCreateCorpus(char *Path, int nimages, int VisSfMsharedIntr
 	CorpusData.IDCumView.push_back(totalSift);
 	printf("\n");
 
-	printf("Refine corpus ....");
-	//Refine visSfm corpus
 	vector<int>Refinement_SharedIntrinsic;
-	for (int ii = 0; ii < CorpusData.nCameras; ii++)
-		Refinement_SharedIntrinsic.push_back(ii); //corpus is created from 1 camera.
+	if (sharedInstrinsic)
+	{
+		for (int ii = 0; ii < CorpusData.nCameras; ii++)
+			Refinement_SharedIntrinsic.push_back(0); //first visible camera is the reference camera to build the corpus
 
-	vector<int>AvailableViews;
+		sprintf(Fname, "%s/SharedIntrinsic.txt", Path); FILE *fp = fopen(Fname, "r");
+		if (fp != NULL)
+		{
+			int camID, group;
+			while (fscanf(fp, "%d %d", &camID, &group) != EOF)
+				Refinement_SharedIntrinsic[camID] = group;
+			fclose(fp);
+		}
+	}
+
+
+	//Refine visSfm corpus
+	printf("Refine corpus ....\n");
 	for (int ii = 0; ii < CorpusData.nCameras; ii++)
 	{
-		AvailableViews.push_back(ii);
 		CorpusData.camera[ii].threshold = 100.0; //make sure that most points are inliers
 		CorpusData.camera[ii].ShutterModel = ShutterModel;
 	}
 
 	vector<bool>GoodPoints;
 	if (ShutterModel == 0)
-		GlobalShutterBundleAdjustment(Path, CorpusData.camera, CorpusData.xyz, CorpusData.viewIdAll3D, CorpusData.uvAll3D, CorpusData.scaleAll3D, AvailableViews, Refinement_SharedIntrinsic, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, distortionCorrected, 0, false, false);
+		GlobalShutterBundleAdjustment(Path, CorpusData.camera, CorpusData.xyz, CorpusData.viewIdAll3D, CorpusData.uvAll3D, CorpusData.scaleAll3D, Refinement_SharedIntrinsic, CorpusData.nCameras, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, distortionCorrected, 0, false, false);
 	else
-		CayleyRollingShutterBundleAdjustment(Path, CorpusData.camera, CorpusData.xyz, CorpusData.viewIdAll3D, CorpusData.uvAll3D, CorpusData.scaleAll3D, AvailableViews, Refinement_SharedIntrinsic, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, false, distortionCorrected, 0, false, false);
+		CayleyRollingShutterBundleAdjustment(Path, CorpusData.camera, CorpusData.xyz, CorpusData.viewIdAll3D, CorpusData.uvAll3D, CorpusData.scaleAll3D, Refinement_SharedIntrinsic, CorpusData.nCameras, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, false, distortionCorrected, 0, false, false);
 
 	if (doubleRefinement)
 	{
@@ -11983,9 +12015,9 @@ int RefineVisualSfMAndCreateCorpus(char *Path, int nimages, int VisSfMsharedIntr
 			CorpusData.camera[ii].threshold = threshold;
 
 		if (ShutterModel == 0)
-			GlobalShutterBundleAdjustment(Path, CorpusData.camera, CorpusData.xyz, CorpusData.viewIdAll3D, CorpusData.uvAll3D, CorpusData.scaleAll3D, AvailableViews, Refinement_SharedIntrinsic, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, distortionCorrected, 0, false, false);
+			GlobalShutterBundleAdjustment(Path, CorpusData.camera, CorpusData.xyz, CorpusData.viewIdAll3D, CorpusData.uvAll3D, CorpusData.scaleAll3D, Refinement_SharedIntrinsic, CorpusData.nCameras, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, distortionCorrected, 0, false, false);
 		else
-			CayleyRollingShutterBundleAdjustment(Path, CorpusData.camera, CorpusData.xyz, CorpusData.viewIdAll3D, CorpusData.uvAll3D, CorpusData.scaleAll3D, AvailableViews, Refinement_SharedIntrinsic, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, false, distortionCorrected, 0, false, false);
+			CayleyRollingShutterBundleAdjustment(Path, CorpusData.camera, CorpusData.xyz, CorpusData.viewIdAll3D, CorpusData.uvAll3D, CorpusData.scaleAll3D, Refinement_SharedIntrinsic, CorpusData.nCameras, fixedIntrinsc, fixedDistortion, fixedPose, fixedfirstCamPose, false, distortionCorrected, 0, false, false);
 	}
 	printf("\n");
 
@@ -12000,8 +12032,6 @@ int RefineVisualSfMAndCreateCorpus(char *Path, int nimages, int VisSfMsharedIntr
 	for (int ii = 0; ii < nimages; ii++)
 		AvailViews.push_back(ii);
 	SaveCurrentSfmGL(Path, CorpusData.camera, AvailViews, CorpusData.xyz, CorpusData.rgb);
-
-	printf("\n");
 
 	delete[]AllKeyPts, delete[]AllDesc;
 

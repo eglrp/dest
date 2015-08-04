@@ -3,33 +3,22 @@
 #pragma once
 
 #include <cstdlib>
-#include <stdio.h>
-#include <iostream>
-#include <limits>
 #include <iostream>
 #include <fstream>
 #include <algorithm>
 #include <math.h>
 #include <omp.h>
-#include <stdint.h>
 #include <stdarg.h>
 
-#include "ceres/ceres.h"
-#include "ceres/rotation.h"
+#include <ceres/ceres.h>
+#include <ceres/rotation.h>
 #include <opencv2/opencv.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/core/core.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/features2d/features2d.hpp>
-#include <opencv2/calib3d/calib3d.hpp>
 #include <Eigen/Dense>
-#include "Eigen/Sparse"
 
 #include "Visualization.h"
 #include "DataStructure.h"
 #include "ImagePro.h"
-
-//#include <gsl/gsl_bspline.h>
 
 #include "SiftGPU/src/SiftGPU/SiftGPU.h"
 
@@ -142,6 +131,7 @@ bool WriteDescriptorBinary(char *fn, Mat descriptor, bool silent = false);
 Mat ReadDescriptorBinary(char *fn, int descriptorSize, bool silent = false);
 
 int readVisualSFMSift(char *fn, vector<KeyPoint>&kpts, Mat &descriptors, bool silent = true);
+int readVisualSFMSift(char *fn, vector<SiftKeypoint>&kpts, Mat &descriptors, bool silent = true);
 bool WriteKPointsSIFTGPU(char *fn, vector<SiftKeypoint>kpts, bool silent);
 bool WriteKPointsBinarySIFTGPU(char *fn, vector<SiftGPU::SiftKeypoint>kpts, bool silent = false);
 bool ReadKPointsBinarySIFTGPU(char *fn, vector<SiftGPU::SiftKeypoint> &kpts, bool silent = false);
@@ -575,12 +565,17 @@ bool ReadIntrinsicResults(char *path, CameraData *DeviceParas);
 int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams);
 void SaveCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>AvailViews, Point3d *All3D, int npts);
 void ReadCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>&AvailViews, Point3d *All3D, int npts);
-int ReadCumulativePoints(char *Path, int nviews, int timeID, vector<int>&cumulativePts);
 void ReadPointCorrespondences(char *Path, int nviews, int timeID, vector<int> *PointCorres, vector<int>&mask, int totalPts, bool Merge = false);
 void ReadPointCorrespondences(char *Path, int nviews, int timeID, vector<int> *PointCorres, int totalPts, bool Merge);
 void GenerateMergePointCorrespondences(vector<int> *MergePointCorres, vector<int> *PointCorres, int totalPts);
 void GenerateViewandPointCorrespondences(vector<int> *ViewCorres, vector<int> *PointIDCorres, vector<int> *PointCorres, vector<int> CumIDView, int totalPts);
 void Save3DPoints(char *Path, Point3d *All3D, vector<int>Selected3DIndex);
+
+int ReadCumulativePoints(char *Path, int nviews, int timeID, vector<int>&cumulativePts);
+void ReadCumulativePointsVisualSfm(char *Path, int nviews, vector<int>&cumulativePts);
+void GenerateMatchingTable(char *Path, int nviews, int timeID);
+void GenerateMatchingTableVisualSfM(char *Path, int nviews);
+void GenerateViewCorrespondenceMatrix(char *Path, int nviews, int timeID);
 
 void convertRTToTwist(double *R, double *T, double *twist);
 void convertTwistToRT(double *twist, double *R, double *T);
@@ -603,6 +598,7 @@ void GetRTFromrt(CameraData *AllViewsParas, int nviews);
 void GetRCGL(CameraData &camInfo);
 void GetRCGL(double *R, double *T, double *Rgl, double *C);
 void GetTfromC(CameraData &camInfo);
+void GetTfromC(double *R, double *C, double *T);
 void InvertCameraPose(double *R, double *T, double *iR, double *iT);
 
 void GetRTFromrt(CameraData &camera);
@@ -631,7 +627,7 @@ void BlurDetectionDriver(char *Path, int nimages, int width, int height, float b
 
 int GenerateVisualSFMinput(char *path, int startFrame, int stopFrame, int npts);
 bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics, int nHDs = 30, int nVGAs = 24, int nPanels = 20);
-bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize, vector<KeyPoint> *AllKeyPts = 0, Mat *AllDesc = 0, int nplus = 0);
+bool loadNVM(const char *filepath, Corpus &CorpusData, vector<Point2i> &ImgSize, int nplus = 0, vector<KeyPoint> *AllKeyPts = 0, Mat *AllDesc = 0);
 bool loadBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool saveBundleAdjustedNVMResults(char *BAfileName, Corpus &CorpusData);
 bool ReSaveBundleAdjustedNVMResults(char *BAfileName, double ScaleFactor = 1.0);
@@ -641,12 +637,13 @@ int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool outputtext = false, bool
 int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool inputtext = false, bool notReadDescriptor = false);
 bool loadIndividualNVMforpose(char *Path, CameraData *CameraInfo, vector<int>availViews, int timeIDstart, int timeIDstop, int nviews, bool sharedIntrinsics);
 int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int ScannedCopursCam, int nVideoViews, int startTime, int stopTime, int LensModel = RADIAL_TANGENTIAL_PRISM, int distortionCorrected = 1);
-int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime);
-int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime);
+int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime, double threshold = 5.0, int ninliersThresh = 40);
+int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime, double threshold = 5.0, int ninliersThresh = 40);
 int WriteVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime);
 void GettPosesGL(double *R, double *T, double *poseGL);
 void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID);
-void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>&AvailTime, int camID, int StartTime = 0);
+void SaveVideoCameraIntrinsic(char *Fname, CameraData *AllViewParas, vector<int>&AvailTime, int camID, int StartTime);
+void SaveVideoCameraPoses(char *Fname, CameraData *AllViewParas, vector<int>&AvailTime, int camID, int StartTime = 0);
 int DownSampleSpatialCalib(char *Path, int nviews, int startFrame, int stopFrame, int Factor);
 
 void DetectBlobCorrelation(double *img, int width, int height, Point2d *Checker, int &npts, double sigma, int search_area, int NMS_BW, double thresh);

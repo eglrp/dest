@@ -82,16 +82,12 @@ struct Corpus
 	vector<vector<double> > scaleAll3D; //3D -> uv of that point in those visible views
 	vector<Mat>DescAll3D; //desc for all 3d
 
-	vector<vector<Point2d> > uvAllViews; //all views valid 2D points
-	vector<vector<double> > scaleAllViews; //all views valid 2D points
-	vector <vector<int> >threeDIdAllViews; //2D point in visible view -> 3D index
+	vector<Point2d> *uvAllViews; //all views valid 2D points
+	vector<double> *scaleAllViews; //all views valid 2D points
+	vector<int> *threeDIdAllViews; //2D point in visible view -> 3D index
+	vector<FeatureDesc> *DescAllViews;//all views valid desc
 
-	vector<Point2d> *uvAllViews2; //all views valid 2D points
-	vector<double> *scaleAllViews2; //all views valid 2D points
-	vector<int> *threeDIdAllViews2; //2D point in visible view -> 3D index
-	vector<FeatureDesc> *DescAllViews2;//all views valid desc
-
-	Mat SiftDesc, SurfDesc;
+	//Mat SiftDesc, SurfDesc;
 };
 struct CorpusandVideo
 {
@@ -120,7 +116,7 @@ struct ImgPtEle
 	int viewID, frameID, imWidth, imHeight;
 	Point2d pt2D;
 	Point3d pt3D;
-	double ray[3], camcenter[3], d, timeStamp, scale, canonicalScale, std2D, std3D, pixelSizeToMm= 10^3;
+	double ray[3], camcenter[3], d, timeStamp, scale, canonicalScale, std2D, std3D, pixelSizeToMm;
 	double K[9], R[9], Quat[4], T[3], P[12], Q[6], u[2];
 };
 

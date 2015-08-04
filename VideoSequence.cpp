@@ -1,7 +1,3 @@
-#include <iostream>
-#include <boost/config.hpp>
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/prim_minimum_spanning_tree.hpp>
 #include "VideoSequence.h"
 #include "Ultility.h"
 

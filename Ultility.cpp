@@ -1,7 +1,6 @@
 #include "Ultility.h"
 #include "ImagePro.h"
 #include "Geometry.h"
-#include "BAutil.h"
 
 using namespace std;
 using namespace cv;
@@ -308,179 +307,179 @@ void GenerateiDCTBasis(double *Basis, int nsamples, double t)
 /*
 void GenerateSplineBasisWithBreakPts(double *Basis, double *DBasis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder, int DerivativeOrder)
 {
-	if (ResampledPts[nResamples - 1] > BreakPts[nbreaks - 1])
-	{
-		cout << "Element of the resampled data is out the break point range!" << endl;
-		abort();
-	}
+if (ResampledPts[nResamples - 1] > BreakPts[nbreaks - 1])
+{
+cout << "Element of the resampled data is out the break point range!" << endl;
+abort();
+}
 
-	const int ncoeffs = nbreaks + SplineOrder - 2;
-	gsl_bspline_workspace *bw = gsl_bspline_alloc(SplineOrder, nbreaks);
-	gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
+const int ncoeffs = nbreaks + SplineOrder - 2;
+gsl_bspline_workspace *bw = gsl_bspline_alloc(SplineOrder, nbreaks);
+gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
 
-	gsl_bspline_deriv_workspace *dw = dw = gsl_bspline_deriv_alloc(SplineOrder);
-	gsl_matrix  *dBi = gsl_matrix_alloc(ncoeffs, DerivativeOrder + 1);
+gsl_bspline_deriv_workspace *dw = dw = gsl_bspline_deriv_alloc(SplineOrder);
+gsl_matrix  *dBi = gsl_matrix_alloc(ncoeffs, DerivativeOrder + 1);
 
-	//copy data to gsl format
-	for (int ii = 0; ii < nbreaks; ii++)
-		gsl_vector_set(gsl_BreakPts, ii, BreakPts[ii]);
+//copy data to gsl format
+for (int ii = 0; ii < nbreaks; ii++)
+gsl_vector_set(gsl_BreakPts, ii, BreakPts[ii]);
 
-	//contruct knots
-	gsl_bspline_knots(gsl_BreakPts, bw);
+//contruct knots
+gsl_bspline_knots(gsl_BreakPts, bw);
 
-	//construct basis matrix
-	for (int ii = 0; ii < nResamples; ii++)
-	{
-		gsl_bspline_deriv_eval(ResampledPts[ii], DerivativeOrder, dBi, bw, dw);//compute basis vector for point i
+//construct basis matrix
+for (int ii = 0; ii < nResamples; ii++)
+{
+gsl_bspline_deriv_eval(ResampledPts[ii], DerivativeOrder, dBi, bw, dw);//compute basis vector for point i
 
-		if (Basis != NULL) //sometimes, the 0th order is not needed
-			for (int jj = 0; jj < ncoeffs; jj++)
-				Basis[jj + ii*ncoeffs] = gsl_matrix_get(dBi, jj, 0);
+if (Basis != NULL) //sometimes, the 0th order is not needed
+for (int jj = 0; jj < ncoeffs; jj++)
+Basis[jj + ii*ncoeffs] = gsl_matrix_get(dBi, jj, 0);
 
-		if (DerivativeOrder == 1)
-			for (int jj = 0; jj < ncoeffs; jj++)
-				DBasis[jj + ii*ncoeffs] = gsl_matrix_get(dBi, jj, 1);
-	}
+if (DerivativeOrder == 1)
+for (int jj = 0; jj < ncoeffs; jj++)
+DBasis[jj + ii*ncoeffs] = gsl_matrix_get(dBi, jj, 1);
+}
 
 
-	gsl_bspline_free(bw);
-	gsl_bspline_deriv_free(dw);
-	gsl_matrix_free(dBi);
+gsl_bspline_free(bw);
+gsl_bspline_deriv_free(dw);
+gsl_matrix_free(dBi);
 
-	return;
+return;
 }
 void GenerateResamplingSplineBasisWithBreakPts(double *Basis, double *ResampledPts, double *BreakPts, int nResamples, int nbreaks, int SplineOrder)
 {
-	if (ResampledPts[nResamples - 1] > BreakPts[nbreaks - 1])
-	{
-		cout << "Element of the resampled data is out the break point range!" << endl;
-		abort();
-	}
+if (ResampledPts[nResamples - 1] > BreakPts[nbreaks - 1])
+{
+cout << "Element of the resampled data is out the break point range!" << endl;
+abort();
+}
 
-	gsl_bspline_workspace *bw = gsl_bspline_alloc(SplineOrder, nbreaks);
+gsl_bspline_workspace *bw = gsl_bspline_alloc(SplineOrder, nbreaks);
 
-	gsl_vector *Bi = gsl_vector_alloc(nbreaks + SplineOrder - 2);
-	gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
-	//gsl_matrix *gsl_Basis = gsl_matrix_alloc(nResamples, nbreaks + SplineOrder - 2);
+gsl_vector *Bi = gsl_vector_alloc(nbreaks + SplineOrder - 2);
+gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
+//gsl_matrix *gsl_Basis = gsl_matrix_alloc(nResamples, nbreaks + SplineOrder - 2);
 
-	//copy data to gsl format
-	for (int ii = 0; ii < nbreaks; ii++)
-		gsl_vector_set(gsl_BreakPts, ii, BreakPts[ii]);
+//copy data to gsl format
+for (int ii = 0; ii < nbreaks; ii++)
+gsl_vector_set(gsl_BreakPts, ii, BreakPts[ii]);
 
-	//contruct knots
-	gsl_bspline_knots(gsl_BreakPts, bw);
+//contruct knots
+gsl_bspline_knots(gsl_BreakPts, bw);
 
-	//construct basis matrix
-	int ncoeffs = nbreaks + 2;
-	for (int ii = 0; ii < nResamples; ii++)
-	{
-		gsl_bspline_eval(ResampledPts[ii], Bi, bw); //compute basis vector for point i
+//construct basis matrix
+int ncoeffs = nbreaks + 2;
+for (int ii = 0; ii < nResamples; ii++)
+{
+gsl_bspline_eval(ResampledPts[ii], Bi, bw); //compute basis vector for point i
 
-		//for (int jj = 0; jj < ncoeffs; jj++)
-		//	gsl_matrix_set(gsl_Basis, ii, jj, gsl_vector_get(Bi, jj));
+//for (int jj = 0; jj < ncoeffs; jj++)
+//	gsl_matrix_set(gsl_Basis, ii, jj, gsl_vector_get(Bi, jj));
 
-		for (int jj = 0; jj < ncoeffs; jj++)
-			Basis[jj + ii*ncoeffs] = gsl_vector_get(Bi, jj);
-	}
+for (int jj = 0; jj < ncoeffs; jj++)
+Basis[jj + ii*ncoeffs] = gsl_vector_get(Bi, jj);
+}
 
-	gsl_bspline_free(bw);
-	gsl_vector_free(Bi);
-	//gsl_matrix_free(gsl_Basis);
+gsl_bspline_free(bw);
+gsl_vector_free(Bi);
+//gsl_matrix_free(gsl_Basis);
 
-	return;
+return;
 }
 void GenerateResamplingSplineBasisWithBreakPts(double *Basis, vector<double> ResampledPts, vector<double>BreakPts, int SplineOrder)
 {
-	int nResamples = (int)ResampledPts.size(), nbreaks = (int)BreakPts.size();
-	if (ResampledPts[nResamples - 1] > BreakPts[nbreaks - 1])
-	{
-		//cout << "Element of the resampled data is out the break point range!" << endl;
-		abort();
-	}
+int nResamples = (int)ResampledPts.size(), nbreaks = (int)BreakPts.size();
+if (ResampledPts[nResamples - 1] > BreakPts[nbreaks - 1])
+{
+//cout << "Element of the resampled data is out the break point range!" << endl;
+abort();
+}
 
-	gsl_bspline_workspace *bw = gsl_bspline_alloc(SplineOrder, nbreaks);
+gsl_bspline_workspace *bw = gsl_bspline_alloc(SplineOrder, nbreaks);
 
-	gsl_vector *Bi = gsl_vector_alloc(nbreaks + 2);
-	gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
-	gsl_matrix *gsl_Basis = gsl_matrix_alloc(nResamples, nbreaks + 2);
+gsl_vector *Bi = gsl_vector_alloc(nbreaks + 2);
+gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
+gsl_matrix *gsl_Basis = gsl_matrix_alloc(nResamples, nbreaks + 2);
 
-	//copy data to gsl format
-	for (int ii = 0; ii < nbreaks; ii++)
-		gsl_vector_set(gsl_BreakPts, ii, BreakPts[ii]);
+//copy data to gsl format
+for (int ii = 0; ii < nbreaks; ii++)
+gsl_vector_set(gsl_BreakPts, ii, BreakPts[ii]);
 
-	//contruct knots
-	gsl_bspline_knots(gsl_BreakPts, bw);
+//contruct knots
+gsl_bspline_knots(gsl_BreakPts, bw);
 
-	//construct basis matrix
-	for (int ii = 0; ii < nResamples; ii++)
-	{
-		gsl_bspline_eval(ResampledPts[ii], Bi, bw); //compute basis vector for point i
+//construct basis matrix
+for (int ii = 0; ii < nResamples; ii++)
+{
+gsl_bspline_eval(ResampledPts[ii], Bi, bw); //compute basis vector for point i
 
-		for (int jj = 0; jj < nbreaks + 2; jj++)
-			gsl_matrix_set(gsl_Basis, ii, jj, gsl_vector_get(Bi, jj));
-	}
+for (int jj = 0; jj < nbreaks + 2; jj++)
+gsl_matrix_set(gsl_Basis, ii, jj, gsl_vector_get(Bi, jj));
+}
 
-	for (int jj = 0; jj < nResamples; jj++)
-		for (int ii = 0; ii < nbreaks + 2; ii++)
-			Basis[ii + jj*(nbreaks + 2)] = gsl_matrix_get(gsl_Basis, jj, ii);
+for (int jj = 0; jj < nResamples; jj++)
+for (int ii = 0; ii < nbreaks + 2; ii++)
+Basis[ii + jj*(nbreaks + 2)] = gsl_matrix_get(gsl_Basis, jj, ii);
 
-	gsl_bspline_free(bw);
-	gsl_vector_free(Bi);
-	gsl_matrix_free(gsl_Basis);
+gsl_bspline_free(bw);
+gsl_vector_free(Bi);
+gsl_matrix_free(gsl_Basis);
 
-	return;
+return;
 }
 void GenerateResamplingSplineBasisWithBreakPtsExample()
 {
-	int nResamples = 200, nbreaks = 15, SplineOrder = 4;
-	double *Basis = new double[nResamples*(nbreaks + 2)];
-	double *ResampledPts = new double[nResamples];
-	double *BreakPts = new double[nbreaks];
+int nResamples = 200, nbreaks = 15, SplineOrder = 4;
+double *Basis = new double[nResamples*(nbreaks + 2)];
+double *ResampledPts = new double[nResamples];
+double *BreakPts = new double[nbreaks];
 
-	for (int ii = 0; ii < nbreaks; ii++)
-		BreakPts[ii] = 15.0*ii / 14.0;
+for (int ii = 0; ii < nbreaks; ii++)
+BreakPts[ii] = 15.0*ii / 14.0;
 
-	for (int ii = 0; ii < nResamples; ii++)
-		ResampledPts[ii] = (15.0 / (nResamples - 1)) * ii;
+for (int ii = 0; ii < nResamples; ii++)
+ResampledPts[ii] = (15.0 / (nResamples - 1)) * ii;
 
-	GenerateResamplingSplineBasisWithBreakPts(Basis, ResampledPts, BreakPts, nResamples, nbreaks, SplineOrder);
+GenerateResamplingSplineBasisWithBreakPts(Basis, ResampledPts, BreakPts, nResamples, nbreaks, SplineOrder);
 
-	FILE *fp = fopen("C:/temp/gsl_B.txt", "w + ");
-	for (int jj = 0; jj < nResamples; jj++)
-	{
-		for (int ii = 0; ii < nbreaks + 2; ii++)
-			fprintf(fp, "%.16f ", Basis[ii + jj*(nbreaks + 2)]);
-		fprintf(fp, "\n");
-	}
-	fclose(fp);
+FILE *fp = fopen("C:/temp/gsl_B.txt", "w + ");
+for (int jj = 0; jj < nResamples; jj++)
+{
+for (int ii = 0; ii < nbreaks + 2; ii++)
+fprintf(fp, "%.16f ", Basis[ii + jj*(nbreaks + 2)]);
+fprintf(fp, "\n");
+}
+fclose(fp);
 
-	return;
+return;
 }
 int FindActingControlPts(double t, int *ActingID, int ncontrols, gsl_bspline_workspace *bw, gsl_vector *Bi, int splineOrder, int extraNControls)
 {
-	gsl_bspline_eval(t, Bi, bw);
+gsl_bspline_eval(t, Bi, bw);
 
-	int startID = -1;
-	for (int ii = 0; ii < ncontrols; ii++)
-	{
-		double bi = gsl_vector_get(Bi, ii);
-		if (bi > 1.0e-9)
-		{
-			startID = ii;
-			break;
-		}
-	}
+int startID = -1;
+for (int ii = 0; ii < ncontrols; ii++)
+{
+double bi = gsl_vector_get(Bi, ii);
+if (bi > 1.0e-9)
+{
+startID = ii;
+break;
+}
+}
 
-	//add points at the two ends of acting controls just in case
-	while (startID - extraNControls / 2 < 0) //at the begining,  ---> need to decrese starting point
-		startID++;
-	while (startID + splineOrder + extraNControls / 2 > ncontrols) //at the end, #control points is less than SplineOrder ---> need to decrese starting point
-		startID--;
+//add points at the two ends of acting controls just in case
+while (startID - extraNControls / 2 < 0) //at the begining,  ---> need to decrese starting point
+startID++;
+while (startID + splineOrder + extraNControls / 2 > ncontrols) //at the end, #control points is less than SplineOrder ---> need to decrese starting point
+startID--;
 
-	for (int ii = 0; ii < splineOrder + extraNControls; ii++) //assume # controls >> Splineorder + extraNControl
-		ActingID[ii] = startID - extraNControls / 2 + ii;
+for (int ii = 0; ii < splineOrder + extraNControls; ii++) //assume # controls >> Splineorder + extraNControl
+ActingID[ii] = startID - extraNControls / 2 + ii;
 
-	return 0;
+return 0;
 }
 */
 
@@ -723,7 +722,7 @@ int BSplineGetBasis(const double x, double * B, double *knots, int nbreaks, int 
 int BSplineGetAllBasis(double *AllB, double *samples, double *BreakPts, int nsamples, int nbreaks, int SplineOrder, const int nderiv, double *AlldB, double *Alld2B)
 {
 	int nCoeffs = nbreaks + SplineOrder - 2;
-	double *B = new double[nCoeffs*(nderiv+1)];
+	double *B = new double[nCoeffs*(nderiv + 1)];
 	double *knots = new double[nCoeffs + SplineOrder];
 
 	BSplineGetKnots(knots, BreakPts, nbreaks, nCoeffs, SplineOrder);
@@ -740,14 +739,14 @@ int BSplineGetAllBasis(double *AllB, double *samples, double *BreakPts, int nsam
 		for (int jj = 0; jj < nCoeffs; jj++)
 		{
 			AllB[ii*nCoeffs + jj] = B[jj];
-			if (nderiv >=1)
+			if (nderiv >= 1)
 				AlldB[ii*nCoeffs + jj] = B[jj + nCoeffs];
-			if (nderiv==2)
-				Alld2B[ii*nCoeffs + jj] = B[jj + 2*nCoeffs];
+			if (nderiv == 2)
+				Alld2B[ii*nCoeffs + jj] = B[jj + 2 * nCoeffs];
 		}
 	}
 
-	delete[]B, delete []knots;
+	delete[]B, delete[]knots;
 	return 0;
 }
 
@@ -4146,6 +4145,62 @@ int readVisualSFMSift(char *fn, vector<KeyPoint>&kpts, Mat &descriptors, bool si
 
 	return 0;
 }
+int readVisualSFMSift(char *fn, vector<SiftKeypoint>&kpts, Mat &descriptors, bool silent)
+{
+	ifstream fin;
+	fin.open(fn, ios::binary);
+	if (!fin.is_open())
+	{
+		cout << "Cannot open: " << fn << endl;
+		return 1;
+	}
+	if (!silent)
+		cout << "Load " << fn << endl;
+
+	int dummy, npts, descriptorSize = SIFTBINS;
+	float val;
+
+	fin.read(reinterpret_cast<char *>(&dummy), sizeof(int));//SIFT
+	fin.read(reinterpret_cast<char *>(&dummy), sizeof(int));///V4.0
+	fin.read(reinterpret_cast<char *>(&npts), sizeof(int));//npts
+	fin.read(reinterpret_cast<char *>(&dummy), sizeof(int));//5numbers
+	fin.read(reinterpret_cast<char *>(&dummy), sizeof(int));//descriptorSize
+
+	kpts.reserve(npts);
+	SiftKeypoint kpt;
+	for (int ii = 0; ii < npts; ii++)
+	{
+		fin.read(reinterpret_cast<char *>(&kpt.x), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&kpt.y), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&val), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&kpt.s), sizeof(float));
+		fin.read(reinterpret_cast<char *>(&kpt.o), sizeof(float));
+		kpts.push_back(kpt);
+	}
+
+
+	uint8_t d;
+	float desci[SIFTBINS];
+	descriptors.create(npts, SIFTBINS, CV_32F);
+	for (int j = 0; j < npts; j++)
+	{
+		val = 0.0;
+		for (int i = 0; i < descriptorSize; i++)
+		{
+			fin.read(reinterpret_cast<char *>(&d), sizeof(uint8_t));
+			dummy = (int)d;
+			desci[i] = (float)(int)d;
+			val += desci[i] * desci[i];
+		}
+		val = sqrt(val);
+
+		for (int i = 0; i < descriptorSize; i++)
+			descriptors.at<float>(j, i) = desci[i] / val;
+	}
+	fin.close();
+
+	return 0;
+}
 bool WriteKPointsSIFTGPU(char *fn, vector<SiftKeypoint>kpts, bool silent)
 {
 	FILE *fp = fopen(fn, "w+");
@@ -4329,25 +4384,18 @@ Mat ReadDescriptorBinarySIFTGPU(char *fn, bool silent)
 	if (!fin.is_open())
 	{
 		cout << "Cannot open: " << fn << endl;
-		Mat descriptors(1, 128, CV_32F);
+		Mat descriptors(1, SIFTBINS, CV_32F);
 		return descriptors;
 	}
 	if (silent)
 		cout << "Load " << fn << endl;
 
 	int npts, descriptorSize = SIFTBINS;
-	float val;
-
 	fin.read(reinterpret_cast<char *>(&npts), sizeof(int));
-	Mat descriptors(npts, 128, CV_32F);
+	Mat descriptors(npts, SIFTBINS, CV_32F);
 	for (int j = 0; j < npts; j++)
-	{
 		for (int i = 0; i < descriptorSize; i++)
-		{
-			fin.read(reinterpret_cast<char *>(&val), sizeof(float));
-			descriptors.at<float>(j, i) = val;
-		}
-	}
+			fin.read(reinterpret_cast<char *>(&descriptors.at<float>(j, i)), sizeof(float));
 	fin.close();
 
 	return descriptors;
@@ -5397,7 +5445,7 @@ bool ReadIntrinsicResults(char *path, CameraData *AllViewsParas)
 {
 	//Note that visCamualSfm use different lens model than openCV or matlab or yours (inverse model)
 	char Fname[200], dummy[200];
-	int id = 0, lensType, width, height;
+	int id = 0, lensType, shutterType, width, height;
 	double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1, omega, DistCtrX, DistCtrY;
 
 	sprintf(Fname, "%s/DevicesIntrinsics.txt", path); FILE *fp = fopen(Fname, "r");
@@ -5406,9 +5454,9 @@ bool ReadIntrinsicResults(char *path, CameraData *AllViewsParas)
 		cout << "Cannot load " << Fname << endl;
 		return false;
 	}
-	while (fscanf(fp, "%s %d %d %d %lf %lf %lf %lf %lf ", dummy, &lensType, &width, &height, &fx, &fy, &skew, &u0, &v0) != EOF)
+	while (fscanf(fp, "%s %d %d %d %d %lf %lf %lf %lf %lf ", dummy, &lensType, &shutterType, &width, &height, &fx, &fy, &skew, &u0, &v0) != EOF)
 	{
-		AllViewsParas[id].LensModel = lensType, AllViewsParas[id].width = width, AllViewsParas[id].height = height;
+		AllViewsParas[id].LensModel = lensType, AllViewsParas[id].ShutterModel = shutterType,  AllViewsParas[id].width = width, AllViewsParas[id].height = height;
 		AllViewsParas[id].K[0] = fx, AllViewsParas[id].K[1] = skew, AllViewsParas[id].K[2] = u0,
 			AllViewsParas[id].K[3] = 0.0, AllViewsParas[id].K[4] = fy, AllViewsParas[id].K[5] = v0,
 			AllViewsParas[id].K[6] = 0.0, AllViewsParas[id].K[7] = 0.0, AllViewsParas[id].K[8] = 1.0;
@@ -5458,12 +5506,12 @@ int SaveIntrinsicResults(char *path, CameraData *AllViewsParas, int nCams)
 			r0 = AllViewsParas[id].distortion[0], r1 = AllViewsParas[id].distortion[1], r2 = AllViewsParas[id].distortion[2];
 			t0 = AllViewsParas[id].distortion[3], t1 = AllViewsParas[id].distortion[4];
 			p0 = AllViewsParas[id].distortion[5], p1 = AllViewsParas[id].distortion[6];
-			fprintf(fp, "%d.png %d %d %d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf \n", ii, LensType, AllViewsParas[id].width, AllViewsParas[id].height, fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1);
+			fprintf(fp, "%d.png %d %d %d %d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf \n", ii, LensType, AllViewsParas[id].ShutterModel, AllViewsParas[id].width, AllViewsParas[id].height, fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1);
 		}
 		else
 		{
 			omega = AllViewsParas[id].distortion[0], DistCtrX = AllViewsParas[id].distortion[1], DistCtrY = AllViewsParas[id].distortion[2];
-			fprintf(fp, "%d.png %d %d %d %lf %lf %lf %lf %lf %lf %lf %lf \n", ii, LensType, AllViewsParas[id].width, AllViewsParas[id].height, fx, fy, skew, u0, v0, omega, DistCtrX, DistCtrY);
+			fprintf(fp, "%d.png %d %d %d %d %lf %lf %lf %lf %lf %lf %lf %lf \n", ii, LensType, AllViewsParas[id].ShutterModel, AllViewsParas[id].width, AllViewsParas[id].height, fx, fy, skew, u0, v0, omega, DistCtrX, DistCtrY);
 		}
 	}
 	fclose(fp);
@@ -5539,29 +5587,6 @@ void ReadCurrentSfmInfo(char *path, CameraData *AllViewParas, vector<int>&AvailV
 	}
 
 	return;
-}
-int ReadCumulativePoints(char *Path, int nviews, int timeID, vector<int>&cumulativePts)
-{
-	int ii, jj;
-	char Fname[200];
-	if (timeID < 0)
-		sprintf(Fname, "%s/CumlativePoints.txt", Path);
-	else
-		sprintf(Fname, "%s/Dynamic/CumlativePoints_%d.txt", Path, timeID);
-	FILE *fp = fopen(Fname, "r");
-	if (fp == NULL)
-	{
-		printf("Cannot load %s. Abort program!\n", Fname);
-		return 1;
-	}
-	for (ii = 0; ii < nviews + 1; ii++)
-	{
-		fscanf(fp, "%d\n", &jj);
-		cumulativePts.push_back(jj);
-	}
-	fclose(fp);
-
-	return 0;
 }
 void ReadPointCorrespondences(char *Path, int nviews, int timeID, vector<int> *PointCorres, vector<int>&CeresDuplicateAddInMask, int totalPts, bool Merge)
 {
@@ -5705,6 +5730,490 @@ void Save3DPoints(char *Path, Point3d *All3D, vector<int>Selected3DIndex)
 		fprintf(fp, "%.3f %.3f %.3f\n", All3D[pID].x, All3D[pID].y, All3D[pID].z);
 	}
 	fclose(fp);
+}
+
+int ReadCumulativePoints(char *Path, int nviews, int timeID, vector<int>&cumulativePts)
+{
+	int ii, jj;
+	char Fname[200];
+	if (timeID < 0)
+		sprintf(Fname, "%s/CumlativePoints.txt", Path);
+	else
+		sprintf(Fname, "%s/Dynamic/CumlativePoints_%d.txt", Path, timeID);
+	FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s. Abort program!\n", Fname);
+		return 1;
+	}
+	for (ii = 0; ii < nviews + 1; ii++)
+	{
+		fscanf(fp, "%d\n", &jj);
+		cumulativePts.push_back(jj);
+	}
+	fclose(fp);
+
+	return 0;
+}
+void ReadCumulativePointsVisualSfm(char *Path, int nviews, vector<int>&cumulativePts)
+{
+	char Fname[200];
+	int dummy, npts, currentNpts = 0;
+	cumulativePts.push_back(currentNpts);
+	for (int ii = 0; ii < nviews; ii++)
+	{
+		sprintf(Fname, "%s/%d.sift", Path, ii);
+		ifstream fin; fin.open(Fname, ios::binary);
+		if (!fin.is_open())
+		{
+			cout << "Cannot open: " << Fname << endl;
+			abort();
+		}
+
+		fin.read(reinterpret_cast<char *>(&dummy), sizeof(int));//SIFT
+		fin.read(reinterpret_cast<char *>(&dummy), sizeof(int));///V4.0
+		fin.read(reinterpret_cast<char *>(&npts), sizeof(int));//npts
+		fin.read(reinterpret_cast<char *>(&dummy), sizeof(int));//5numbers
+		fin.read(reinterpret_cast<char *>(&dummy), sizeof(int));//descriptorSize
+
+		fin.close();
+
+		currentNpts += npts;
+		cumulativePts.push_back(currentNpts);
+	}
+
+	sprintf(Fname, "%s/CumlativePoints.txt", Path);
+	FILE *fp = fopen(Fname, "w+");
+	for (int ii = 0; ii < nviews + 1; ii++)
+		fprintf(fp, "%d\n", cumulativePts[ii]);
+	fclose(fp);
+
+	return;
+}
+void GenerateMatchingTable(char *Path, int nviews, int timeID)
+{
+	char Fname[200];
+
+	int totalPts;
+	vector<int> cumulativePts;
+	ReadCumulativePoints(Path, nviews, timeID, cumulativePts);
+	totalPts = cumulativePts.at(nviews);
+
+	vector<Point2i> *AllPairWiseMatchingId = new vector<Point2i>[nviews*(nviews - 1) / 2];
+	for (int ii = 0; ii < nviews*(nviews - 1) / 2; ii++)
+		AllPairWiseMatchingId[ii].reserve(10000);
+
+	int percent = 10, incre = 10;
+	int nfiles = nviews*(nviews - 1) / 2, filesCount = 0;
+	double start = omp_get_wtime();
+	for (int jj = 0; jj < nviews - 1; jj++)
+	{
+		for (int ii = jj + 1; ii < nviews; ii++)
+		{
+			if (100.0*filesCount / nfiles >= percent)
+			{
+				printf("@\r# %.2f%% (%.2fs) Reading pairwise matches....", 100.0*filesCount / nfiles, omp_get_wtime() - start);
+				percent += incre;
+			}
+			filesCount++;
+			if (timeID < 0)
+				sprintf(Fname, "%s/M_%d_%d.dat", Path, jj, ii);
+			else
+				sprintf(Fname, "%s/Dynamic/M%d_%d_%d.dat", Path, timeID, jj, ii);
+
+			int count = ii - jj - 1;
+			for (int i = 0; i <= jj - 1; i++)
+				count += nviews - i - 1;
+
+			int id1, id2, npts;
+			FILE *fp = fopen(Fname, "r");
+			if (fp == NULL)
+				continue;
+			fscanf(fp, "%d ", &npts);
+			AllPairWiseMatchingId[count].reserve(npts);
+			while (fscanf(fp, "%d %d ", &id1, &id2) != EOF)
+				AllPairWiseMatchingId[count].push_back(Point2i(id1, id2));
+			fclose(fp);
+		}
+	}
+
+	//Generate Visbible Points Table
+	vector<int> *KeysBelongTo3DPoint = new vector <int>[nviews];
+	for (int jj = 0; jj < nviews; jj++)
+	{
+		KeysBelongTo3DPoint[jj].reserve(cumulativePts[jj + 1] - cumulativePts[jj]);
+		for (int ii = 0; ii < cumulativePts[jj + 1] - cumulativePts[jj]; ii++)
+			KeysBelongTo3DPoint[jj].push_back(-1);
+	}
+
+	vector<int>*ViewMatch = new vector<int>[totalPts]; //cotains all visible views of 1 3D point
+	vector<int>*PointIDMatch = new vector<int>[totalPts];//cotains all keyID of the visible views of 1 3D point
+	int count3D = 0;
+
+	for (int jj = 0; jj < nviews; jj++)
+	{
+		for (int ii = jj + 1; ii < nviews; ii++)
+		{
+			int PairWiseID = ii - jj - 1;
+			for (int i = 0; i <= jj - 1; i++)
+				PairWiseID += nviews - i - 1;
+			//printf("@(%d, %d) with %d 3+ points ...TE: %.2fs\n ", jj, ii, count3D, omp_get_wtime() - start);
+			for (int kk = 0; kk < AllPairWiseMatchingId[PairWiseID].size(); kk++)
+			{
+				int id1 = AllPairWiseMatchingId[PairWiseID].at(kk).x;
+				int id2 = AllPairWiseMatchingId[PairWiseID].at(kk).y;
+				int ID3D1 = KeysBelongTo3DPoint[jj].at(id1), ID3D2 = KeysBelongTo3DPoint[ii].at(id2);
+				if (ID3D1 == -1 && ID3D2 == -1) //Both are never seeen before
+				{
+					ViewMatch[count3D].push_back(jj), ViewMatch[count3D].push_back(ii);
+					PointIDMatch[count3D].push_back(id1), PointIDMatch[count3D].push_back(id2);
+					KeysBelongTo3DPoint[jj].at(id1) = count3D, KeysBelongTo3DPoint[ii].at(id2) = count3D; //this pair of corres constitutes 3D point #count
+					count3D++;
+				}
+				else if (ID3D1 == -1 && ID3D2 != -1)
+				{
+					ViewMatch[ID3D2].push_back(jj);
+					PointIDMatch[ID3D2].push_back(id1);
+					KeysBelongTo3DPoint[jj].at(id1) = ID3D2; //this point constitutes 3D point #ID3D2
+				}
+				else if (ID3D1 != -1 && ID3D2 == -1)
+				{
+					ViewMatch[ID3D1].push_back(ii);
+					PointIDMatch[ID3D1].push_back(id2);
+					KeysBelongTo3DPoint[ii].at(id2) = ID3D1; //this point constitutes 3D point #ID3D2
+				}
+				else if (ID3D1 != -1 && ID3D2 != -1 && ID3D1 != ID3D2)//Strange case where 1 point (usually not vey discrimitive or repeating points) is matched to multiple points in the same view pair 
+					//--> Just concatanate the one with fewer points to largrer one and hope MultiTriangulationRansac can do sth.
+				{
+					if (ViewMatch[ID3D1].size() >= ViewMatch[ID3D2].size())
+					{
+						int nmatches = ViewMatch[ID3D2].size();
+						for (int ll = 0; ll < nmatches; ll++)
+						{
+							ViewMatch[ID3D1].push_back(ViewMatch[ID3D2].at(ll));
+							PointIDMatch[ID3D1].push_back(PointIDMatch[ID3D2].at(ll));
+						}
+						ViewMatch[ID3D2].clear(), PointIDMatch[ID3D2].clear();
+					}
+					else
+					{
+						int nmatches = ViewMatch[ID3D1].size();
+						for (int ll = 0; ll < nmatches; ll++)
+						{
+							ViewMatch[ID3D2].push_back(ViewMatch[ID3D1].at(ll));
+							PointIDMatch[ID3D2].push_back(PointIDMatch[ID3D1].at(ll));
+						}
+						ViewMatch[ID3D1].clear(), PointIDMatch[ID3D1].clear();
+					}
+				}
+				else//(ID3D1 == ID3D2): cycle in the corres, i.e. a-b, a-c, and b-c
+					continue;
+			}
+		}
+	}
+	printf("Merged correspondences in %.2fs\n ", omp_get_wtime() - start);
+
+	int count = 0, maxmatches = 0, npts = 0;
+	if (timeID < 0)
+		sprintf(Fname, "%s/ViewPM.txt", Path);
+	else
+		sprintf(Fname, "%s/Dynamic/ViewPM_%d.txt", Path, timeID);
+	FILE *fp = fopen(Fname, "w+");
+	if (fp != NULL)
+	{
+		for (int jj = 0; jj < count3D; jj++)
+		{
+			int nmatches = ViewMatch[jj].size();
+			if (nmatches < 2 || nmatches > nviews * 2)
+				continue;
+
+			npts++;
+			if (nmatches > 2)
+				count++;
+			if (nmatches > maxmatches)
+				maxmatches = nmatches;
+
+			fprintf(fp, "%d ", nmatches);
+			for (int ii = 0; ii < nmatches; ii++)
+				fprintf(fp, "%d ", ViewMatch[jj][ii]);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+	printf("#3+ points: %d. Max #matches views:  %d. #matches point: %d\n", count, maxmatches, npts);
+
+
+	if (timeID < 0)
+		sprintf(Fname, "%s/IDPM.txt", Path);
+	else
+		sprintf(Fname, "%s/Dynamic/IDPM_%d.txt", Path, timeID);
+	fp = fopen(Fname, "w+");
+	if (fp != NULL)
+	{
+		for (int jj = 0; jj < count3D; jj++)
+		{
+			int nmatches = PointIDMatch[jj].size();
+			if (nmatches < 2 || nmatches > nviews * 2)
+				continue;
+
+			fprintf(fp, "%d ", nmatches);
+			for (int ii = 0; ii < nmatches; ii++)
+				fprintf(fp, "%d ", PointIDMatch[jj][ii]);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+	printf("Finished generateing point correspondence matrix\n");
+
+	delete[]ViewMatch;
+	delete[]PointIDMatch;
+
+	return;
+}
+void GenerateMatchingTableVisualSfM(char *Path, int nviews)
+{
+	char buf[512], file1[512], file2[512];
+
+	int id, viewID1, viewID2, nmatch, totalPts;
+	vector<int> cumulativePts;
+	ReadCumulativePointsVisualSfm(Path, nviews, cumulativePts);
+	totalPts = cumulativePts.at(nviews);
+
+	//Generate Visbible Points Table
+	vector<int> *KeysBelongTo3DPoint = new vector <int>[nviews];
+	for (int jj = 0; jj < nviews; jj++)
+	{
+		KeysBelongTo3DPoint[jj].reserve(cumulativePts[jj + 1] - cumulativePts[jj]);
+		for (int ii = 0; ii < cumulativePts[jj + 1] - cumulativePts[jj]; ii++)
+			KeysBelongTo3DPoint[jj].push_back(-1);
+	}
+
+	int count3D = 0;
+	vector<int>*ViewMatch = new vector<int>[totalPts]; //cotains all visible views of 1 3D point
+	vector<int>*PointIDMatch = new vector<int>[totalPts];//cotains all keyID of the visible views of 1 3D point
+
+	//Read visualsfm matches
+	double start = omp_get_wtime();
+	sprintf(buf, "%s/match.txt", Path); FILE *fp = fopen(buf, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot read %s\n", buf);
+		abort();
+	}
+	vector<int>mid1, mid2;
+	while (fscanf(fp, "%s %s", file1, file2) != EOF)
+	{
+		mid1.clear(), mid2.clear();
+		string  filename1 = string(file1), filename2 = string(file2);
+
+		std::size_t posDot = filename1.find(".");
+		string subs = filename1.substr(0, posDot);
+		const char * str = subs.c_str();
+		viewID1 = atoi(str);
+
+		posDot = filename2.find(".");
+		subs = filename2.substr(0, posDot);
+		str = subs.c_str();
+		viewID2 = atoi(str);
+
+		fscanf(fp, "%d ", &nmatch);
+		for (int ii = 0; ii < nmatch; ii++)
+		{
+			fscanf(fp, "%d ", &id);
+			mid1.push_back(id);
+		}
+		for (int ii = 0; ii < nmatch; ii++)
+		{
+			fscanf(fp, "%d ", &id);
+			mid2.push_back(id);
+		}
+
+		for (int kk = 0; kk < nmatch; kk++)
+		{
+			int id1 = mid1[kk], id2 = mid2[kk];
+			int ID3D1 = KeysBelongTo3DPoint[viewID1].at(id1), ID3D2 = KeysBelongTo3DPoint[viewID2].at(id2);
+			if (ID3D1 == -1 && ID3D2 == -1) //Both are never seeen before
+			{
+				ViewMatch[count3D].push_back(viewID1), ViewMatch[count3D].push_back(viewID2);
+				PointIDMatch[count3D].push_back(id1), PointIDMatch[count3D].push_back(id2);
+				KeysBelongTo3DPoint[viewID1].at(id1) = count3D, KeysBelongTo3DPoint[viewID2].at(id2) = count3D; //this pair of corres constitutes 3D point #count
+				count3D++;
+			}
+			else if (ID3D1 == -1 && ID3D2 != -1)
+			{
+				ViewMatch[ID3D2].push_back(viewID1);
+				PointIDMatch[ID3D2].push_back(id1);
+				KeysBelongTo3DPoint[viewID1].at(id1) = ID3D2; //this point constitutes 3D point #ID3D2
+			}
+			else if (ID3D1 != -1 && ID3D2 == -1)
+			{
+				ViewMatch[ID3D1].push_back(viewID2);
+				PointIDMatch[ID3D1].push_back(id2);
+				KeysBelongTo3DPoint[viewID2].at(id2) = ID3D1; //this point constitutes 3D point #ID3D2
+			}
+			else if (ID3D1 != -1 && ID3D2 != -1 && ID3D1 != ID3D2)//Strange case where 1 point (usually not vey discrimitive or repeating points) is matched to multiple points in the same view pair 
+				//--> Just concatanate the one with fewer points to largrer one and hope MultiTriangulationRansac can do sth.
+			{
+				if (ViewMatch[ID3D1].size() >= ViewMatch[ID3D2].size())
+				{
+					int nmatches = ViewMatch[ID3D2].size();
+					for (int ll = 0; ll < nmatches; ll++)
+					{
+						ViewMatch[ID3D1].push_back(ViewMatch[ID3D2].at(ll));
+						PointIDMatch[ID3D1].push_back(PointIDMatch[ID3D2].at(ll));
+					}
+					ViewMatch[ID3D2].clear(), PointIDMatch[ID3D2].clear();
+				}
+				else
+				{
+					int nmatches = ViewMatch[ID3D1].size();
+					for (int ll = 0; ll < nmatches; ll++)
+					{
+						ViewMatch[ID3D2].push_back(ViewMatch[ID3D1].at(ll));
+						PointIDMatch[ID3D2].push_back(PointIDMatch[ID3D1].at(ll));
+					}
+					ViewMatch[ID3D1].clear(), PointIDMatch[ID3D1].clear();
+				}
+			}
+			else//(ID3D1 == ID3D2): cycle in the corres, i.e. a-b, a-c, and b-c
+				continue;
+		}
+	}
+	printf("Merged correspondences in %.2fs\n ", omp_get_wtime() - start);
+
+	int count = 0, maxmatches = 0, npts = 0;
+	sprintf(buf, "%s/ViewPM.txt", Path); fp = fopen(buf, "w+");
+	if (fp != NULL)
+	{
+		for (int jj = 0; jj < count3D; jj++)
+		{
+			int nmatches = ViewMatch[jj].size();
+			if (nmatches < 2 || nmatches > nviews * 2)
+				continue;
+
+			npts++;
+			if (nmatches > 2)
+				count++;
+			if (nmatches > maxmatches)
+				maxmatches = nmatches;
+
+			fprintf(fp, "%d ", nmatches);
+			for (int ii = 0; ii < nmatches; ii++)
+				fprintf(fp, "%d ", ViewMatch[jj][ii]);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+	printf("#3+ points: %d. Max #matches views:  %d. #matches point: %d\n", count, maxmatches, npts);
+
+
+	sprintf(buf, "%s/IDPM.txt", Path); fp = fopen(buf, "w+");
+	if (fp != NULL)
+	{
+		for (int jj = 0; jj < count3D; jj++)
+		{
+			int nmatches = PointIDMatch[jj].size();
+			if (nmatches < 2 || nmatches > nviews * 2)
+				continue;
+
+			fprintf(fp, "%d ", nmatches);
+			for (int ii = 0; ii < nmatches; ii++)
+				fprintf(fp, "%d ", PointIDMatch[jj][ii]);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+	printf("Finished generateing point correspondence matrix\n");
+
+	delete[]ViewMatch;
+	delete[]PointIDMatch;
+
+	return;
+}
+void GenerateViewCorrespondenceMatrix(char *Path, int nviews, int timeID)
+{
+	int ii, jj, kk, ll, mm, nn;
+	char Fname[200];
+
+	vector<int> cumulativePts, PtsView;
+	if (timeID < 0)
+		sprintf(Fname, "%s/CumlativePoints.txt", Path);
+	else
+		sprintf(Fname, "%s/Dynamic/CumlativePoints_%d.txt", Path, timeID);
+	FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot open %s", Fname);
+		exit(1);
+	}
+	for (ii = 0; ii < nviews + 1; ii++)
+	{
+		fscanf(fp, "%d\n", &jj);
+		cumulativePts.push_back(jj);
+	}
+	fclose(fp);
+
+	Mat viewMatrix(nviews, nviews, CV_32S);
+	viewMatrix = Scalar::all(0);
+
+	vector<int>matches; matches.reserve(nviews * 2);
+	for (mm = 0; mm < nviews - 1; mm++)
+	{
+		for (nn = mm + 1; nn < nviews; nn++)
+		{
+			int totalPts = cumulativePts.at(nviews);
+
+			int count = 0;
+			if (timeID < 0)
+				sprintf(Fname, "%s/PM.txt", Path);
+			else
+				sprintf(Fname, "%s/Dynamic/PM_%d.txt", Path, timeID);
+			fp = fopen(Fname, "r");
+			if (fp == NULL)
+			{
+				printf("Cannot open %s", Fname);
+				exit(1);
+			}
+			for (jj = 0; jj < totalPts; jj++)
+			{
+				kk = 0; matches.clear();
+				fscanf(fp, "%d ", &kk);
+				for (ii = 0; ii < kk; ii++)
+				{
+					fscanf(fp, "%d ", &ll);
+					matches.push_back(ll);
+				}
+
+				if (jj >= cumulativePts.at(mm) && jj < cumulativePts.at(mm + 1))
+				{
+					for (ii = 0; ii < kk; ii++)
+					{
+						int match = matches[ii];
+						if (match >= cumulativePts.at(nn) && match < cumulativePts.at(nn + 1))
+							viewMatrix.at<int>(mm + nn*nviews) += 1;
+					}
+				}
+			}
+			fclose(fp);
+
+		}
+	}
+	completeSymm(viewMatrix, true);
+
+	if (timeID < 0)
+		sprintf(Fname, "%s/VM.txt", Path);
+	else
+		sprintf(Fname, "%s/Dynamic/VM_%d.txt", Path, timeID);
+	fp = fopen(Fname, "w+");
+	for (jj = 0; jj < nviews; jj++)
+	{
+		for (ii = 0; ii < nviews; ii++)
+			fprintf(fp, "%d ", viewMatrix.at<int>(ii + jj*nviews));
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	return;
 }
 
 void convertRTToTwist(double *R, double *T, double *twist)
@@ -6046,6 +6555,14 @@ void GetTfromC(CameraData &camInfo)
 
 	mat_mul(camInfo.R, camInfo.camCenter, T, 3, 3, 1);
 	camInfo.T[0] = -T[0], camInfo.T[1] = -T[1], camInfo.T[2] = -T[2];
+	camInfo.rt[3] = -T[0], camInfo.rt[4] = -T[1], camInfo.rt[5] = -T[2];
+
+	return;
+}
+void GetTfromC(double *R, double *C, double *T)
+{
+	mat_mul(R, C, T, 3, 3, 1);
+	T[0] = -T[0], T[1] = -T[1], T[2] = -T[2];
 	return;
 }
 void InvertCameraPose(double *R, double *T, double *iR, double *iT)
@@ -6075,9 +6592,11 @@ void CopyCamereInfo(CameraData Src, CameraData &Dst, bool Extrinsic)
 		Dst.intrinsic[ii] = Src.intrinsic[ii];
 
 	Dst.LensModel = Src.LensModel;
+	Dst.ShutterModel = Src.ShutterModel;
 	Dst.ninlierThresh = Src.ninlierThresh;
 	Dst.threshold = Src.threshold;
 	Dst.width = Src.width, Dst.height = Src.height;
+	Dst.valid = Src.valid;
 
 	if (Extrinsic)
 	{
@@ -6312,7 +6831,7 @@ int Pose_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsamples, char 
 	gsl_vector *gsl_BreakPts = gsl_vector_alloc(nbreaks);
 
 	for (int ii = 0; ii < nbreaks; ii++)
-		gsl_vector_set(gsl_BreakPts, ii, BreakLoc[ii]);
+	gsl_vector_set(gsl_BreakPts, ii, BreakLoc[ii]);
 	gsl_bspline_knots(gsl_BreakPts, bw);*/
 
 	double *Bi = new double[nControls];
@@ -6336,7 +6855,7 @@ int Pose_se_BSplineInterpolation(char *Fname1, char *Fname2, int nsamples, char 
 
 		BSplineFindActiveCtrl(ActingID, SampleLoc[ii], knots, nbreaks, nControls, SplineOrder, 0);
 		BSplineGetBasis(SampleLoc[ii], Bi, knots, nbreaks, nControls, SplineOrder);
-		
+
 		for (int jj = 0; jj < 6; jj++)
 		{
 			if (se3 == 1)
@@ -6968,7 +7487,7 @@ bool loadNVMLite(const char *filepath, Corpus &CorpusData, int sharedIntrinsics,
 
 	return true;
 }
-bool loadNVM(const char *Fname, Corpus &CorpusData, vector<Point2i> &ImgSize, vector<KeyPoint> *AllKeyPts, Mat *AllDesc, int nplus)
+bool loadNVM(const char *Fname, Corpus &CorpusData, vector<Point2i> &ImgSize, int nplus, vector<KeyPoint> *AllKeyPts, Mat *AllDesc)
 {
 	ifstream ifs(Fname);
 	if (ifs.fail())
@@ -7077,16 +7596,16 @@ bool loadNVM(const char *Fname, Corpus &CorpusData, vector<Point2i> &ImgSize, ve
 	FeatureDesc desci;
 	if (AllDesc != NULL)
 	{
-		CorpusData.scaleAllViews2 = new vector<double>[CorpusData.nCameras];
-		CorpusData.uvAllViews2 = new vector<Point2d>[CorpusData.nCameras];
-		CorpusData.threeDIdAllViews2 = new vector<int>[CorpusData.nCameras];
-		CorpusData.DescAllViews2 = new vector<FeatureDesc>[CorpusData.nCameras];
+		CorpusData.scaleAllViews = new vector<double>[CorpusData.nCameras];
+		CorpusData.uvAllViews = new vector<Point2d>[CorpusData.nCameras];
+		CorpusData.threeDIdAllViews = new vector<int>[CorpusData.nCameras];
+		CorpusData.DescAllViews = new vector<FeatureDesc>[CorpusData.nCameras];
 		for (int ii = 0; ii < CorpusData.nCameras; ii++)
 		{
-			CorpusData.scaleAllViews2[ii].reserve(5000);
-			CorpusData.uvAllViews2[ii].reserve(5000);
-			CorpusData.threeDIdAllViews2[ii].reserve(5000);
-			CorpusData.DescAllViews2[ii].reserve(5000);
+			CorpusData.scaleAllViews[ii].reserve(5000);
+			CorpusData.uvAllViews[ii].reserve(5000);
+			CorpusData.threeDIdAllViews[ii].reserve(5000);
+			CorpusData.DescAllViews[ii].reserve(5000);
 		}
 	}
 
@@ -7095,7 +7614,7 @@ bool loadNVM(const char *Fname, Corpus &CorpusData, vector<Point2i> &ImgSize, ve
 		viewID3D.clear(), pid3D.clear(), uv3D.clear(), scale3D.clear();
 		ifs >> xyz.x >> xyz.y >> xyz.z >> rgb.x >> rgb.y >> rgb.z;
 		ifs >> nviews;
-		
+
 		int cur3DID = CorpusData.viewIdAll3D.size();
 		for (int ii = 0; ii < nviews; ii++)
 		{
@@ -7112,14 +7631,13 @@ bool loadNVM(const char *Fname, Corpus &CorpusData, vector<Point2i> &ImgSize, ve
 
 				if (AllDesc != NULL)
 				{
-					//for (int jj = 0; jj < 128; jj++)  Desc3Di.at<float>(ii, jj) = AllDesc[viewID].at<float>(pid, jj);
 					for (int jj = 0; jj < 128; jj++)
 						desci.desc[jj] = AllDesc[CameraOrder[viewID]].at<float>(pid, jj);
 
-					CorpusData.uvAllViews2[CameraOrder[viewID]].push_back(uv);
-					CorpusData.scaleAllViews2[CameraOrder[viewID]].push_back(AllKeyPts[CameraOrder[viewID]][pid].size);
-					CorpusData.threeDIdAllViews2[CameraOrder[viewID]].push_back(cur3DID);
-					CorpusData.DescAllViews2[CameraOrder[viewID]].push_back(desci);
+					CorpusData.uvAllViews[CameraOrder[viewID]].push_back(uv);
+					CorpusData.scaleAllViews[CameraOrder[viewID]].push_back(AllKeyPts[CameraOrder[viewID]][pid].size);
+					CorpusData.threeDIdAllViews[CameraOrder[viewID]].push_back(cur3DID);
+					CorpusData.DescAllViews[CameraOrder[viewID]].push_back(desci);
 				}
 			}
 		}
@@ -7133,8 +7651,6 @@ bool loadNVM(const char *Fname, Corpus &CorpusData, vector<Point2i> &ImgSize, ve
 			CorpusData.scaleAll3D.push_back(scale3D);
 			CorpusData.pointIdAll3D.push_back(pid3D);
 		}
-		
-		//if (AllDesc != NULL) 	CorpusData.DescAll3D.push_back(Desc3Di);
 	}
 	CorpusData.n3dPoints = (int)CorpusData.xyz.size();
 
@@ -7550,28 +8066,28 @@ int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool saveDesc
 	fclose(fp);
 
 	sprintf(Fname, "%s/Corpus_threeDIdAllViews.txt", Path); fp = fopen(Fname, "w+");
-	if (CorpusData.threeDIdAllViews.size() != 0)
+	/*if (CorpusData.threeDIdAllViews.size() != 0)
 	{
-		for (jj = 0; jj < CorpusData.nCameras; jj++)
-		{
-			int n3D = CorpusData.threeDIdAllViews[jj].size();
-			fprintf(fp, "%d\n", n3D);
-			for (ii = 0; ii < n3D; ii++)
-				fprintf(fp, "%d ", CorpusData.threeDIdAllViews[jj][ii]);
-			fprintf(fp, "\n");
-		}
+	for (jj = 0; jj < CorpusData.nCameras; jj++)
+	{
+	int n3D = CorpusData.threeDIdAllViews[jj].size();
+	fprintf(fp, "%d\n", n3D);
+	for (ii = 0; ii < n3D; ii++)
+	fprintf(fp, "%d ", CorpusData.threeDIdAllViews[jj][ii]);
+	fprintf(fp, "\n");
+	}
 	}
 	else
+	{*/
+	for (jj = 0; jj < CorpusData.nCameras; jj++)
 	{
-		for (jj = 0; jj < CorpusData.nCameras; jj++)
-		{
-			int n3D = CorpusData.threeDIdAllViews2[jj].size();
-			fprintf(fp, "%d\n", n3D);
-			for (ii = 0; ii < n3D; ii++)
-				fprintf(fp, "%d ", CorpusData.threeDIdAllViews2[jj][ii]);
-			fprintf(fp, "\n");
-		}
+		int n3D = CorpusData.threeDIdAllViews[jj].size();
+		fprintf(fp, "%d\n", n3D);
+		for (ii = 0; ii < n3D; ii++)
+			fprintf(fp, "%d ", CorpusData.threeDIdAllViews[jj][ii]);
+		fprintf(fp, "\n");
 	}
+	//}
 	fclose(fp);
 
 	sprintf(Fname, "%s/Corpus_cum.txt", Path); fp = fopen(Fname, "w+");
@@ -7582,18 +8098,18 @@ int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool saveDesc
 	for (ii = 0; ii < CorpusData.nCameras; ii++)
 	{
 		sprintf(Fname, "%s/CorpusK_%d.txt", Path, ii); FILE *fp = fopen(Fname, "w+");
-		if (CorpusData.uvAllViews.size() != 0)
+		/*if (CorpusData.uvAllViews.size() != 0)
 		{
-			int npts = CorpusData.uvAllViews[ii].size();
-			for (int jj = 0; jj < npts; jj++)
-				fprintf(fp, "%.4f %.4f %.2f\n", CorpusData.uvAllViews[ii][jj].x, CorpusData.uvAllViews[ii][jj].y, CorpusData.scaleAllViews[ii][jj]);
+		int npts = CorpusData.uvAllViews[ii].size();
+		for (int jj = 0; jj < npts; jj++)
+		fprintf(fp, "%.4f %.4f %.2f\n", CorpusData.uvAllViews[ii][jj].x, CorpusData.uvAllViews[ii][jj].y, CorpusData.scaleAllViews[ii][jj]);
 		}
 		else
-		{
-			int npts = CorpusData.uvAllViews2[ii].size();
-			for (int jj = 0; jj < npts; jj++)
-				fprintf(fp, "%.4f %.4f %.2f\n", CorpusData.uvAllViews2[ii][jj].x, CorpusData.uvAllViews2[ii][jj].y, CorpusData.scaleAllViews2[ii][jj]);
-		}
+		{*/
+		int npts = CorpusData.uvAllViews[ii].size();
+		for (int jj = 0; jj < npts; jj++)
+			fprintf(fp, "%.4f %.4f %.2f\n", CorpusData.uvAllViews[ii][jj].x, CorpusData.uvAllViews[ii][jj].y, CorpusData.scaleAllViews[ii][jj]);
+		//}
 		fclose(fp);
 	}
 
@@ -7641,66 +8157,66 @@ int SaveCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool saveDesc
 	{
 		for (kk = 0; kk < CorpusData.nCameras; kk++)
 		{
-			if (CorpusData.SiftDesc.rows != 0)
+			/*if (CorpusData.SiftDesc.rows != 0)
 			{
-				sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk);	fp = fopen(Fname, "w+");
-				int npts = CorpusData.threeDIdAllViews[kk].size(), curPid = CorpusData.IDCumView[kk];
-				fprintf(fp, "%d\n", npts);
-				for (jj = 0; jj < npts; jj++)
-				{
-					fprintf(fp, "%d ", CorpusData.threeDIdAllViews[kk][jj]);
-					for (ii = 0; ii < SIFTBINS; ii++)
-						fprintf(fp, "%.5f ", CorpusData.SiftDesc.at<float>(curPid + jj, ii));
-					fprintf(fp, "\n");
-				}
-				fclose(fp);
+			sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk);	fp = fopen(Fname, "w+");
+			int npts = CorpusData.threeDIdAllViews[kk].size(), curPid = CorpusData.IDCumView[kk];
+			fprintf(fp, "%d\n", npts);
+			for (jj = 0; jj < npts; jj++)
+			{
+			fprintf(fp, "%d ", CorpusData.threeDIdAllViews[kk][jj]);
+			for (ii = 0; ii < SIFTBINS; ii++)
+			fprintf(fp, "%.5f ", CorpusData.SiftDesc.at<float>(curPid + jj, ii));
+			fprintf(fp, "\n");
+			}
+			fclose(fp);
 			}
 			else
+			{*/
+			sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk);	fp = fopen(Fname, "w+");
+			int npts = CorpusData.threeDIdAllViews[kk].size();
+			fprintf(fp, "%d\n", npts);
+			for (jj = 0; jj < npts; jj++)
 			{
-				sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk);	fp = fopen(Fname, "w+");
-				int npts = CorpusData.threeDIdAllViews2[kk].size();
-				fprintf(fp, "%d\n", npts);
-				for (jj = 0; jj < npts; jj++)
-				{
-					fprintf(fp, "%d ", CorpusData.threeDIdAllViews2[kk][jj]);
-					for (ii = 0; ii < SIFTBINS; ii++)
-						fprintf(fp, "%.5f ", CorpusData.DescAllViews2[kk][jj].desc[ii]);
-					fprintf(fp, "\n");
-				}
-				fclose(fp);
+				fprintf(fp, "%d ", CorpusData.threeDIdAllViews[kk][jj]);
+				for (ii = 0; ii < SIFTBINS; ii++)
+					fprintf(fp, "%.5f ", CorpusData.DescAllViews[kk][jj].desc[ii]);
+				fprintf(fp, "\n");
 			}
+			fclose(fp);
+			//}
 		}
 	}
 	else
 	{
 		for (kk = 0; kk < CorpusData.nCameras; kk++)
 		{
-			if (CorpusData.threeDIdAllViews.size() != 0)
+			/*if (CorpusData.threeDIdAllViews.size() != 0)
 			{
-				sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk); ofstream fout; fout.open(Fname, ios::binary);
-				int npts = CorpusData.threeDIdAllViews[kk].size(), curPid = CorpusData.IDCumView[kk];
-				fout.write(reinterpret_cast<char *>(&npts), sizeof(int));
-				for (jj = 0; jj < npts; jj++)
-				{
-					fout.write(reinterpret_cast<char *>(&CorpusData.threeDIdAllViews[kk][jj]), sizeof(int));
-					for (ii = 0; ii < SIFTBINS; ii++)
-						fout.write(reinterpret_cast<char *>(&CorpusData.SiftDesc.at<float>(curPid + jj, ii)), sizeof(float));
-				}
-				fout.close();
+			sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk); ofstream fout; fout.open(Fname, ios::binary);
+			int npts = CorpusData.threeDIdAllViews[kk].size(), curPid = CorpusData.IDCumView[kk];
+			fout.write(reinterpret_cast<char *>(&npts), sizeof(int));
+			for (jj = 0; jj < npts; jj++)
+			{
+			fout.write(reinterpret_cast<char *>(&CorpusData.threeDIdAllViews[kk][jj]), sizeof(int));
+			for (ii = 0; ii < SIFTBINS; ii++)
+			fout.write(reinterpret_cast<char *>(&CorpusData.SiftDesc.at<float>(curPid + jj, ii)), sizeof(float));
+			}
+			fout.close();
 			}
 			else
+			{*/
+			sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk); ofstream fout; fout.open(Fname, ios::binary);
+			int npts = CorpusData.threeDIdAllViews[kk].size();
+			fout.write(reinterpret_cast<char *>(&npts), sizeof(int));
+			for (jj = 0; jj < npts; jj++)
 			{
-				sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk); ofstream fout; fout.open(Fname, ios::binary);
-				int npts = CorpusData.threeDIdAllViews2[kk].size();
-				fout.write(reinterpret_cast<char *>(&npts), sizeof(int));
-				for (jj = 0; jj < npts; jj++)
-				{
-					fout.write(reinterpret_cast<char *>(&CorpusData.threeDIdAllViews2[kk][jj]), sizeof(int));
-					for (ii = 0; ii < SIFTBINS; ii++)
-						fout.write(reinterpret_cast<char *>(&CorpusData.DescAllViews2[kk][jj].desc[ii]), sizeof(float));
-				}
-				fout.close();
+				fout.write(reinterpret_cast<char *>(&CorpusData.threeDIdAllViews[kk][jj]), sizeof(int));
+				for (ii = 0; ii < SIFTBINS; ii++)
+					fout.write(reinterpret_cast<char *>(&CorpusData.DescAllViews[kk][jj].desc[ii]), sizeof(float));
 			}
+			fout.close();
+			//}
 		}
 	}
 
@@ -7794,19 +8310,22 @@ int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool notReadD
 	}
 	fclose(fp);
 
+	CorpusData.threeDIdAllViews = new vector<int>[CorpusData.nCameras];
+	CorpusData.uvAllViews = new vector<Point2d>[CorpusData.nCameras];
+	CorpusData.scaleAllViews = new vector<double>[CorpusData.nCameras];
+	CorpusData.DescAllViews = new vector<FeatureDesc>[CorpusData.nCameras];
+
 	sprintf(Fname, "%s/Corpus_threeDIdAllViews.txt", Path); fp = fopen(Fname, "r");
 	int n3D, id3D;
-	vector<int>threeDid;
 	for (jj = 0; jj < CorpusData.nCameras; jj++)
 	{
-		threeDid.clear();
 		fscanf(fp, "%d ", &n3D);
+		CorpusData.threeDIdAllViews[jj].reserve(n3D);
 		for (ii = 0; ii < n3D; ii++)
 		{
 			fscanf(fp, "%d ", &id3D);
-			threeDid.push_back(id3D);
+			CorpusData.threeDIdAllViews[jj].push_back(id3D);
 		}
-		CorpusData.threeDIdAllViews.push_back(threeDid);
 	}
 	fclose(fp);
 
@@ -7820,19 +8339,19 @@ int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool notReadD
 	}
 	fclose(fp);
 
-	uvVector.reserve(2000);
 	for (ii = 0; ii < CorpusData.nCameras; ii++)
 	{
-		uvVector.clear(), scaleVector.clear();
+		CorpusData.uvAllViews[ii].reserve(3000);
+		CorpusData.scaleAllViews[ii].reserve(3000);
 		sprintf(Fname, "%s/CorpusK_%d.txt", Path, ii);
 		FILE *fp = fopen(Fname, "r");
 		while (fscanf(fp, "%lf %lf %lf", &uv.x, &uv.y, &scale) != EOF)
+		{
 			uvVector.push_back(uv), scaleVector.push_back(scale);
-		//while (fscanf(fp, "%lf %lf ", &uv.x, &uv.y) != EOF)
-		//uvVector.push_back(uv), scaleVector.push_back(1.0);
+			CorpusData.uvAllViews[ii].push_back(uv);
+			CorpusData.scaleAllViews[ii].push_back(scale);
+		}
 		fclose(fp);
-		CorpusData.uvAllViews.push_back(uvVector);
-		CorpusData.scaleAllViews.push_back(scaleVector);
 	}
 
 	sprintf(Fname, "%s/Corpus_Intrinsics.txt", Path); fp = fopen(Fname, "r");
@@ -7893,37 +8412,31 @@ int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool notReadD
 	if (notReadDescriptor)
 		return 0;
 
-	float desc;
-	CorpusData.SiftDesc.create(totalPts, SIFTBINS, CV_32F);
+	FeatureDesc desci;
 	totalPts = 0;
 	if (notbinary)
 	{
 		for (kk = 0; kk < nCameras; kk++)
 		{
-			threeDid.clear();
 			sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk);	fp = fopen(Fname, "r");
 
 			int npts; fscanf(fp, "%d ", &npts);
+			CorpusData.DescAllViews[kk].reserve(npts);
 			for (jj = 0; jj < npts; jj++)
 			{
 				fscanf(fp, "%d ", &id3D);
-				threeDid.push_back(id3D);
 				for (ii = 0; ii < SIFTBINS; ii++)
-				{
-					fscanf(fp, "%f ", &desc);
-					CorpusData.SiftDesc.at<float>(totalPts, ii) = desc;
-				}
+					fscanf(fp, "%f ", &desci.desc[ii]);
+				CorpusData.DescAllViews[kk].push_back(desci);
 				totalPts++;
 			}
 			fclose(fp);
-			CorpusData.threeDIdAllViews.push_back(threeDid);
 		}
 	}
 	else
 	{
 		for (kk = 0; kk < nCameras; kk++)
 		{
-			threeDid.clear();
 			sprintf(Fname, "%s/CorpusD_%d.txt", Path, kk);
 			ifstream fin; fin.open(Fname, ios::binary);
 			if (!fin.is_open())
@@ -7933,19 +8446,16 @@ int ReadCorpusInfo(char *Path, Corpus &CorpusData, bool notbinary, bool notReadD
 			}
 
 			int npts; fin.read(reinterpret_cast<char *>(&npts), sizeof(int));
+			CorpusData.DescAllViews[kk].reserve(npts);
 			for (jj = 0; jj < npts; jj++)
 			{
 				fin.read(reinterpret_cast<char *>(&id3D), sizeof(int));
-				threeDid.push_back(id3D);
 				for (ii = 0; ii < SIFTBINS; ii++)
-				{
-					fin.read(reinterpret_cast<char *>(&desc), sizeof(float));
-					CorpusData.SiftDesc.at<float>(totalPts, ii) = desc;
-				}
+					fin.read(reinterpret_cast<char *>(&desci.desc[ii]), sizeof(float));
+				CorpusData.DescAllViews[kk].push_back(desci);
 				totalPts++;
 			}
 			fin.close();
-			CorpusData.threeDIdAllViews.push_back(threeDid);
 		}
 	}
 
@@ -8065,10 +8575,10 @@ int ReadCorpusAndVideoData(char *Path, CorpusandVideo &CorpusandVideoInfo, int S
 
 	return 0;
 }
-int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime)
+int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int startTime, int stopTime, double threshold, int ninliersThresh)
 {
 	char Fname[200];
-	int videoID, frameID, LensType, width, height;
+	int videoID, frameID, LensType, ShutterModel, width, height;
 	int nframes = max(MaxnFrames, stopTime);
 
 	AllVideoInfo.nVideos = nVideoViews;
@@ -8090,7 +8600,7 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 			continue;
 		}
 		double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1, omega, DistCtrX, DistCtrY;
-		while (fscanf(fp, "%d %d %d %d %lf %lf %lf %lf %lf ", &frameID, &LensType, &width, &height, &fx, &fy, &skew, &u0, &v0) != EOF)
+		while (fscanf(fp, "%d %d %d %d %d %lf %lf %lf %lf %lf ", &frameID, &LensType, &ShutterModel, &width, &height, &fx, &fy, &skew, &u0, &v0) != EOF)
 		{
 			AllVideoInfo.VideoInfo[frameID + videoID].valid = true;
 			AllVideoInfo.VideoInfo[frameID + videoID].K[0] = fx, AllVideoInfo.VideoInfo[frameID + videoID].K[1] = skew, AllVideoInfo.VideoInfo[frameID + videoID].K[2] = u0,
@@ -8101,7 +8611,7 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 			GetIntrinsicFromK(AllVideoInfo.VideoInfo[frameID + videoID]);
 			mat_invert(AllVideoInfo.VideoInfo[frameID + videoID].K, AllVideoInfo.VideoInfo[frameID + videoID].invK);
 
-			AllVideoInfo.VideoInfo[frameID + videoID].LensModel = LensType, AllVideoInfo.VideoInfo[frameID + videoID].threshold = 3.0, AllVideoInfo.VideoInfo[frameID + videoID].ninlierThresh = 40;
+			AllVideoInfo.VideoInfo[frameID + videoID].LensModel = LensType, AllVideoInfo.VideoInfo[frameID + videoID].ShutterModel = ShutterModel, AllVideoInfo.VideoInfo[frameID + videoID].threshold = threshold, AllVideoInfo.VideoInfo[frameID + videoID].ninlierThresh = ninliersThresh;
 			if (LensType == RADIAL_TANGENTIAL_PRISM)
 			{
 				fscanf(fp, "%lf %lf %lf %lf %lf %lf %lf ", &r0, &r1, &r2, &t0, &t1, &p0, &p1);
@@ -8136,26 +8646,24 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 			count++;
 			continue;
 		}
-		double R[9], C[3], t1, t2, t3, t4, t5, t6, t7;
-		while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ",
-			&frameID, &R[0], &R[1], &R[2], &t1, &R[3], &R[4], &R[5], &t2, &R[6], &R[7], &R[8], &t3, &t4, &t5, &t6, &t7, &C[0], &C[1], &C[2]) != EOF)
+		double r[3], C[3], wt[6];
+		//while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ",
+		//	&frameID, &R[0], &R[1], &R[2], &t1, &R[3], &R[4], &R[5], &t2, &R[6], &R[7], &R[8], &t3, &t4, &t5, &t6, &t7, &C[0], &C[1], &C[2]) != EOF)
+		//{
+		while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf ", &frameID, &r[0], &r[1], &r[2], &C[0], &C[1], &C[2]) != EOF)
 		{
-			for (int jj = 0; jj < 9; jj++)
-				AllVideoInfo.VideoInfo[frameID + videoID].R[jj] = R[jj];
+			if (AllVideoInfo.VideoInfo[frameID + videoID].ShutterModel == 1)
+				fscanf(fp, "%lf %lf %lf %lf %lf %lf ", &wt[0], &wt[1], &wt[2], &wt[3], &wt[4], &wt[5]);
+
+			for (int jj = 0; jj < 3; jj++)
+				AllVideoInfo.VideoInfo[frameID + videoID].rt[jj] = r[jj];
+			convertRvecToRmat(r, AllVideoInfo.VideoInfo[frameID + videoID].R);
 
 			for (int jj = 0; jj < 3; jj++)
 				AllVideoInfo.VideoInfo[frameID + videoID].camCenter[jj] = C[jj];
+			GetTfromC(AllVideoInfo.VideoInfo[frameID + videoID]);
 
-			//T = -R*Center;
-			mat_mul(R, C, AllVideoInfo.VideoInfo[frameID + videoID].T, 3, 3, 1);
-			for (int jj = 0; jj < 3; jj++)
-				AllVideoInfo.VideoInfo[frameID + videoID].T[jj] = -AllVideoInfo.VideoInfo[frameID + videoID].T[jj];
-
-			mat_invert(AllVideoInfo.VideoInfo[frameID + videoID].R, AllVideoInfo.VideoInfo[frameID + videoID].invR);
-			GetrtFromRT(AllVideoInfo.VideoInfo[frameID + videoID].rt,
-				AllVideoInfo.VideoInfo[frameID + videoID].R, AllVideoInfo.VideoInfo[frameID + videoID].T);
-			AssembleP(AllVideoInfo.VideoInfo[frameID + videoID].K, AllVideoInfo.VideoInfo[frameID + videoID].R,
-				AllVideoInfo.VideoInfo[frameID + videoID].T, AllVideoInfo.VideoInfo[frameID + videoID].P);
+			AssembleP(AllVideoInfo.VideoInfo[frameID + videoID].K, AllVideoInfo.VideoInfo[frameID + videoID].R, AllVideoInfo.VideoInfo[frameID + videoID].T, AllVideoInfo.VideoInfo[frameID + videoID].P);
 		}
 		fclose(fp);
 	}
@@ -8165,10 +8673,10 @@ int ReadVideoData(char *Path, VideoData &AllVideoInfo, int nVideoViews, int star
 
 	return 0;
 }
-int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime)
+int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime, double threshold, int ninliersThresh)
 {
 	char Fname[200];
-	int frameID, LensType, width, height;
+	int frameID, LensType, ShutterModel, width, height;
 	int nframes = max(MaxnFrames, stopTime);
 
 	VideoInfo.VideoInfo = new CameraData[nframes];
@@ -8183,7 +8691,7 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 		return 1;
 	}
 	double fx, fy, skew, u0, v0, r0, r1, r2, t0, t1, p0, p1, omega, DistCtrX, DistCtrY;
-	while (fscanf(fp, "%d %d %d %d %lf %lf %lf %lf %lf ", &frameID, &LensType, &width, &height, &fx, &fy, &skew, &u0, &v0) != EOF)
+	while (fscanf(fp, "%d %d %d %d %d %lf %lf %lf %lf %lf ", &frameID, &LensType, &ShutterModel, &width, &height, &fx, &fy, &skew, &u0, &v0) != EOF)
 	{
 		if (frameID >= startTime && frameID <= stopTime)
 		{
@@ -8195,7 +8703,7 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 			GetIntrinsicFromK(VideoInfo.VideoInfo[frameID]);
 			mat_invert(VideoInfo.VideoInfo[frameID].K, VideoInfo.VideoInfo[frameID].invK);
 
-			VideoInfo.VideoInfo[frameID].LensModel = LensType, VideoInfo.VideoInfo[frameID].threshold = 3.0, VideoInfo.VideoInfo[frameID].ninlierThresh = 40;
+			VideoInfo.VideoInfo[frameID].LensModel = LensType, VideoInfo.VideoInfo[frameID].ShutterModel = ShutterModel, VideoInfo.VideoInfo[frameID].threshold = threshold, VideoInfo.VideoInfo[frameID].ninlierThresh = ninliersThresh;
 			VideoInfo.VideoInfo[frameID].valid = true;
 		}
 
@@ -8228,10 +8736,14 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 		printf("Cannot load %s\n", Fname);
 		return 1;
 	}
-	double R[9], C[3], t2, t3, t4, t5, t6, t7;
-	while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ",
-		&frameID, &R[0], &R[1], &R[2], &t1, &R[3], &R[4], &R[5], &t2, &R[6], &R[7], &R[8], &t3, &t4, &t5, &t6, &t7, &C[0], &C[1], &C[2]) != EOF)
+	double r[3], C[3], wt[6];
+	//while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf ",
+	//	&frameID, &R[0], &R[1], &R[2], &t1, &R[3], &R[4], &R[5], &t2, &R[6], &R[7], &R[8], &t3, &t4, &t5, &t6, &t7, &C[0], &C[1], &C[2]) != EOF)
+	while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf ", &frameID, &r[0], &r[1], &r[2], &C[0], &C[1], &C[2]) != EOF)
 	{
+		if (VideoInfo.VideoInfo[frameID].ShutterModel == 1)
+			fscanf(fp, "%lf %lf %lf %lf %lf %lf ", &wt[0], &wt[1], &wt[2], &wt[3], &wt[4], &wt[5]);
+
 		if (frameID >= startTime && frameID <= stopTime)
 		{
 			if (abs(C[0]) + abs(C[1]) + abs(C[2]) > 0.001)
@@ -8239,25 +8751,18 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 			else
 				VideoInfo.VideoInfo[frameID].valid = false;
 
-			for (int jj = 0; jj < 9; jj++)
-				VideoInfo.VideoInfo[frameID].R[jj] = R[jj];
+			for (int jj = 0; jj < 3; jj++)
+				VideoInfo.VideoInfo[frameID].rt[jj] = r[jj];
+			convertRvecToRmat(r, VideoInfo.VideoInfo[frameID].R);
 
 			for (int jj = 0; jj < 3; jj++)
 				VideoInfo.VideoInfo[frameID].camCenter[jj] = C[jj];
-
-			//T = -R*Center;
-			mat_mul(R, C, VideoInfo.VideoInfo[frameID].T, 3, 3, 1);
-			for (int jj = 0; jj < 3; jj++)
-				VideoInfo.VideoInfo[frameID].T[jj] = -VideoInfo.VideoInfo[frameID].T[jj];
+			GetTfromC(VideoInfo.VideoInfo[frameID]);
 
 			Rotation2Quaternion(VideoInfo.VideoInfo[frameID].R, VideoInfo.VideoInfo[frameID].Quat);
 
-			mat_invert(VideoInfo.VideoInfo[frameID].R, VideoInfo.VideoInfo[frameID].invR);
-			GetrtFromRT(VideoInfo.VideoInfo[frameID].rt,
-				VideoInfo.VideoInfo[frameID].R, VideoInfo.VideoInfo[frameID].T);
 			GetRCGL(VideoInfo.VideoInfo[frameID]);
-			AssembleP(VideoInfo.VideoInfo[frameID].K, VideoInfo.VideoInfo[frameID].R,
-				VideoInfo.VideoInfo[frameID].T, VideoInfo.VideoInfo[frameID].P);
+			AssembleP(VideoInfo.VideoInfo[frameID].K, VideoInfo.VideoInfo[frameID].R, VideoInfo.VideoInfo[frameID].T, VideoInfo.VideoInfo[frameID].P);
 		}
 	}
 	fclose(fp);
@@ -8268,12 +8773,12 @@ int ReadVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, 
 int WriteVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime, int stopTime)
 {
 	//WRITE  INTRINSIC
-	char Fname[200]; sprintf(Fname, "%s/_Intrinsic_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "w+");
+	char Fname[200]; sprintf(Fname, "%s/Intrinsic_%d.txt", Path, viewID); FILE *fp = fopen(Fname, "w+");
 	for (int fid = startTime; fid <= stopTime; fid++)
 	{
 		if (!VideoInfo.VideoInfo[fid].valid)
 			continue;
-		fprintf(fp, "%d %d %d %d %.8f %.8f %.8f %.8f %.8f  ", fid, VideoInfo.VideoInfo[fid].LensModel, VideoInfo.VideoInfo[fid].width, VideoInfo.VideoInfo[fid].height,
+		fprintf(fp, "%d %d %d %d %d %.8f %.8f %.8f %.8f %.8f  ", fid, VideoInfo.VideoInfo[fid].LensModel, VideoInfo.VideoInfo[fid].ShutterModel, VideoInfo.VideoInfo[fid].width, VideoInfo.VideoInfo[fid].height,
 			VideoInfo.VideoInfo[fid].K[0], VideoInfo.VideoInfo[fid].K[4], VideoInfo.VideoInfo[fid].K[1], VideoInfo.VideoInfo[fid].K[2], VideoInfo.VideoInfo[fid].K[5]);
 
 		if (VideoInfo.VideoInfo[fid].LensModel == RADIAL_TANGENTIAL_PRISM)
@@ -8285,21 +8790,43 @@ int WriteVideoDataI(char *Path, VideoData &VideoInfo, int viewID, int startTime,
 	fclose(fp);
 
 	//WRITE VIDEO POSE
-	sprintf(Fname, "%s/_CamPose_%d.txt", Path, viewID); fp = fopen(Fname, "w+");
+	sprintf(Fname, "%s/CamPose_%d.txt", Path, viewID); fp = fopen(Fname, "w+");
 	for (int fid = startTime; fid <= stopTime; fid++)
 	{
 		if (!VideoInfo.VideoInfo[fid].valid)
 			continue;
 
-		fprintf(fp, "%d %.16f %.16f %.16f 0.0 %.16f %.16f %.16f 0.0 %.16f %.16f %.16f 0.0 0.0 0.0 0.0 1.0 %.16f %.16f %.16f ", fid,
-			VideoInfo.VideoInfo[fid].R[0], VideoInfo.VideoInfo[fid].R[1], VideoInfo.VideoInfo[fid].R[2],
-			VideoInfo.VideoInfo[fid].R[3], VideoInfo.VideoInfo[fid].R[4], VideoInfo.VideoInfo[fid].R[5],
-			VideoInfo.VideoInfo[fid].R[6], VideoInfo.VideoInfo[fid].R[7], VideoInfo.VideoInfo[fid].R[8],
-			VideoInfo.VideoInfo[fid].camCenter[0], VideoInfo.VideoInfo[fid].camCenter[1], VideoInfo.VideoInfo[fid].camCenter[2]);
+		fprintf(fp, "%d %.16f %.16f %.16f %.16f %.16f %.16f ", fid, VideoInfo.VideoInfo[fid].rt[0], VideoInfo.VideoInfo[fid].rt[1], VideoInfo.VideoInfo[fid].rt[2], VideoInfo.VideoInfo[fid].camCenter[0], VideoInfo.VideoInfo[fid].camCenter[1], VideoInfo.VideoInfo[fid].camCenter[2]);
+		if (VideoInfo.VideoInfo[fid].ShutterModel)
+			for (int ii = 0; ii < 6; ii++)
+				fprintf(fp, "%.16f ", VideoInfo.VideoInfo[fid].wt[ii]);
+		fprintf(fp, "\n");
 	}
 	fclose(fp);
 
 	return 0;
+}
+void SaveVideoCameraIntrinsic(char *Fname, CameraData *AllViewParas, vector<int>&AvailTime, int camID, int StartTime)
+{
+	FILE *fp = fopen(Fname, "a+");
+	for (int ii = 0; ii < AvailTime.size(); ii++)
+	{
+		int timeID = AvailTime[ii];
+
+		fprintf(fp, "%d %d %d %d %d ", timeID + StartTime, AllViewParas[timeID].LensModel, AllViewParas[timeID].ShutterModel, AllViewParas[timeID].width, AllViewParas[timeID].height);
+		for (int jj = 0; jj < 5; jj++)
+			fprintf(fp, "%f ", AllViewParas[timeID].intrinsic[jj]);
+		if (AllViewParas[timeID].LensModel == RADIAL_TANGENTIAL_PRISM)
+			for (int jj = 0; jj < 7; jj++)
+				fprintf(fp, "%f ", AllViewParas[timeID].distortion[jj]);
+		else
+			for (int jj = 0; jj < 3; jj++)
+				fprintf(fp, "%f ", AllViewParas[timeID].distortion[jj]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	return;
 }
 void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, int timeID)
 {
@@ -8339,10 +8866,8 @@ void SaveCurrentPosesGL(char *path, CameraData *AllViewParas, vector<int>AvailVi
 
 	return;
 }
-void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>&AvailTime, int camID, int StartTime)
+void SaveVideoCameraPoses(char *Fname, CameraData *AllViewParas, vector<int>&AvailTime, int camID, int StartTime)
 {
-	char Fname[200];
-
 	//Center = -iR*T 
 	double iR[9], center[3];
 	for (int ii = 0; ii < AvailTime.size(); ii++)
@@ -8361,16 +8886,18 @@ void SaveVideoCameraPosesGL(char *path, CameraData *AllViewParas, vector<int>&Av
 		AllViewParas[timeID].camCenter[0] = -center[0], AllViewParas[timeID].camCenter[1] = -center[1], AllViewParas[timeID].camCenter[2] = -center[2];
 	}
 
-	sprintf(Fname, "%s/CamPose_%d.txt", path, camID);
 	FILE *fp = fopen(Fname, "a+");
 	for (int ii = 0; ii < AvailTime.size(); ii++)
 	{
 		int timeID = AvailTime[ii];
 		fprintf(fp, "%d ", timeID + StartTime);
-		for (int jj = 0; jj < 16; jj++)
-			fprintf(fp, "%.16f ", AllViewParas[timeID].Rgl[jj]);
+		for (int jj = 0; jj < 3; jj++)
+			fprintf(fp, "%.16f ", AllViewParas[timeID].rt[jj]);
 		for (int jj = 0; jj < 3; jj++)
 			fprintf(fp, "%.16f ", AllViewParas[timeID].camCenter[jj]);
+		if (AllViewParas[timeID].ShutterModel == 1)
+			for (int jj = 0; jj < 6; jj++)
+				fprintf(fp, "%.16f ", AllViewParas[timeID].wt[jj]);
 		fprintf(fp, "\n");
 	}
 	fclose(fp);
@@ -13482,7 +14009,7 @@ int SingleCameraCalibration(char *Path, int camID, int startFrame, int stopFrame
 		//Save Data
 		sprintf(Fname, "%s/Intrinsic_%d.txt", Path, camID);	FILE *fp = fopen(Fname, "w+");
 		for (int ii = 0; ii < (int)ValidFrame.size(); ii++)
-			fprintf(fp, "%d 0 %d %d %.6f %.6f 0.0 %.6f %.6f  %.6f %.6f  %.6f %.6f %.6f 0.0 0.0\n", ValidFrame[ii], imageSize.width, imageSize.height, cameraMatrix.at<double>(0, 0), cameraMatrix.at<double>(1, 1), cameraMatrix.at<double>(0, 2), cameraMatrix.at<double>(1, 2),
+			fprintf(fp, "%d 0 0 %d %d %.6f %.6f 0.0 %.6f %.6f  %.6f %.6f  %.6f %.6f %.6f 0.0 0.0\n", ValidFrame[ii], imageSize.width, imageSize.height, cameraMatrix.at<double>(0, 0), cameraMatrix.at<double>(1, 1), cameraMatrix.at<double>(0, 2), cameraMatrix.at<double>(1, 2),
 			distCoeffs.at<double>(0), distCoeffs.at<double>(1), distCoeffs.at<double>(4), distCoeffs.at<double>(3), distCoeffs.at<double>(2)); //OpenCV tangential distortion is a bit different from mine.
 		fclose(fp);
 

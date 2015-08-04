@@ -1,10 +1,16 @@
+#if !defined(SEQUENCE_H )
+#define SEQUENCE_H
 #pragma once
+
 #include <iostream>
 #include <fstream>
 #include <cstdio>
-#include <stdio.h>
 #include <vector>
 #include <opencv2/opencv.hpp>
+#include <boost/config.hpp>
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/prim_minimum_spanning_tree.hpp>
+#include <boost/graph/kruskal_min_spanning_tree.hpp>
 
 using namespace std;
 using namespace cv;
@@ -46,5 +52,4 @@ int AssignOffsetFromMST(char *Path, char *PairwiseSyncFilename, int nvideos, dou
 void DynamicTimeWarping3Step(Mat pM, vector<int>&p, vector<int> &q);
 void DynamicTimeWarping5Step(Mat pM, vector<int>&p, vector<int> &q);
 
-
-
+#endif

@@ -10,28 +10,26 @@ using namespace cv;
 char *Path;
 
 GLfloat UnitScale = 1.0f; //1 unit corresponds to 1 mm
-static GLfloat g_ratio, g_coordAxisLength = 200.f*UnitScale, g_fViewDistance = 5000 * UnitScale* VIEWING_DISTANCE_MIN;
-static GLfloat g_nearPlane = 1.0*UnitScale, g_farPlane = 30000 * UnitScale;
-GLfloat CameraSize = 100.0f*UnitScale, pointSize = 5.0f*UnitScale, normalSize = 20.f*UnitScale, arrowThickness = .1f*UnitScale;
-static int g_Width = 1200, g_Height = 900, g_xClick = 0, g_yClick = 0, g_mouseYRotate = 0, g_mouseXRotate = 0;
+GLfloat g_ratio, g_coordAxisLength, g_fViewDistance, g_nearPlane, g_farPlane;
+int g_Width = 1200, g_Height = 900, g_xClick = 0, g_yClick = 0, g_mouseYRotate = 0, g_mouseXRotate = 0;
+
+GLfloat CameraSize, pointSize, normalSize, arrowThickness;
+double Discontinuity3DThresh, DiscontinuityTimeThresh = 1000.0; //unit: ms
+int nviews = MaxnCams, timeID = 0, TrajecID = 0, otimeID = 0, oTrajecID = 0, TrialID = 0, oTrialID = 0, maxTime = 0, maxTrial = 10000, nTraject = 1;
 
 enum cam_mode { CAM_DEFAULT, CAM_ROTATE, CAM_ZOOM, CAM_PAN };
 static cam_mode g_camMode = CAM_DEFAULT;
-GLfloat Red[3] = { 1, 0, 0 }, Green[3] = { 0, 1, 0 }, Blue[3] = { 0, 0, 1 }, White[3] = { 1, 1, 1 }, Yellow[3] = { 1.0f, 1.0f, 204.0f / 255.f };
+GLfloat Red[3] = { 1, 0, 0 }, Green[3] = { 0, 1, 0 }, Blue[3] = { 0, 0, 1 }, White[3] = { 1, 1, 1 }, Yellow[3] = { 1.0f, 1.0f, 0 }, Magneta[3] = { 1.f, 0.f, 1.f }, Cycan[3] = { 0.f, 1.f, 1.f };
 
-double Discontinuity3DThresh = 5000.0*UnitScale,
-DiscontinuityTimeThresh = 10000.0; //unit: ms
-int nviews = MaxnCams, timeID = 0, TrajecID = 0, otimeID = 0, oTrajecID = 0, TrialID = 0, oTrialID = 0, maxTime = 0, maxTrial = 10000, nTraject = 1;
 bool drawPointColor = false, drawPatchNormal = false;
 bool g_bButton1Down = false, ReCenterNeeded = false, PickingMode = false, bFullsreen = false, showGroundPlane = false, showAxis = false;
 bool SaveScreen = false, SaveStaticViewingParameters = false, SetStaticViewingParameters = false, SaveDynamicViewingParameters = false, SetDynamicViewingParameters = false;
 
-bool drawCorpusPoints = false, drawCorpusCameras = true, drawTimeVaryingCorpusPoints = false;
+bool drawCorpusPoints = false, drawCorpusCameras = true, drawTimeVaryingCorpusPoints = false, AutomaticUpdate = false;
 bool drawTimeVaryingCameraPose = false, drawCameraTraject = false;
-bool drawTimeVarying3DPoints = false, drawCatTimeVarying3DPoint = false;
-bool drawNative3DTrajectory = true, drawNative3DTrajectoryOneInstance = false, IndiviualTrajectory = false, Trajectory_Time = false, EndTime = false;
-bool TimeVaryingPointsOne = true, TimeVaryingPointsTwo = true, Native3DTrajectoryOne = true, colorVisibility = false, showSkeleton = false;
-bool AutomaticUpdate = false;
+bool colorVisibility = false, OneTimeInstanceOnly = false, IndiviualTrajectory = false, Trajectory_Time = false, EndTime = false, showSkeleton = false;
+bool drawTimeVarying3DPoints = false, drawCatTimeVarying3DPoint = false, drawNative3DTrajectory = true;
+bool TimeVaryingPointsOne = true, TimeVaryingPointsTwo = true, Native3DTrajectoryOne = true;
 double DisplayStartTime = 0.0, DisplayTimeStep = 0.016; //60fps
 
 GLfloat PointsCentroid[3], PointVar[3];
@@ -39,8 +37,8 @@ bool *PlottedTimeVaryingCameras = 0;
 int *maxFramesToDrawPerCamera = 0;
 vector<int> PickedPoints, PickedTraject, PickCams;
 vector<double>TimeInstancesStack;
-vector<Point3d> PickPoint3D;
-vector<Point3d> SkeletonPoints;
+vector<Point3d> PickPoint3D, SkeletonPoints;
+
 typedef struct { GLfloat  viewDistance, CentroidX, CentroidY, CentroidZ; int timeID, mouseYRotate, mouseXRotate; } ViewingParas;
 vector <ViewingParas> DynamicViewingParas;
 VisualizationManager g_vis;
@@ -111,7 +109,7 @@ void SelectionFunction(int x, int y, bool append_rightClick = false)
 					PickedPoints.push_back(pickedID);
 			}
 		}
-		else if (pickedID>=0 && pickedID < MaxnCams)  //which means camera
+		else if (pickedID >= 0 && pickedID < MaxnCams)  //which means camera
 		{
 			printf("Pick camera #%d\n", pickedID);
 
@@ -243,10 +241,10 @@ void Keyboard(unsigned char key, int x, int y)
 			else
 				printf("Indiviual Trajectory: OFF\n");
 		}
-		if (strcmp(Fname, "Trajectory1TimeInstance") == 0 || strcmp(Fname, "Traj1Inst") == 0)
+		if (strcmp(Fname, "OneTime") == 0)
 		{
-			drawNative3DTrajectoryOneInstance = !drawNative3DTrajectoryOneInstance;
-			if (drawNative3DTrajectoryOneInstance)
+			OneTimeInstanceOnly = !OneTimeInstanceOnly;
+			if (OneTimeInstanceOnly)
 				printf("Show only 1 time instance: ON\n");
 			else
 				printf("Show only 1 time instance:  OFF\n");
@@ -287,12 +285,18 @@ void Keyboard(unsigned char key, int x, int y)
 		showGroundPlane = !showGroundPlane;
 		break;
 	case 't':
-		printf("Toggle 3D point trajectory display\n ");
 		drawTimeVarying3DPoints = !drawTimeVarying3DPoints;
+		if (drawCameraTraject)
+			printf("3D point trajectory display: ON\n ");
+		else
+			printf("3D point trajectory display: OFF\n ");
 		break;
 	case 'T':
-		printf("Toggle Camera trajectory display\n ");
 		drawCameraTraject = !drawCameraTraject;
+		if (drawCameraTraject)
+			printf("Camera trajectory display: ON\n ");
+		else
+			printf("Camera trajectory display: OFF\n ");
 		break;
 	case 'r':
 		AutomaticUpdate = !AutomaticUpdate;
@@ -528,7 +532,7 @@ void Draw_Axes(void)
 	glColor3f(0, 1, 0); // Y axis is green.
 	glVertex3f(0, 0, 0);
 	glVertex3f(0, g_coordAxisLength, 0);
-	glColor3f(0, 0, 1); // z axis is blue.
+	glColor3f(0, 0, 1); // Z axis is blue.
 	glVertex3f(0, 0, 0);
 	glVertex3f(0, 0, g_coordAxisLength);
 	glEnd();
@@ -784,7 +788,7 @@ void RenderObjects()
 		Read3DTrajectory(Path, TrialID, colorVisibility);
 		oTrialID = TrialID;
 	}
-	if (TimeInstancesStack.size() >0 && TimeInstancesStack.back() - 1 < timeID)
+	if (TimeInstancesStack.size() > 0 && TimeInstancesStack.back() - 1 < timeID)
 		timeID = TimeInstancesStack.back() - 1;
 	if (EndTime)
 		timeID = TimeInstancesStack.back() - 1;
@@ -801,25 +805,25 @@ void RenderObjects()
 				if (i == PickedPoints[j])
 					picked = true;
 
-				glPushMatrix();
-				glTranslatef(g_vis.CorpusPointPosition[i].x - PointsCentroid[0], g_vis.CorpusPointPosition[i].y - PointsCentroid[1], g_vis.CorpusPointPosition[i].z - PointsCentroid[2]);
-				if (!picked&&drawPointColor)
-					glColor3f(g_vis.CorpusPointColor[i].x, g_vis.CorpusPointColor[i].y, g_vis.CorpusPointColor[i].z);
-				else
-					glColor3fv(Red);
-				glutSolidSphere(pointSize / 1.25, 4, 4);
-				glPopMatrix();
+			glPushMatrix();
+			glTranslatef(g_vis.CorpusPointPosition[i].x - PointsCentroid[0], g_vis.CorpusPointPosition[i].y - PointsCentroid[1], g_vis.CorpusPointPosition[i].z - PointsCentroid[2]);
+			if (!picked&&drawPointColor)
+				glColor3f(g_vis.CorpusPointColor[i].x, g_vis.CorpusPointColor[i].y, g_vis.CorpusPointColor[i].z);
+			else
+				glColor3fv(Red);
+			glutSolidSphere(pointSize / 1.25, 4, 4);
+			glPopMatrix();
 
-				if (drawPatchNormal)
-				{
-					glColor4f(0, 1, 0, 0.5f);
-					Point3d newHeadPt = normalSize *g_vis.PointNormal[i] + g_vis.CorpusPointPosition[i];
-					glPushMatrix();
-					Arrow(g_vis.CorpusPointPosition[i].x - PointsCentroid[0], g_vis.CorpusPointPosition[i].y - PointsCentroid[1], g_vis.CorpusPointPosition[i].z - PointsCentroid[2],
-						newHeadPt.x - PointsCentroid[0], newHeadPt.y - PointsCentroid[1], newHeadPt.z - PointsCentroid[2], arrowThickness);
-					glPopMatrix();
-				}
-			
+			if (drawPatchNormal)
+			{
+				glColor4f(0, 1, 0, 0.5f);
+				Point3d newHeadPt = normalSize *g_vis.PointNormal[i] + g_vis.CorpusPointPosition[i];
+				glPushMatrix();
+				Arrow(g_vis.CorpusPointPosition[i].x - PointsCentroid[0], g_vis.CorpusPointPosition[i].y - PointsCentroid[1], g_vis.CorpusPointPosition[i].z - PointsCentroid[2],
+					newHeadPt.x - PointsCentroid[0], newHeadPt.y - PointsCentroid[1], newHeadPt.z - PointsCentroid[2], arrowThickness);
+				glPopMatrix();
+			}
+
 		}
 
 		for (unsigned int i = 0; i < g_vis.CorpusPointPosition2.size(); ++i)
@@ -830,7 +834,7 @@ void RenderObjects()
 			for (unsigned int j = 0; j < PickedPoints.size(); j++)
 				if (i == PickedPoints[j])
 					picked = true;
-		
+
 			glPushMatrix();
 			glTranslatef(g_vis.CorpusPointPosition2[i].x - PointsCentroid[0], g_vis.CorpusPointPosition2[i].y - PointsCentroid[1], g_vis.CorpusPointPosition2[i].z - PointsCentroid[2]);
 			if (!picked&&drawPointColor)
@@ -1005,7 +1009,7 @@ void RenderObjects()
 	//draw 3d trajectories
 	if (drawNative3DTrajectory)
 	{
-		if (drawNative3DTrajectoryOneInstance &&showSkeleton)
+		if (OneTimeInstanceOnly &&showSkeleton)
 			SkeletonPoints.clear();
 
 		if (drawCameraTraject)
@@ -1039,7 +1043,7 @@ void RenderObjects()
 			DetermineDiscontinuityInTrajectory(segNode, g_vis.Traject3D[tid], g_vis.Track3DLength[tid]);
 
 			//draw lines
-			if (!drawNative3DTrajectoryOneInstance)
+			if (!OneTimeInstanceOnly)
 			{
 				for (int segID = 0; segID < segNode.size(); segID++)
 				{
@@ -1075,12 +1079,12 @@ void RenderObjects()
 
 				for (int fid = segNode[segID].x; fid < segNode[segID].y; fid++)
 				{
-					if (!drawNative3DTrajectoryOneInstance &&Trajectory_Time && g_vis.Traject3D[tid][fid].timeID > TimeInstancesStack[timeID])
+					if (!OneTimeInstanceOnly &&Trajectory_Time && g_vis.Traject3D[tid][fid].timeID > TimeInstancesStack[timeID])
 						continue;
 					else if (Trajectory_Time && g_vis.Traject3D[tid][fid].timeID != TimeInstancesStack[timeID])
 						continue;
 
-					if (drawNative3DTrajectoryOneInstance &&showSkeleton)
+					if (OneTimeInstanceOnly &&showSkeleton)
 						SkeletonPoints.push_back(Point3d(g_vis.Traject3D[tid][fid].WC.x, g_vis.Traject3D[tid][fid].WC.y, g_vis.Traject3D[tid][fid].WC.z));
 
 					TrajPointColorI[0] = g_vis.Traject3D[tid][fid].rgb.x, TrajPointColorI[1] = g_vis.Traject3D[tid][fid].rgb.y, TrajPointColorI[2] = g_vis.Traject3D[tid][fid].rgb.z, TrajPointColorI[3] = 1.0f;
@@ -1148,7 +1152,7 @@ void RenderObjects()
 			}
 		}
 
-		if (drawNative3DTrajectoryOneInstance &&showSkeleton)
+		if (OneTimeInstanceOnly &&showSkeleton)
 		{
 			if ((int)SkeletonPoints.size() == 31)
 				RenderSkeleton2(SkeletonPoints, Red);
@@ -1180,11 +1184,19 @@ void RenderObjects()
 							continue;
 						glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
 						if (j == 0)
-							glColor3fv(White);
-						else if (j == 1)
 							glColor3fv(Red);
-						else
+						else if (j == 1)
 							glColor3fv(Green);
+						else if (j == 2)
+							glColor3fv(Blue);
+						else if (j == 3)
+							glColor3fv(Yellow);
+						else if (j == 4)
+							glColor3fv(Magneta);
+						else if (j == 5)
+							glColor3fv(Cycan);
+						else
+							glColor3fv(White);
 					}
 					glEnd();
 
@@ -1200,8 +1212,22 @@ void RenderObjects()
 
 						glPushMatrix();
 						glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
-						glColor3fv(White);
-						glutSolidSphere(pointSize / 2.5, 10, 10);
+						if (j == 0)
+							glColor3fv(Red);
+						else if (j == 1)
+							glColor3fv(Green);
+						else if (j == 2)
+							glColor3fv(Blue);
+						else if (j == 3)
+							glColor3fv(Yellow);
+						else if (j == 4)
+							glColor3fv(Magneta);
+						else if (j == 5)
+							glColor3fv(Cycan);
+						else
+							glColor3fv(White);
+
+						glutSolidSphere(pointSize / 10.0, 10, 10);
 						glPopMatrix();
 					}
 
@@ -1232,8 +1258,16 @@ void RenderObjects()
 					if (g_vis.glCameraPoseInfo[j][i].frameID < 0 || g_vis.glCameraPoseInfo[j][i].frameID >timeID)
 						continue;
 
-					if (i != timeID)
-						continue;
+					if (drawCameraTraject)
+					{
+						if (!OneTimeInstanceOnly && g_vis.glCameraPoseInfo[j][i].frameID > timeID)
+							continue;
+						if (OneTimeInstanceOnly && g_vis.glCameraPoseInfo[j][i].frameID != timeID)
+							continue;
+					}
+					else
+						if (g_vis.glCameraPoseInfo[j][i].frameID != timeID)
+							continue;
 
 					float* centerPt = g_vis.glCameraPoseInfo[j].at(i).camCenter;
 					if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
@@ -1402,10 +1436,10 @@ int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, b
 	//PointsCentroid[0] = -108, PointsCentroid[1] = -1356, PointsCentroid[2] = 5228;
 
 	UnitScale = sqrt(pow(PointVar[0], 2) + pow(PointVar[1], 2) + pow(PointVar[2], 2)) / 750.0;
-	g_coordAxisLength = 200.f*UnitScale, g_fViewDistance = 5000 * UnitScale* VIEWING_DISTANCE_MIN;
-	g_nearPlane = 1.0*UnitScale, g_farPlane = 30000 * UnitScale;
-	CameraSize = 100.0f*UnitScale, pointSize = 5.0f*UnitScale, normalSize = 20.f*UnitScale, arrowThickness = .1f*UnitScale;
-	Discontinuity3DThresh = 5000.0*UnitScale;
+	g_coordAxisLength = 100.f*UnitScale, g_fViewDistance = 5000 * UnitScale* VIEWING_DISTANCE_MIN;
+	g_nearPlane = 1.0*UnitScale, g_farPlane = 30000.f * UnitScale;
+	CameraSize = 50.0f*UnitScale, pointSize = 5.0f*UnitScale, normalSize = 20.f*UnitScale, arrowThickness = .1f*UnitScale;
+	Discontinuity3DThresh = 500.0*UnitScale;
 
 	if (drawTimeVaryingCameraPose)
 	{
@@ -2057,14 +2091,19 @@ void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime)
 
 	int timeID;
 	CamInfo temp;
+	double r[3], R[9];
 	for (int ii = 0; ii < nviews; ii++)
 	{
-		sprintf(Fname, "%s/_CamPose_%d.txt", path, ii);
-		FILE *fp = fopen(Fname, "r");
+		sprintf(Fname, "%s/CamPose_sRSCayley_%d.txt", path, ii);	FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)
 		{
-			printf("Cannot load %s\n", Fname);
-			continue;
+			printf("Cannot load %s. Try another file ...\n", Fname);
+			sprintf(Fname, "%s/CamPose_%d.txt", path, ii); fp = fopen(Fname, "r");
+			if (fp == NULL)
+			{
+				printf("Cannot load %s\n", Fname);
+				continue;
+			}
 		}
 		bool firsttime = true;
 		int lasAvailFrame = 0;
@@ -2072,7 +2111,6 @@ void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime)
 		{
 			if (timeID != 1 && firsttime) //filling the empty space
 			{
-				//firsttime = false;
 				for (int jj = lasAvailFrame; jj < timeID - 1; jj++)
 				{
 					temp.frameID = -1;
@@ -2081,10 +2119,17 @@ void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime)
 			}
 
 			temp.frameID = timeID;
-			for (int jj = 0; jj < 16; jj++)
-				fscanf(fp, "%f ", &temp.Rgl[jj]);
+
+			for (int jj = 0; jj < 3; jj++)
+				fscanf(fp, "%lf ", &r[jj]);
 			for (int jj = 0; jj < 3; jj++)
 				fscanf(fp, "%f ", &temp.camCenter[jj]);
+			convertRvecToRmat(r, R);
+
+			temp.Rgl[0] = R[0], temp.Rgl[1] = R[1], temp.Rgl[2] = R[2], temp.Rgl[3] = 0.0;
+			temp.Rgl[4] = R[3], temp.Rgl[5] = R[4], temp.Rgl[6] = R[5], temp.Rgl[7] = 0.0;
+			temp.Rgl[8] = R[6], temp.Rgl[9] = R[7], temp.Rgl[10] = R[8], temp.Rgl[11] = 0.0;
+			temp.Rgl[12] = 0, temp.Rgl[13] = 0, temp.Rgl[14] = 0, temp.Rgl[15] = 1.0;
 
 			if (ii == 0 && createTimeStack)
 				TimeInstancesStack.push_back(timeID);

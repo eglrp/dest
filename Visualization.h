@@ -1,13 +1,8 @@
 #include <cstdlib>
 #include <stdio.h>
-#include <iostream>
-#include <limits>
-#include <iostream>
-#include <fstream>
 #include <algorithm>
 #include <math.h>
 #include <omp.h>
-#include <stdint.h>
 
 #include <opencv2/opencv.hpp>
 #include "DataStructure.h"

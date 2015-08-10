@@ -27,16 +27,16 @@ bool SaveScreen = false, SaveStaticViewingParameters = false, SetStaticViewingPa
 
 bool drawCorpusPoints = false, drawCorpusCameras = true, drawTimeVaryingCorpusPoints = false, AutomaticUpdate = false;
 bool drawTimeVaryingCameraPose = false, drawCameraTraject = false;
-bool colorVisibility = false, OneTimeInstanceOnly = false, IndiviualTrajectory = false, Trajectory_Time = false, EndTime = false, showSkeleton = false;
+bool colorVisibility = false, OneTimeInstanceOnly = true, IndiviualTrajectory = false, Trajectory_Time = false, EndTime = false, showSkeleton = false;
 bool drawTimeVarying3DPoints = false, drawCatTimeVarying3DPoint = false, drawNative3DTrajectory = true;
-bool TimeVaryingPointsOne = true, TimeVaryingPointsTwo = true, Native3DTrajectoryOne = true;
+bool TimeVaryingPointsOne = true, TimeVaryingPointsTwo = true, Native3DTrajectoryOne = true, FirstPose = true, SecondPose = false;
 double DisplayStartTime = 0.0, DisplayTimeStep = 0.016; //60fps
 
 GLfloat PointsCentroid[3], PointVar[3];
 bool *PlottedTimeVaryingCameras = 0;
 int *maxFramesToDrawPerCamera = 0;
 vector<int> PickedPoints, PickedTraject, PickCams;
-vector<double>TimeInstancesStack;
+vector<double>TimeInstancesStack, TimeInstancesStack2;
 vector<Point3d> PickPoint3D, SkeletonPoints;
 
 typedef struct { GLfloat  viewDistance, CentroidX, CentroidY, CentroidZ; int timeID, mouseYRotate, mouseXRotate; } ViewingParas;
@@ -249,7 +249,14 @@ void Keyboard(unsigned char key, int x, int y)
 			else
 				printf("Show only 1 time instance:  OFF\n");
 		}
-
+		if (strcmp(Fname, "SwitchPose") == 0)
+		{
+			if (FirstPose)
+				printf("Pose 2: ON\n");
+			else
+				printf("Pose : ON\n");
+			FirstPose = !FirstPose; SecondPose = !SecondPose;
+		}
 		break;
 	case 'o':
 		printf("Current time: %d. Please enter the new time: ", timeID);
@@ -1164,87 +1171,119 @@ void RenderObjects()
 	}
 
 	//draw time varying camera pose
-	if ((drawTimeVaryingCameraPose && !Trajectory_Time) || drawTimeVaryingCameraPose && timeID == TimeInstancesStack.size() - 1)
+	if (FirstPose)
 	{
-		for (int j = 0; j < nviews; j++)
+		if ((drawTimeVaryingCameraPose && !Trajectory_Time) || drawTimeVaryingCameraPose && timeID == TimeInstancesStack.size() - 1)
 		{
-			if (g_vis.glCameraPoseInfo[j].size() > 0)
+			for (int j = 0; j < nviews; j++)
 			{
-				if (drawCameraTraject)
+				if (g_vis.glCameraPoseInfo[j].size() > 0)
 				{
-					glPushMatrix();
-					glBegin(GL_LINE_STRIP);
-					int maxtime = min(timeID, (int)g_vis.glCameraPoseInfo[j].size() - 1);
-					for (unsigned int i = 0; i <= maxtime; ++i)
+					if (drawCameraTraject)
 					{
-						if (g_vis.glCameraPoseInfo[j][i].frameID < 0 || g_vis.glCameraPoseInfo[j][i].frameID >timeID)
-							continue;
-						float* centerPt = g_vis.glCameraPoseInfo[j][i].camCenter;
-						if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
-							continue;
-						glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
-						if (j == 0)
-							glColor3fv(Red);
-						else if (j == 1)
-							glColor3fv(Green);
-						else if (j == 2)
-							glColor3fv(Blue);
-						else if (j == 3)
-							glColor3fv(Yellow);
-						else if (j == 4)
-							glColor3fv(Magneta);
-						else if (j == 5)
-							glColor3fv(Cycan);
-						else
-							glColor3fv(White);
-					}
-					glEnd();
-
-					//drawPoints on the trajectory
-					for (unsigned int i = 0; i <= maxtime; ++i)
-					{
-						if (g_vis.glCameraPoseInfo[j][i].frameID < 0 || g_vis.glCameraPoseInfo[j][i].frameID >timeID)
-							continue;
-						float* centerPt = g_vis.glCameraPoseInfo[j][i].camCenter;
-						if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
-							continue;
-						glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
-
 						glPushMatrix();
-						glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
-						if (j == 0)
-							glColor3fv(Red);
-						else if (j == 1)
-							glColor3fv(Green);
-						else if (j == 2)
-							glColor3fv(Blue);
-						else if (j == 3)
-							glColor3fv(Yellow);
-						else if (j == 4)
-							glColor3fv(Magneta);
-						else if (j == 5)
-							glColor3fv(Cycan);
+						glBegin(GL_LINE_STRIP);
+						int maxtime = min(timeID, (int)g_vis.glCameraPoseInfo[j].size() - 1);
+						for (unsigned int i = 0; i <= maxtime; ++i)
+						{
+							if (g_vis.glCameraPoseInfo[j][i].frameID < 0 || g_vis.glCameraPoseInfo[j][i].frameID >timeID)
+								continue;
+							float* centerPt = g_vis.glCameraPoseInfo[j][i].camCenter;
+							if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
+								continue;
+							glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+							if (j == 0)
+								glColor3fv(Red);
+							else if (j == 1)
+								glColor3fv(Green);
+							else if (j == 2)
+								glColor3fv(Blue);
+							else if (j == 3)
+								glColor3fv(Yellow);
+							else if (j == 4)
+								glColor3fv(Magneta);
+							else if (j == 5)
+								glColor3fv(Cycan);
+							else
+								glColor3fv(White);
+						}
+						glEnd();
+
+						//drawPoints on the trajectory
+						for (unsigned int i = 0; i <= maxtime; ++i)
+						{
+							if (g_vis.glCameraPoseInfo[j][i].frameID < 0 || g_vis.glCameraPoseInfo[j][i].frameID >timeID)
+								continue;
+							float* centerPt = g_vis.glCameraPoseInfo[j][i].camCenter;
+							if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
+								continue;
+							glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+
+							glPushMatrix();
+							glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+							if (j == 0)
+								glColor3fv(Red);
+							else if (j == 1)
+								glColor3fv(Green);
+							else if (j == 2)
+								glColor3fv(Blue);
+							else if (j == 3)
+								glColor3fv(Yellow);
+							else if (j == 4)
+								glColor3fv(Magneta);
+							else if (j == 5)
+								glColor3fv(Cycan);
+							else
+								glColor3fv(White);
+
+							glutSolidSphere(pointSize / 10.0, 10, 10);
+							glPopMatrix();
+						}
+
+						//Draw camera at the end of the trajectory
+						int dist, closestID = -1, closestFrame = maxTime + 1;
+						for (int i = 0; i < maxtime; i++)
+						{
+							dist = abs(g_vis.glCameraPoseInfo[j][i].frameID - timeID);
+							if (closestFrame > dist)
+								closestFrame = dist, closestID = i;
+						}
+
+						if (closestFrame == 0)
+						{
+							float* centerPt = g_vis.glCameraPoseInfo[j][closestID].camCenter;
+							GLfloat* R = g_vis.glCameraPoseInfo[j][closestID].Rgl;
+
+							glPushMatrix();
+							glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+							glMultMatrixf(R);
+							DrawCamera();
+							glPopMatrix();
+						}
+					}
+
+					for (unsigned int i = 0; i < g_vis.glCameraPoseInfo[j].size(); ++i)
+					{
+						if (g_vis.glCameraPoseInfo[j][i].frameID < 0 || g_vis.glCameraPoseInfo[j][i].frameID >timeID)
+							continue;
+
+						if (drawCameraTraject)
+						{
+							if (!OneTimeInstanceOnly && g_vis.glCameraPoseInfo[j][i].frameID > timeID)
+								continue;
+							if (OneTimeInstanceOnly && g_vis.glCameraPoseInfo[j][i].frameID != timeID)
+								continue;
+						}
 						else
-							glColor3fv(White);
+							if (g_vis.glCameraPoseInfo[j][i].frameID != timeID)
+								continue;
 
-						glutSolidSphere(pointSize / 10.0, 10, 10);
-						glPopMatrix();
-					}
+						float* centerPt = g_vis.glCameraPoseInfo[j].at(i).camCenter;
+						if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
+							continue;
+						GLfloat* R = g_vis.glCameraPoseInfo[j].at(i).Rgl;
 
-					//Draw camera at the end of the trajectory
-					int dist, closestID = -1, closestFrame = maxTime + 1;
-					for (int i = 0; i < maxtime; i++)
-					{
-						dist = abs(g_vis.glCameraPoseInfo[j][i].frameID - timeID);
-						if (closestFrame > dist)
-							closestFrame = dist, closestID = i;
-					}
-
-					if (closestFrame == 0)
-					{
-						float* centerPt = g_vis.glCameraPoseInfo[j][closestID].camCenter;
-						GLfloat* R = g_vis.glCameraPoseInfo[j][closestID].Rgl;
-
+						glLoadName(i);//for picking purpose
 						glPushMatrix();
 						glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
 						glMultMatrixf(R);
@@ -1252,34 +1291,128 @@ void RenderObjects()
 						glPopMatrix();
 					}
 				}
-
-				for (unsigned int i = 0; i < g_vis.glCameraPoseInfo[j].size(); ++i)
+			}
+		}
+	}
+	if (SecondPose)
+	{
+		if (TimeInstancesStack2.size() > 0 && (drawTimeVaryingCameraPose && !Trajectory_Time) || drawTimeVaryingCameraPose && timeID == TimeInstancesStack2.size() - 1)
+		{
+			for (int j = 0; j < nviews; j++)
+			{
+				if (g_vis.glCameraPoseInfo2[j].size() > 0)
 				{
-					if (g_vis.glCameraPoseInfo[j][i].frameID < 0 || g_vis.glCameraPoseInfo[j][i].frameID >timeID)
-						continue;
-
 					if (drawCameraTraject)
 					{
-						if (!OneTimeInstanceOnly && g_vis.glCameraPoseInfo[j][i].frameID > timeID)
-							continue;
-						if (OneTimeInstanceOnly && g_vis.glCameraPoseInfo[j][i].frameID != timeID)
-							continue;
+						glPushMatrix();
+						glBegin(GL_LINE_STRIP);
+						int maxtime = min(timeID, (int)g_vis.glCameraPoseInfo2[j].size() - 1);
+						for (unsigned int i = 0; i <= maxtime; ++i)
+						{
+							if (g_vis.glCameraPoseInfo2[j][i].frameID < 0 || g_vis.glCameraPoseInfo2[j][i].frameID >timeID)
+								continue;
+							float* centerPt = g_vis.glCameraPoseInfo2[j][i].camCenter;
+							if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
+								continue;
+							glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+							if (j == 0)
+								glColor3fv(Red);
+							else if (j == 1)
+								glColor3fv(Green);
+							else if (j == 2)
+								glColor3fv(Blue);
+							else if (j == 3)
+								glColor3fv(Yellow);
+							else if (j == 4)
+								glColor3fv(Magneta);
+							else if (j == 5)
+								glColor3fv(Cycan);
+							else
+								glColor3fv(White);
+						}
+						glEnd();
+
+						//drawPoints on the trajectory
+						for (unsigned int i = 0; i <= maxtime; ++i)
+						{
+							if (g_vis.glCameraPoseInfo2[j][i].frameID < 0 || g_vis.glCameraPoseInfo2[j][i].frameID >timeID)
+								continue;
+							float* centerPt = g_vis.glCameraPoseInfo2[j][i].camCenter;
+							if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
+								continue;
+							glVertex3f(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+
+							glPushMatrix();
+							glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+							if (j == 0)
+								glColor3fv(Red);
+							else if (j == 1)
+								glColor3fv(Green);
+							else if (j == 2)
+								glColor3fv(Blue);
+							else if (j == 3)
+								glColor3fv(Yellow);
+							else if (j == 4)
+								glColor3fv(Magneta);
+							else if (j == 5)
+								glColor3fv(Cycan);
+							else
+								glColor3fv(White);
+
+							glutSolidSphere(pointSize / 10.0, 10, 10);
+							glPopMatrix();
+						}
+
+						//Draw camera at the end of the trajectory
+						int dist, closestID = -1, closestFrame = maxTime + 1;
+						for (int i = 0; i < maxtime; i++)
+						{
+							dist = abs(g_vis.glCameraPoseInfo2[j][i].frameID - timeID);
+							if (closestFrame > dist)
+								closestFrame = dist, closestID = i;
+						}
+
+						if (closestFrame == 0)
+						{
+							float* centerPt = g_vis.glCameraPoseInfo2[j][closestID].camCenter;
+							GLfloat* R = g_vis.glCameraPoseInfo2[j][closestID].Rgl;
+
+							glPushMatrix();
+							glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+							glMultMatrixf(R);
+							DrawCamera();
+							glPopMatrix();
+						}
 					}
-					else
-						if (g_vis.glCameraPoseInfo[j][i].frameID != timeID)
+
+					for (unsigned int i = 0; i < g_vis.glCameraPoseInfo2[j].size(); ++i)
+					{
+						if (g_vis.glCameraPoseInfo2[j][i].frameID < 0 || g_vis.glCameraPoseInfo2[j][i].frameID >timeID)
 							continue;
 
-					float* centerPt = g_vis.glCameraPoseInfo[j].at(i).camCenter;
-					if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
-						continue;
-					GLfloat* R = g_vis.glCameraPoseInfo[j].at(i).Rgl;
+						if (drawCameraTraject)
+						{
+							if (!OneTimeInstanceOnly && g_vis.glCameraPoseInfo2[j][i].frameID > timeID)
+								continue;
+							if (OneTimeInstanceOnly && g_vis.glCameraPoseInfo2[j][i].frameID != timeID)
+								continue;
+						}
+						else
+							if (g_vis.glCameraPoseInfo2[j][i].frameID != timeID)
+								continue;
 
-					glLoadName(i);//for picking purpose
-					glPushMatrix();
-					glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
-					glMultMatrixf(R);
-					DrawCamera();
-					glPopMatrix();
+						float* centerPt = g_vis.glCameraPoseInfo2[j].at(i).camCenter;
+						if (abs(centerPt[0]) + abs(centerPt[1]) + abs(centerPt[2]) < 0.01)
+							continue;
+						GLfloat* R = g_vis.glCameraPoseInfo2[j].at(i).Rgl;
+
+						glLoadName(i);//for picking purpose
+						glPushMatrix();
+						glTranslatef(centerPt[0] - PointsCentroid[0], centerPt[1] - PointsCentroid[1], centerPt[2] - PointsCentroid[2]);
+						glMultMatrixf(R);
+						DrawCamera();
+						glPopMatrix();
+					}
 				}
 			}
 		}
@@ -1444,6 +1577,7 @@ int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, b
 	if (drawTimeVaryingCameraPose)
 	{
 		ReadCurrentPosesGL(Path, nViews, StartTime, StopTime);
+		ReadCurrentPosesGL2(Path, nViews, StartTime, StopTime);
 
 		PlottedTimeVaryingCameras = new bool[nViews];
 		maxFramesToDrawPerCamera = new int[nViews];
@@ -2135,6 +2269,66 @@ void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime)
 				TimeInstancesStack.push_back(timeID);
 
 			g_vis.glCameraPoseInfo[ii].push_back(temp);
+			lasAvailFrame = timeID;
+		}
+		fclose(fp);
+	}
+
+	return;
+}
+void ReadCurrentPosesGL2(char *path, int nviews, int StartTime, int StopTime)
+{
+	char Fname[200];
+	g_vis.glCameraPoseInfo2 = new vector<CamInfo>[(StopTime - StartTime + 1)*nviews];
+
+	bool createTimeStack = TimeInstancesStack2.size() == 0 ? true : false;
+
+	int timeID;
+	CamInfo temp;
+	double r[3], R[9];
+	for (int ii = 0; ii < nviews; ii++)
+	{
+		sprintf(Fname, "%s/CamPose_%d.txt", path, ii);	FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+		{
+			//printf("Cannot load %s. Try another file ...\n", Fname);
+			sprintf(Fname, "%s/CamPose_%d.txt", path, ii); fp = fopen(Fname, "r");
+			if (fp == NULL)
+			{
+				//printf("Cannot load %s\n", Fname);
+				continue;
+			}
+		}
+		bool firsttime = true;
+		int lasAvailFrame = 0;
+		while (fscanf(fp, "%d ", &timeID) != EOF)
+		{
+			if (timeID != 1 && firsttime) //filling the empty space
+			{
+				for (int jj = lasAvailFrame; jj < timeID - 1; jj++)
+				{
+					temp.frameID = -1;
+					g_vis.glCameraPoseInfo2[ii].push_back(temp);
+				}
+			}
+
+			temp.frameID = timeID;
+
+			for (int jj = 0; jj < 3; jj++)
+				fscanf(fp, "%lf ", &r[jj]);
+			for (int jj = 0; jj < 3; jj++)
+				fscanf(fp, "%f ", &temp.camCenter[jj]);
+			convertRvecToRmat(r, R);
+
+			temp.Rgl[0] = R[0], temp.Rgl[1] = R[1], temp.Rgl[2] = R[2], temp.Rgl[3] = 0.0;
+			temp.Rgl[4] = R[3], temp.Rgl[5] = R[4], temp.Rgl[6] = R[5], temp.Rgl[7] = 0.0;
+			temp.Rgl[8] = R[6], temp.Rgl[9] = R[7], temp.Rgl[10] = R[8], temp.Rgl[11] = 0.0;
+			temp.Rgl[12] = 0, temp.Rgl[13] = 0, temp.Rgl[14] = 0, temp.Rgl[15] = 1.0;
+
+			if (ii == 0 && createTimeStack)
+				TimeInstancesStack2.push_back(timeID);
+
+			g_vis.glCameraPoseInfo2[ii].push_back(temp);
 			lasAvailFrame = timeID;
 		}
 		fclose(fp);

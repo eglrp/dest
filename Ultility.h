@@ -67,6 +67,7 @@ void ShowDataToImage(char *Fname, char *Img, int width, int height, int nchannel
 bool SaveDataToImageCVFormat(char *fname, char *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, char *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, unsigned char *Img, int width, int height, int nchannels = 1);
+bool SaveDataToImage(char *fname, int *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, float *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, double *Img, int width, int height, int nchannels = 1);
 
@@ -683,17 +684,23 @@ int DetectRedLaserCorrelationMultiScale(char *ImgName, int width, int height, un
 
 int CleanCheckBoardDetection(char *Path, int viewID, int startF, int stopF);
 
+double Compute_AffineHomo(vector<Point2d> &From, vector<Point2d> To, double *Affine, double *A = 0, double *B = 0);
+double Compute_AffineHomo(Point2d *From, Point2d *To, int npts, double *Affine, Point2d *sFrom, Point2d *sTo, double *A = 0, double *B = 0);
+double findTransformECC(InputArray templateImage, InputArray inputImage, InputOutputArray warpMatrix, int motionType, TermCriteria criteria);
+double findTransformECC_Optimized(Mat &templateFloat, Mat &imageFloat, Mat &gradientX, Mat &gradientY, Mat &gradientXWarped, Mat &gradientYWarped, Mat &warpMatrix, int motionType, TermCriteria criteria);
 double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, int nchannels, Point2i &POI, int search_area, double thresh, double *T = NULL);
 double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double *Para, int width, int height, int nchannels, Point2d &POI, int advanced_tech, int Convergence_Criteria, double ZNCCthresh, int InterpAlgo, double *Znssd_reqd = 0);
-double findTransformECC(InputArray templateImage, InputArray inputImage, InputOutputArray warpMatrix, int motionType, TermCriteria criteria);
 
 void RefineCornersFromInit(double *Para, int width, int height, int nchannels, Point2d *Checker, int &npts, vector<double>PatternAngles, int hsubset1, int hsubset2, int searchArea, double ZNCCCoarseThresh, double ZNCCthresh, int InterpAlgo);
 void RefineCorners(double *Para, int width, int height, int nchannels, Point2d *Checker, Point2d *Fcorners, int *FStype, int &npts, vector<double>PatternAngles, int hsubset1, int hsubset2, int searchArea, double ZNCCCoarseThresh, double ZNCCthresh, int InterpAlgo);
 int CornerDetectorDriver(char *Path, int checkerSize, double ZNCCThreshold, int startF, int stopF, int width, int height);
 
-double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
-double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
-int TrackOpenCVLK(char *Path, int startFrame, int stopFrame);
+double TemplateMatching0(double *RefPara, double *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
+double TemplateMatching0(float *RefPara, float *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
+double TemplateMatching(double *RefPara, double *TarPara, int refWidth, int refHeight, int tarWidth, int tarHeight, int nchannels, Point2d From, Point2d &Target, LKParameters LKArg, bool greedySearch, double *Timg = 0, double *T = 0, double *Znssd_reqd = 0, double *iWp = 0, double *direction = 0);
+int TrackOpenCVLK(char *Path, int startFrame, int stopFrame, int npryLevels = 5);
+
+
 int ReadCorresAndRunTracking(char *Path, int nviews, int startFrame, int beginFrame, int endFrame, int *FrameOffset, int HighFrameRateFactor = 4);
 int CleanUp2DTrackingByGradientConsistency(char *Path, int nviews, int ntrajects);
 int DownSampleTracking(char *Path, int nviews, int ntrajects, int HighFrameRateFactor);

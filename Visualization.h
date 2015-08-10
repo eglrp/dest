@@ -41,6 +41,7 @@ int Read3DTrajectory(char *path, int trialID = 0, bool colorVisibility = true);
 int Read3DTrajectoryWithCovariance(char *path, int trialID = 0);
 
 void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime);
+void ReadCurrentPosesGL2(char *path, int nviews, int StartTime, int StopTime);
 int screenShot(char *Fname, int width, int height, bool color);
 
 

@@ -1242,6 +1242,16 @@ double ComputeZNCCPatch(double *RefPatch, double *TarPatch, int hsubset, int nch
 }
 void mat_invert(double* mat, double* imat, int dims)
 {
+	if (dims == 2)
+	{
+		double a0 = mat[0], a1 = mat[1], a2 = mat[2], a3 = mat[3];
+		double det = a0*a3 - a1*a2;
+		if (abs(det) < 1e-9)
+			printf("Caution. Matrix is ill-condition\n");
+
+		imat[0] = a3 / det, imat[1] = -a1 / det;
+		imat[2] = -a2 / det, imat[3] = a0 / det;
+	}
 	if (dims == 3)
 	{
 		// only work for 3x3
@@ -3323,7 +3333,7 @@ int Compute3DTrajectoryError2DTracking(char *Path, TrajectoryData infoTraj, int 
 			}
 			if (!found)
 				continue;
-			double fufv[2];
+			//double fufv[2];
 			Point2d PR = Projected2DLoc[0], PT = PR;
 			Tracked2DLoc.push_back(PR);
 
@@ -3370,9 +3380,8 @@ int Compute3DTrajectoryError2DTracking(char *Path, TrajectoryData infoTraj, int 
 			//Let track the 2D points and compute their differnces
 			for (int kk = 0; kk < visibleFrameCount - 1; kk++)
 			{
-				if (TrackingByLK(VisImageParaPtr[kk], VisImageParaPtr[kk + 1], hsubset, width, height, width, height, nchannels, PR, PT, 3, 1, 0.85, 30, 1, fufv, false, NULL, NULL, Timg, T, Znssd_reqd) < 0.9)
-					break;//tracking fails
-				PR.x = PR.x + fufv[0], PR.y = PR.y + fufv[1];
+				//if(TemplateMatching(VisImageParaPtr[kk], VisImageParaPtr[kk+1], width, height, width, height,nchannels, PR, Pt, LKarg, Timg, T, Znssd_reqd)<0.9)
+				//	break;//tracking fails
 				Tracked2DLoc.push_back(PR);
 				error += sqrt(pow(Projected2DLoc[kk + 1].x - PR.x, 2) + pow(Projected2DLoc[kk + 1].y - PR.y, 2));
 			}
@@ -3857,6 +3866,18 @@ bool SaveDataToImage(char *fname, unsigned char *Img, int width, int height, int
 		for (ii = 0; ii < width; ii++)
 			for (kk = 0; kk < nchannels; kk++)
 				M.data[nchannels*ii + kk + nchannels*jj*width] = Img[ii + jj*width + kk*length];
+
+	return imwrite(fname, M);
+}
+bool SaveDataToImage(char *fname, int *Img, int width, int height, int nchannels)
+{
+	int ii, jj, kk, length = width*height;
+
+	Mat M = Mat::zeros(height, width, nchannels == 1 ? CV_8UC1 : CV_8UC3);
+	for (jj = 0; jj < height; jj++)
+		for (ii = 0; ii < width; ii++)
+			for (kk = 0; kk < nchannels; kk++)
+				M.data[nchannels*ii + kk + nchannels*jj*width] = (unsigned char)Img[ii + jj*width + kk*length];
 
 	return imwrite(fname, M);
 }
@@ -5456,7 +5477,7 @@ bool ReadIntrinsicResults(char *path, CameraData *AllViewsParas)
 	}
 	while (fscanf(fp, "%s %d %d %d %d %lf %lf %lf %lf %lf ", dummy, &lensType, &shutterType, &width, &height, &fx, &fy, &skew, &u0, &v0) != EOF)
 	{
-		AllViewsParas[id].LensModel = lensType, AllViewsParas[id].ShutterModel = shutterType,  AllViewsParas[id].width = width, AllViewsParas[id].height = height;
+		AllViewsParas[id].LensModel = lensType, AllViewsParas[id].ShutterModel = shutterType, AllViewsParas[id].width = width, AllViewsParas[id].height = height;
 		AllViewsParas[id].K[0] = fx, AllViewsParas[id].K[1] = skew, AllViewsParas[id].K[2] = u0,
 			AllViewsParas[id].K[3] = 0.0, AllViewsParas[id].K[4] = fy, AllViewsParas[id].K[5] = v0,
 			AllViewsParas[id].K[6] = 0.0, AllViewsParas[id].K[7] = 0.0, AllViewsParas[id].K[8] = 1.0;
@@ -9822,35 +9843,13 @@ static void update_warping_matrix_ECC(Mat& map_matrix, const Mat& update, const 
 }
 double findTransformECC(InputArray templateImage, InputArray inputImage, InputOutputArray warpMatrix, int motionType, TermCriteria criteria)
 {
+	//Input images: 1-channel images of CV_8U or CV_32F.
+	//warpmat: CV_32F
+
 	Mat src = templateImage.getMat();//template iamge
 	Mat dst = inputImage.getMat(); //input image (to be warped)
 	Mat map = warpMatrix.getMat(); //warp (transformation)
 
-	CV_Assert(!src.empty());
-	CV_Assert(!dst.empty());
-
-
-	if (!(src.type() == dst.type()))
-		printf("Both input images must have the same data type");
-
-	//accept only 1-channel images
-	if (src.type() != CV_8UC1 && src.type() != CV_32FC1)
-		printf("Images must have 8uC1 or 32fC1 type");
-
-	if (map.type() != CV_32FC1)
-		printf("warpMatrix must be single-channel floating-point matrix");
-
-	CV_Assert(map.cols == 3);
-	CV_Assert(map.rows == 2 || map.rows == 3);
-
-	CV_Assert(motionType == MOTION_AFFINE || motionType == MOTION_HOMOGRAPHY ||
-		motionType == MOTION_EUCLIDEAN || motionType == MOTION_TRANSLATION);
-
-	if (motionType == MOTION_HOMOGRAPHY){
-		CV_Assert(map.rows == 3);
-	}
-
-	CV_Assert(criteria.type & TermCriteria::COUNT || criteria.type & TermCriteria::EPS);
 	const int    numberOfIterations = (criteria.type & TermCriteria::COUNT) ? criteria.maxCount : 200;
 	const double termination_eps = (criteria.type & TermCriteria::EPS) ? criteria.epsilon : -1;
 
@@ -10027,7 +10026,514 @@ double findTransformECC(InputArray templateImage, InputArray inputImage, InputOu
 	// return final correlation coefficient
 	return rho;
 }
+double findTransformECC_Optimized(Mat &templateFloat, Mat &imageFloat, Mat &gradientX, Mat &gradientY, Mat &gradientXWarped, Mat &gradientYWarped, Mat &warpMatrix, int motionType, TermCriteria criteria)
+{
+	//Input images: CV_32F.
+	//warpmat: CV_32F
 
+	/*Mat templateFloat = Mat(hs, ws, CV_32F);// to store the (smoothed) template
+	Mat imageFloat = Mat(hd, wd, CV_32F);// to store the (smoothed) input image
+
+	//gaussian filtering is optional
+	templateFloat.convertTo(templateFloat, templateFloat.type());
+	GaussianBlur(templateFloat, templateFloat, Size(5, 5), 0, 0);//is in-place filtering slower?
+
+	imageFloat.convertTo(imageFloat, imageFloat.type());
+	GaussianBlur(imageFloat, imageFloat, Size(5, 5), 0, 0);
+
+	// needed matrices for gradients and warped gradients
+	Mat gradientX = Mat::zeros(hd, wd, CV_32FC1);
+	Mat gradientY = Mat::zeros(hd, wd, CV_32FC1);
+	Mat gradientXWarped = Mat(hs, ws, CV_32FC1);
+	Mat gradientYWarped = Mat(hs, ws, CV_32FC1);
+
+
+	// calculate first order image derivatives
+	Matx13f dx(-0.5f, 0.0f, 0.5f);
+
+	filter2D(imageFloat, gradientX, -1, dx);
+	filter2D(imageFloat, gradientY, -1, dx.t());*/
+
+
+	const int    numberOfIterations = (criteria.type & TermCriteria::COUNT) ? criteria.maxCount : 200;
+	const double termination_eps = (criteria.type & TermCriteria::EPS) ? criteria.epsilon : -1;
+
+	int paramTemp = 6;//default: affine
+	switch (motionType){
+	case MOTION_TRANSLATION:
+		paramTemp = 2;
+		break;
+	case MOTION_EUCLIDEAN:
+		paramTemp = 3;
+		break;
+	case MOTION_HOMOGRAPHY:
+		paramTemp = 8;
+		break;
+	}
+	const int numberOfParameters = paramTemp;
+
+	const int ws = templateFloat.cols, hs = templateFloat.rows, wd = imageFloat.cols, hd = imageFloat.rows;
+	Mat templateZM = Mat(hs, ws, CV_32F);// to store the (smoothed)zero-mean version of template
+	Mat imageWarped = Mat(hs, ws, CV_32F);// to store the warped zero-mean input image
+	Mat allOnes = Mat::ones(hd, wd, CV_8U); //to use it for mask warping
+	Mat imageMask = Mat(hs, ws, CV_8U); //to store the final mask
+
+
+	Mat Xcoord = Mat(1, ws, CV_32F), Ycoord = Mat(hs, 1, CV_32F);
+	Mat Xgrid = Mat(hs, ws, CV_32F), Ygrid = Mat(hs, ws, CV_32F);
+
+	float* XcoPtr = Xcoord.ptr<float>(0), *YcoPtr = Ycoord.ptr<float>(0);
+	for (int j = 0; j < ws; j++)
+		XcoPtr[j] = (float)j;
+	for (int j = 0; j < hs; j++)
+		YcoPtr[j] = (float)j;
+
+	repeat(Xcoord, hs, 1, Xgrid), repeat(Ycoord, 1, ws, Ygrid);
+	Xcoord.release(), Ycoord.release();
+
+	// matrices needed for solving linear equation system for maximizing ECC
+	Mat jacobian = Mat(hs, ws*numberOfParameters, CV_32F);
+	Mat hessian = Mat(numberOfParameters, numberOfParameters, CV_32F);
+	Mat hessianInv = Mat(numberOfParameters, numberOfParameters, CV_32F);
+	Mat imageProjection = Mat(numberOfParameters, 1, CV_32F);
+	Mat templateProjection = Mat(numberOfParameters, 1, CV_32F);
+	Mat imageProjectionHessian = Mat(numberOfParameters, 1, CV_32F);
+	Mat errorProjection = Mat(numberOfParameters, 1, CV_32F);
+
+	Mat deltaP = Mat(numberOfParameters, 1, CV_32F);//transformation parameter correction
+	Mat error = Mat(hs, ws, CV_32F);//error as 2D matrix
+
+	const int imageFlags = INTER_LINEAR + WARP_INVERSE_MAP;
+	const int maskFlags = INTER_NEAREST + WARP_INVERSE_MAP;
+
+
+	// iteratively update map_matrix
+	double rho = -1;
+	double last_rho = -termination_eps;
+	for (int i = 1; (i <= numberOfIterations) && (fabs(rho - last_rho) >= termination_eps); i++)
+	{
+
+		// warp-back portion of the inputImage and gradients to the coordinate space of the templateImage
+		if (motionType != MOTION_HOMOGRAPHY)
+		{
+			warpAffine(imageFloat, imageWarped, warpMatrix, imageWarped.size(), imageFlags);
+			warpAffine(gradientX, gradientXWarped, warpMatrix, gradientXWarped.size(), imageFlags);
+			warpAffine(gradientY, gradientYWarped, warpMatrix, gradientYWarped.size(), imageFlags);
+			warpAffine(allOnes, imageMask, warpMatrix, imageMask.size(), maskFlags);
+		}
+		else
+		{
+			warpPerspective(imageFloat, imageWarped, warpMatrix, imageWarped.size(), imageFlags);
+			warpPerspective(gradientX, gradientXWarped, warpMatrix, gradientXWarped.size(), imageFlags);
+			warpPerspective(gradientY, gradientYWarped, warpMatrix, gradientYWarped.size(), imageFlags);
+			warpPerspective(allOnes, imageMask, warpMatrix, imageMask.size(), maskFlags);
+		}
+
+
+		Scalar imgMean, imgStd, tmpMean, tmpStd;
+		meanStdDev(imageWarped, imgMean, imgStd, imageMask);
+		meanStdDev(templateFloat, tmpMean, tmpStd, imageMask);
+
+		subtract(imageWarped, imgMean, imageWarped, imageMask);//zero-mean input
+		templateZM = Mat::zeros(templateZM.rows, templateZM.cols, templateZM.type());
+		subtract(templateFloat, tmpMean, templateZM, imageMask);//zero-mean template
+
+		const double tmpNorm = std::sqrt(countNonZero(imageMask)*(tmpStd.val[0])*(tmpStd.val[0]));
+		const double imgNorm = std::sqrt(countNonZero(imageMask)*(imgStd.val[0])*(imgStd.val[0]));
+
+		// calculate jacobian of image wrt parameters
+		switch (motionType){
+		case MOTION_AFFINE:
+			image_jacobian_affine_ECC(gradientXWarped, gradientYWarped, Xgrid, Ygrid, jacobian);
+			break;
+		case MOTION_HOMOGRAPHY:
+			image_jacobian_homo_ECC(gradientXWarped, gradientYWarped, Xgrid, Ygrid, warpMatrix, jacobian);
+			break;
+		case MOTION_TRANSLATION:
+			image_jacobian_translation_ECC(gradientXWarped, gradientYWarped, jacobian);
+			break;
+		case MOTION_EUCLIDEAN:
+			image_jacobian_euclidean_ECC(gradientXWarped, gradientYWarped, Xgrid, Ygrid, warpMatrix, jacobian);
+			break;
+		}
+
+		// calculate Hessian and its inverse
+		project_onto_jacobian_ECC(jacobian, jacobian, hessian);
+
+		hessianInv = hessian.inv();
+
+		const double correlation = templateZM.dot(imageWarped);
+
+		// calculate enhanced correlation coefficiont (ECC)->rho
+		last_rho = rho;
+		rho = correlation / (imgNorm*tmpNorm);
+
+		// project images into jacobian
+		project_onto_jacobian_ECC(jacobian, imageWarped, imageProjection);
+		project_onto_jacobian_ECC(jacobian, templateZM, templateProjection);
+
+
+		// calculate the parameter lambda to account for illumination variation
+		imageProjectionHessian = hessianInv*imageProjection;
+		const double lambda_n = (imgNorm*imgNorm) - imageProjection.dot(imageProjectionHessian);
+		const double lambda_d = correlation - templateProjection.dot(imageProjectionHessian);
+		if (lambda_d <= 0.0)
+		{
+			rho = -1;
+			printf("The algorithm stopped before its convergence. The correlation is going to be minimized. Images may be uncorrelated or non-overlapped");
+		}
+		const double lambda = (lambda_n / lambda_d);
+
+		// estimate the update step delta_p
+		error = lambda*templateZM - imageWarped;
+		project_onto_jacobian_ECC(jacobian, error, errorProjection);
+		deltaP = hessianInv * errorProjection;
+
+		// update warping matrix
+		update_warping_matrix_ECC(warpMatrix, deltaP, motionType);
+	}
+
+	// return final correlation coefficient
+	return rho;
+}
+int ECCMatchingDemo()
+{
+	double pts[8] = { 752.43, 339.24,
+		769.33, 348.69,
+		778.05, 322.93,
+		762.73, 314.69 };
+
+	Mat cvPattern = imread("C:/temp/x.png", 0);
+	Mat cvImg = imread("E:/ARTag/0/63.png", 0);
+
+	vector<Point2d> patternPts, imgPts;
+	patternPts.push_back(Point2d(0, 339));
+	patternPts.push_back(Point2d(339, 339));
+	patternPts.push_back(Point2d(339, 0));
+	patternPts.push_back(Point2d(0, 0));
+
+	imgPts.push_back(Point2d(752.43, 339.24));
+	imgPts.push_back(Point2d(769.33, 348.69));
+	imgPts.push_back(Point2d(778.05, 322.93));
+	imgPts.push_back(Point2d(762.73, 314.69));
+
+	double Affine[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+	Compute_AffineHomo(patternPts, imgPts, Affine);
+
+	//Data initalization
+	Mat templateFloat = Mat(cvPattern.rows, cvPattern.cols, CV_32F);// to store the (smoothed) template
+	Mat imageFloat = Mat(cvImg.rows, cvImg.cols, CV_32F);// to store the (smoothed) input image
+
+	//gaussian filtering is optional
+	cvPattern.convertTo(templateFloat, templateFloat.type());
+	cvImg.convertTo(imageFloat, imageFloat.type());
+	GaussianBlur(templateFloat, templateFloat, Size(5, 5), 0, 0);
+	GaussianBlur(imageFloat, imageFloat, Size(5, 5), 0, 0);
+
+	// needed matrices for gradients and warped gradients
+	Mat gradientX = Mat::zeros(cvImg.rows, cvImg.cols, CV_32FC1);
+	Mat gradientY = Mat::zeros(cvImg.rows, cvImg.cols, CV_32FC1);
+	Mat gradientXWarped = Mat(cvPattern.rows, cvPattern.cols, CV_32FC1);
+	Mat gradientYWarped = Mat(cvPattern.rows, cvPattern.cols, CV_32FC1);
+
+	// calculate first order image derivatives
+	Matx13f dx(-0.5f, 0.0f, 0.5f);
+	filter2D(imageFloat, gradientX, -1, dx);
+	filter2D(imageFloat, gradientY, -1, dx.t());
+
+	// Define the motion model
+	const int warp_mode = 3;
+	int number_of_iterations = 30;
+	double termination_eps = 1e-6;
+	TermCriteria criteria(TermCriteria::COUNT + TermCriteria::EPS, number_of_iterations, termination_eps);
+
+	Mat wMat = Mat::eye(3, 3, CV_32F);
+	for (int ii = 0; ii < 6; ii++)
+		wMat.at<float>(ii) = Affine[ii];
+
+	double score = findTransformECC_Optimized(templateFloat, imageFloat, gradientX, gradientY, gradientXWarped, gradientYWarped, wMat, warp_mode, criteria);
+	//double score = findTransformECC(cvPattern, cvImg, wMat, warp_mode, criteria);
+
+	for (int ii = 0; ii < 4; ii++)
+	{
+		double denum = patternPts[ii].x*wMat.at<float>(2, 0) + patternPts[ii].y*wMat.at<float>(2, 1) + wMat.at<float>(2, 2);
+		imgPts[ii].x = (patternPts[ii].x*wMat.at<float>(0, 0) + patternPts[ii].y*wMat.at<float>(0, 1) + wMat.at<float>(0, 2)) / denum;
+		imgPts[ii].y = (patternPts[ii].x*wMat.at<float>(1, 0) + patternPts[ii].y*wMat.at<float>(1, 1) + wMat.at<float>(1, 2)) / denum;
+	}
+
+	// Storage for warped image.
+	Mat warped_image = Mat(cvPattern.rows, cvPattern.cols, CV_32F);
+	if (warp_mode != MOTION_HOMOGRAPHY)
+		warpAffine(cvImg, warped_image, wMat, warped_image.size(), INTER_LINEAR + WARP_INVERSE_MAP);
+	else
+		warpPerspective(cvImg, warped_image, wMat, warped_image.size(), INTER_LINEAR + WARP_INVERSE_MAP);
+	imwrite("C:/temp/y.png", warped_image);
+
+	return 0;
+}
+int TrackOpenCVLK(char *Path, int startFrame, int stopFrame, int npryLevels)
+{
+	Mat colorImg, gray, prevGray, tImg, backGround, bestFrameInWind;
+	vector<Point2f> points[2];
+	vector<uchar> status;
+	vector<float> err;
+
+	char Fname[200];
+	cvNamedWindow("Static Image detection with LK", WINDOW_NORMAL);
+
+	bool needToInit = true;
+	int MAX_COUNT = 10000, frameID = 0;
+
+	TermCriteria termcrit(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.03);
+	Size subPixWinSize(21, 21), winSize(31, 31);
+
+	for (int frameID = startFrame; frameID <= stopFrame; frameID++)
+	{
+		sprintf(Fname, "%s/%d.png", Path, frameID); colorImg = imread(Fname, 1);
+		if (colorImg.empty())
+		{
+			printf("Cannot read %s\n", Fname);
+			break;
+		}
+
+		cvtColor(colorImg, gray, CV_BGR2GRAY);
+		cvtColor(gray, backGround, CV_GRAY2BGR);
+
+		if (needToInit || frameID == startFrame) // automatic initialization
+		{
+			points[0].clear(), points[1].clear();
+			goodFeaturesToTrack(gray, points[1], MAX_COUNT, 0.05, 40, Mat(), 21, 0, 0.04);
+			cornerSubPix(gray, points[1], subPixWinSize, Size(-1, -1), termcrit);
+			for (int jj = 0; jj < points[1].size(); jj++)
+				circle(backGround, points[1][jj], 5, Scalar(0, 0, 255), 2);
+
+			sprintf(Fname, "%s/%d.txt", Path, frameID);	FILE *fp = fopen(Fname, "w+");
+			for (int jj = 0; jj < points[1].size(); jj++)
+				fprintf(fp, "%.3f %.3f\n", points[1][jj].x, points[1][jj].y);
+			fclose(fp);
+		}
+
+		if (!points[0].empty())
+		{
+			status.clear(); err.clear();
+			if (prevGray.empty())
+				gray.copyTo(prevGray);
+			calcOpticalFlowPyrLK(prevGray, gray, points[0], points[1], status, err, winSize, npryLevels, termcrit, 0, 0.001);
+
+			size_t i, k;
+			int succeded = 0;
+			for (i = k = 0; i < points[1].size(); i++)
+			{
+				if (!status[i])
+					continue;
+				succeded++;
+				points[1][k++] = points[1][i];
+				circle(backGround, points[1][i], 5, Scalar(0, 0, 255), 2);
+			}
+			points[1].resize(k);
+
+			sprintf(Fname, "%s/%d.txt", Path, frameID);	FILE *fp = fopen(Fname, "w+");
+			for (int jj = 0; jj < points[1].size(); jj++)
+				fprintf(fp, "%.3f %.3f\n", points[1][jj].x, points[1][jj].y);
+			fclose(fp);
+
+			if (succeded < 0.2*points[1].size())
+			{
+				printf("Redected @ frame %d due to low # of features", frameID);
+				goodFeaturesToTrack(gray, points[1], MAX_COUNT, 0.01, 10, Mat(), 3, 0, 0.04);
+				cornerSubPix(gray, points[1], subPixWinSize, Size(-1, -1), termcrit);
+			}
+		}
+
+		needToInit = false;
+		imshow("Static Image detection with LK", backGround);
+		char c = (char)waitKey(10);
+		if (c == 27)
+			needToInit = true;
+
+		sprintf(Fname, "%s/_%d.jpg", Path, frameID);
+		imwrite(Fname, backGround);
+
+		std::swap(points[1], points[0]);
+		swap(prevGray, gray);
+	}
+
+	return 0;
+}
+
+double ComputeSSIG(double *Para, int x, int y, int hsubset, int width, int height, int nchannels, int InterpAlgo)
+{
+	int ii, jj, kk, length = width*height;
+	double S[3], ssig = 0.0;
+
+	for (kk = 0; kk < nchannels; kk++)
+	{
+		for (jj = -hsubset; jj <= hsubset; jj++)
+		{
+			for (ii = -hsubset; ii <= hsubset; ii++)
+			{
+				Get_Value_Spline(Para + kk*length, width, height, x + ii, y + jj, S, 0, InterpAlgo);
+				ssig += S[1] * S[1] + S[2] * S[2];
+			}
+		}
+	}
+
+	return ssig / (2 * hsubset + 1) / (2 * hsubset + 1);
+}
+double Compute_AffineHomo(Point2d *From, Point2d *To, int npts, double *Affine, Point2d *sFrom, Point2d *sTo, double *A, double *B)
+{
+	//To = H*From
+	int ii;
+	bool createMem = false;
+	if (A == NULL)
+	{
+		sFrom = new Point2d[npts], sTo = new Point2d[npts];
+		A = new double[npts * 3], B = new double[npts];
+		createMem = true;
+	}
+
+	//Normalize all pts.
+	Point2d meanTo(0, 0), meanFrom(0, 0);
+	for (ii = 0; ii < npts; ii++)
+	{
+		meanTo.x += To[ii].x, meanTo.y += To[ii].y;
+		meanFrom.x += From[ii].x, meanFrom.y += From[ii].y;
+	}
+	meanTo.x /= npts, meanTo.y /= npts;
+	meanFrom.x /= npts, meanFrom.y /= npts;
+
+	Point2d scaleF(0, 0), scaleT(0, 0);
+	for (ii = 0; ii < npts; ii++)
+	{
+		scaleF.x += abs(From[ii].x - meanFrom.x) / npts, scaleF.y += abs(From[ii].y - meanFrom.y) / npts;
+		scaleT.x += abs(To[ii].x - meanTo.x) / npts, scaleT.y += abs(To[ii].y - meanTo.y) / npts;
+	}
+	for (ii = 0; ii < npts; ii++)
+	{
+		sFrom[ii].x = (From[ii].x - meanFrom.x) / scaleF.x, sFrom[ii].y = (From[ii].y - meanFrom.y) / scaleF.y;
+		sTo[ii].x = (To[ii].x - meanTo.x) / scaleT.x, sTo[ii].y = (To[ii].y - meanTo.y) / scaleT.y;
+	}
+
+	//solve for row 1
+	for (ii = 0; ii < npts; ii++)
+		A[3 * ii] = sFrom[ii].x, A[3 * ii + 1] = sFrom[ii].y, A[3 * ii + 2] = 1.0, B[ii] = sTo[ii].x;
+
+	Map<VectorXd> eB(B, npts);
+	Map<VectorXd> eAffine1(Affine, 3);
+	Map < Matrix < double, Dynamic, Dynamic, RowMajor > > eA(A, npts, 3);
+	eAffine1 = eA.jacobiSvd(ComputeThinU | ComputeThinV).solve(eB);
+
+
+	//solve for row 2
+	for (ii = 0; ii < npts; ii++)
+		A[3 * ii] = sFrom[ii].x, A[3 * ii + 1] = sFrom[ii].y, A[3 * ii + 2] = 1.0, B[ii] = sTo[ii].y;
+
+	Map<VectorXd> eB2(B, npts);
+	Map < Matrix < double, Dynamic, Dynamic, RowMajor > > eA2(A, npts, 3);
+	Map<VectorXd> eAffine2(Affine + 3, 3);
+	eAffine2 = eA2.jacobiSvd(ComputeThinU | ComputeThinV).solve(eB2);
+
+
+	//denormalize
+	double Tfrom[9] = { 1.0 / scaleF.x, 0.0, -meanFrom.x / scaleF.x, 0.0, 1.0 / scaleF.y, -meanFrom.y / scaleF.y, 0, 0, 1 };
+	double Tto[9] = { 1.0 / scaleT.x, 0.0, -meanTo.x / scaleT.x, 0.0, 1.0 / scaleT.y, -meanTo.y / scaleT.y, 0, 0, 1 };
+	double affine[9] = { Affine[0], Affine[1], Affine[2], Affine[3], Affine[4], Affine[5], 0, 0, 1 };
+	Matrix<double, 3, 3, RowMajor> eTfrom(Tfrom), eTto(Tto), eaffine(affine);
+	Matrix<double, 3, 3, RowMajor> denormAffine = eTto.inverse()*eaffine*eTfrom;
+
+	Affine[0] = denormAffine(0, 0), Affine[1] = denormAffine(0, 1), Affine[2] = denormAffine(0, 2);
+	Affine[3] = denormAffine(1, 0), Affine[4] = denormAffine(1, 1), Affine[5] = denormAffine(1, 2);
+
+	double error = 0.0, errorx, errory;
+	for (ii = 0; ii < npts; ii++)
+	{
+		errorx = (Affine[0] * From[ii].x + Affine[1] * From[ii].y + Affine[2] - To[ii].x);
+		errory = (Affine[3] * From[ii].x + Affine[4] * From[ii].y + Affine[5] - To[ii].y);
+		error += errorx*errorx + errory*errory;
+	}
+
+	if (createMem)
+		delete[]A, delete[]B, delete[]sFrom, delete[]sTo;
+
+	return error / npts;
+}
+double Compute_AffineHomo(vector<Point2d> &From, vector<Point2d> To, double *Affine, double *A, double *B)
+{
+	//To = H*From
+	int ii, npts = (int)From.size();
+	bool createMem = false;
+	if (A == NULL)
+	{
+		A = new double[npts * 3], B = new double[npts];
+		createMem = true;
+	}
+
+	//Normalize all pts.
+	Point2d meanTo(0, 0), meanFrom(0, 0);
+	for (ii = 0; ii < npts; ii++)
+	{
+		meanTo.x += To[ii].x, meanTo.y += To[ii].y;
+		meanFrom.x += From[ii].x, meanFrom.y += From[ii].y;
+	}
+	meanTo.x /= npts, meanTo.y /= npts;
+	meanFrom.x /= npts, meanFrom.y /= npts;
+
+	Point2d scaleF(0, 0), scaleT(0, 0);
+	vector<Point2d> sFrom(npts), sTo(npts);
+	for (ii = 0; ii < npts; ii++)
+	{
+		scaleF.x += abs(From[ii].x - meanFrom.x) / npts, scaleF.y += abs(From[ii].y - meanFrom.y) / npts;
+		scaleT.x += abs(To[ii].x - meanTo.x) / npts, scaleT.y += abs(To[ii].y - meanTo.y) / npts;
+	}
+	for (ii = 0; ii < npts; ii++)
+	{
+		sFrom[ii].x = (From[ii].x - meanFrom.x) / scaleF.x, sFrom[ii].y = (From[ii].y - meanFrom.y) / scaleF.y;
+		sTo[ii].x = (To[ii].x - meanTo.x) / scaleT.x, sTo[ii].y = (To[ii].y - meanTo.y) / scaleT.y;
+	}
+
+	//solve for row 1
+	for (ii = 0; ii < npts; ii++)
+		A[3 * ii] = sFrom[ii].x, A[3 * ii + 1] = sFrom[ii].y, A[3 * ii + 2] = 1.0, B[ii] = sTo[ii].x;
+
+	Map<VectorXd> eB(B, npts);
+	Map<VectorXd> eAffine1(Affine, 3);
+	Map < Matrix < double, Dynamic, Dynamic, RowMajor > > eA(A, npts, 3);
+	eAffine1 = eA.jacobiSvd(ComputeThinU | ComputeThinV).solve(eB);
+
+
+	//solve for row 2
+	for (ii = 0; ii < npts; ii++)
+		A[3 * ii] = sFrom[ii].x, A[3 * ii + 1] = sFrom[ii].y, A[3 * ii + 2] = 1.0, B[ii] = sTo[ii].y;
+
+	Map<VectorXd> eB2(B, npts);
+	Map < Matrix < double, Dynamic, Dynamic, RowMajor > > eA2(A, npts, 3);
+	Map<VectorXd> eAffine2(Affine + 3, 3);
+	eAffine2 = eA2.jacobiSvd(ComputeThinU | ComputeThinV).solve(eB2);
+
+
+	//denormalize
+	double Tfrom[9] = { 1.0 / scaleF.x, 0.0, -meanFrom.x / scaleF.x, 0.0, 1.0 / scaleF.y, -meanFrom.y / scaleF.y, 0, 0, 1 };
+	double Tto[9] = { 1.0 / scaleT.x, 0.0, -meanTo.x / scaleT.x, 0.0, 1.0 / scaleT.y, -meanTo.y / scaleT.y, 0, 0, 1 };
+	double affine[9] = { Affine[0], Affine[1], Affine[2], Affine[3], Affine[4], Affine[5], 0, 0, 1 };
+	Matrix<double, 3, 3, RowMajor> eTfrom(Tfrom), eTto(Tto), eaffine(affine);
+	Matrix<double, 3, 3, RowMajor> denormAffine = eTto.inverse()*eaffine*eTfrom;
+
+	Affine[0] = denormAffine(0, 0), Affine[1] = denormAffine(0, 1), Affine[2] = denormAffine(0, 2);
+	Affine[3] = denormAffine(1, 0), Affine[4] = denormAffine(1, 1), Affine[5] = denormAffine(1, 2);
+
+	double error = 0.0, errorx, errory;
+	for (ii = 0; ii < npts; ii++)
+	{
+		errorx = (Affine[0] * From[ii].x + Affine[1] * From[ii].y + Affine[2] - To[ii].x);
+		errory = (Affine[3] * From[ii].x + Affine[4] * From[ii].y + Affine[5] - To[ii].y);
+		error += errorx*errorx + errory*errory;
+	}
+
+	if (createMem)
+		delete[]A, delete[]B;
+
+	return error / npts;
+}
 double TMatchingSuperCoarse(double *Pattern, int pattern_size, int hsubset, double *Image, int width, int height, int nchannels, Point2i &POI, int search_area, double thresh, double *T)
 {
 	//No interpolation at all, just slide the template around to compute the ZNCC
@@ -10461,7 +10967,7 @@ double TMatchingFine_ZNCC(double *Pattern, int pattern_size, int hsubset, double
 
 	return 1.0 - 0.5*DIC_Coeff_min;
 }
-double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch, double *ShapePara, double *oPara, double *Timg, double *T, double *Znssd_reqd)
+double TemplateMatching0(double *RefPara, double *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch, double *ShapePara, double *oPara, double *Timg, double *T, double *Znssd_reqd)
 {
 	//Also a fine ImgRef matching,.... some differences in the input as compared to TMatchingFine though
 	// NOTE: initial guess is of the form of the homography
@@ -10475,7 +10981,7 @@ double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef,
 	int p_jump, p_jump_0 = 1, p_jump_incr = 1;
 	int TimgS = 2 * hsubset + 1, Tlength = TimgS*TimgS, RefLength = widthRef*heightRef, TarLength = widthTar*heightTar;
 
-	double 	AA[196 * 196], BB[14], CC[14], p[14], ip[14], p_best[14];
+	double 	AA[196], BB[14], CC[14], p[14], ip[14], p_best[14];
 	if (ShapePara == NULL)
 	{
 		for (ii = 0; ii < nn; ii++)
@@ -10917,7 +11423,7 @@ double TrackingByLK(double *RefPara, double *TarPara, int hsubset, int widthRef,
 	}
 	return ZNCC;
 }
-double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch, double *ShapePara, double *oPara, double *Timg, double *T, double *Znssd_reqd)
+double TemplateMatching0(float *RefPara, float *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch, double *ShapePara, double *oPara, double *Timg, double *T, double *Znssd_reqd)
 {
 	//Also a fine ImgRef matching,.... some differences in the input as compared to TMatchingFine though
 	// NOTE: initial guess is of the form of the homography
@@ -11373,91 +11879,1006 @@ double TrackingByLK(float *RefPara, float *TarPara, int hsubset, int widthRef, i
 	}
 	return ZNCC;
 }
-int TrackOpenCVLK(char *Path, int startFrame, int stopFrame)
+double TemplateMatching(double *RefPara, double *TarPara, int refWidth, int refHeight, int tarWidth, int tarHeight, int nchannels, Point2d From, Point2d &Target, LKParameters LKArg, bool greedySearch, double *Timg, double *T, double *Znssd_reqd, double *iWp, double *direction)
 {
-	Mat colorImg, gray, prevGray, tImg, backGround, bestFrameInWind;
-	vector<Point2f> points[2];
-	vector<uchar> status;
-	vector<float> err;
+	//DIC_Algo = 0: epip translation+photometric
+	//DIC_Algo = 1: epip affine+photometric
+	//DIC_Algo = 2: translation+photometric
+	//DIC_Algo = 3: affine+photometric
+	//DIC_Algo = 4: epi irreglar + photometric
+	//DIC_Algo = 5: epi quadratic + photometric
+	//DIC_Algo = 6: irregular + photometric
+	//DIC_Algo = 7:  quadratic + photmetric
+	//DIC_Algo = 8: ZNCC affine. Only support gray scale image
+	//DIC_Algo = 9:  ZNCC quadratic. Only support gray scale image
 
-	char Fname[200];
-	cvNamedWindow("Static Image detection with LK", WINDOW_NORMAL);
 
-	bool needToInit = true;
-	int MAX_COUNT = 5000, frameID = 0;
+	int i, j, k, kk, iii, jjj, ij, i2, j2, m;
+	int hsubset = LKArg.hsubset, DIC_Algo = LKArg.DIC_Algo, Interpolation_Algorithm = LKArg.InterpAlgo;
+	int Iter_Max = LKArg.IterMax, Convergence_Criteria = LKArg.Convergence_Criteria, Speed = LKArg.Analysis_Speed;
+	int refLength = refWidth*refHeight, tarLength = tarWidth*tarHeight, TimgS = 2 * hsubset + 1, Tlength = TimgS*TimgS;
 
-	TermCriteria termcrit(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.03);
-	Size subPixWinSize(21, 21), winSize(31, 31);
+	double ii, jj, II, JJ, iii_n, jjj_n, a, b, TarIdx, TarIdy, CorrelScore, CorrelScoreMin, t_1, t_2, t_3, t_4, t_5, t_6, t_f, t_ff, t_g, RefI, TarI, S[9], p_best[14];
+	double conv_crit_1 = 1.0 / pow(10.0, Convergence_Criteria + 2), conv_crit_2 = conv_crit_1*0.01;
+	int NN[] = { 3, 7, 4, 8, 9, 13, 10, 14, 6, 12 }, jumpStep[2] = { 1, 2 };
+	int DIC_Algo2 = DIC_Algo, nn, nExtraParas = 2, iter = 0;
+	int p_jump_0 = jumpStep[Speed], p_jump, p_jump_incr = 1;
 
-	for (int frameID = startFrame; frameID <= stopFrame; frameID++)
+	if (DIC_Algo == 4)
+		nn = 7, DIC_Algo2 = DIC_Algo, DIC_Algo = 1;
+	else if (DIC_Algo == 5)
+		nn = 7, DIC_Algo2 = DIC_Algo, DIC_Algo = 1;
+	else if (DIC_Algo == 6)
+		nn = 8, DIC_Algo2 = DIC_Algo, DIC_Algo = 3;
+	else if (DIC_Algo == 7)
+		nn = 8, DIC_Algo2 = DIC_Algo, DIC_Algo = 3;
+	else if (DIC_Algo == 9)
+		nn = 6, DIC_Algo2 = DIC_Algo, DIC_Algo = 8;
+	else
+		nn = NN[DIC_Algo];
+
+	double AA[196], BB[14], CC[14], p[14];
+	if (DIC_Algo < 8)
+		for (i = 0; i < nn; i++)
+			p[i] = (i == nn - 2 ? 1.0 : 0.0);
+	else
+		for (i = 0; i < nn; i++)
+			p[i] = 0.0;
+
+	bool createMem = false;
+	if (Timg == NULL)
 	{
-		sprintf(Fname, "%s/%d.png", Path, frameID); colorImg = imread(Fname, 1);
-		if (colorImg.empty())
-			break;
-
-		cvtColor(colorImg, gray, CV_BGR2GRAY);
-		cvtColor(gray, backGround, CV_GRAY2BGR);
-
-		if (frameID == startFrame) // automatic initialization
-		{
-			goodFeaturesToTrack(gray, points[1], MAX_COUNT, 0.05, 40, Mat(), 21, 0, 0.04);
-			cornerSubPix(gray, points[1], subPixWinSize, Size(-1, -1), termcrit);
-			for (int jj = 0; jj < points[1].size(); jj++)
-				circle(backGround, points[1][jj], 5, Scalar(83, 185, 255), -1, 8);
-
-			sprintf(Fname, "%s/%d.txt", Path, frameID);	FILE *fp = fopen(Fname, "w+");
-			for (int jj = 0; jj < points[1].size(); jj++)
-				fprintf(fp, "%.3f %.3f\n", points[1][jj].x, points[1][jj].y);
-			fclose(fp);
-		}
-
-		if (!points[0].empty())
-		{
-			status.clear(); err.clear();
-			if (prevGray.empty())
-				gray.copyTo(prevGray);
-			calcOpticalFlowPyrLK(prevGray, gray, points[0], points[1], status, err, winSize, 3, termcrit, 0, 0.001);
-
-			size_t i, k;
-			int succeded = 0;
-			for (i = k = 0; i < points[1].size(); i++)
-			{
-				if (!status[i])
-					continue;
-				succeded++;
-				points[1][k++] = points[1][i];
-				circle(backGround, points[1][i], 5, Scalar(83, 185, 255), -1, 8);
-			}
-			points[1].resize(k);
-
-			sprintf(Fname, "%s/%d.txt", Path, frameID);	FILE *fp = fopen(Fname, "w+");
-			for (int jj = 0; jj < points[1].size(); jj++)
-				fprintf(fp, "%.3f %.3f\n", points[1][jj].x, points[1][jj].y);
-			fclose(fp);
-
-			if (succeded < 0.5*points[1].size())
-			{
-				printf("Redected @ frame %d due to low # of features", frameID);
-				goodFeaturesToTrack(gray, points[1], MAX_COUNT, 0.01, 10, Mat(), 3, 0, 0.04);
-				cornerSubPix(gray, points[1], subPixWinSize, Size(-1, -1), termcrit);
-			}
-		}
-
-		needToInit = false;
-		imshow("Static Image detection with LK", backGround);
-		char c = (char)waitKey(10);
-		if (c == 27)
-			break;
-
-		sprintf(Fname, "%s/_%d.png", Path, frameID);
-		imwrite(Fname, backGround);
-
-		std::swap(points[1], points[0]);
-		swap(prevGray, gray);
+		createMem = true;
+		Timg = new double[Tlength*nchannels], T = new double[2 * Tlength*nchannels], Znssd_reqd = new double[6 * Tlength*nchannels];
 	}
 
-	return 0;
+	for (jjj = -hsubset; jjj <= hsubset; jjj++)
+	{
+		for (iii = -hsubset; iii <= hsubset; iii++)
+		{
+			ii = From.x + iii, jj = From.y + jjj;
+			for (kk = 0; kk < nchannels; kk++)
+			{
+				Get_Value_Spline(RefPara + kk*refLength, refWidth, refHeight, ii, jj, S, -1, Interpolation_Algorithm);
+				Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength] = S[0];
+			}
+		}
+	}
+
+	bool printout = false; FILE *fp;
+	if (printout)
+	{
+		fp = fopen("C:/temp/src.txt", "w+");
+		for (jjj = -hsubset; jjj <= hsubset; jjj++)
+		{
+			for (iii = -hsubset; iii <= hsubset; iii++)
+				for (kk = 0; kk < nchannels; kk++)
+					fprintf(fp, "%.2f ", Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength]);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+
+	//Let's start with translation and initial shape paras (if available)
+	if (greedySearch)
+	{
+		bool Break_Flag = false;
+		double initW[4] = { 0, 0, 0, 0 };
+		if (iWp != NULL)
+			for (int ii = 0; ii < 4; ii++)
+				initW[ii] = iWp[ii];
+
+		CorrelScoreMin = 1e10;
+		p[2] = 1.0, p[3] = 0.0;
+		for (k = 0; k < Iter_Max; k++)
+		{
+			t_1 = 0.0, t_2 = 0.0;
+			for (i = 0; i < nn*nn; i++)
+				AA[i] = 0.0;
+			for (i = 0; i < nn; i++)
+				BB[i] = 0.0;
+
+			if (printout)
+				fp = fopen("C:/temp/tar.txt", "w+");
+
+			if (DIC_Algo == 0 || DIC_Algo == 1)
+				nn = 3;
+			else if (DIC_Algo == 2 || DIC_Algo == 3)
+				nn = 4;
+
+			a = p[2], b = p[3];
+			for (jjj = -hsubset; jjj <= hsubset; jjj++)
+			{
+				for (iii = -hsubset; iii <= hsubset; iii++)
+				{
+					if (DIC_Algo == 0)
+						II = Target.x + iii + p[0] * direction[0], JJ = Target.y + jjj + p[0] * direction[1];
+					else if (DIC_Algo == 1)
+					{
+						II = Target.x + iii + p[0] * direction[0] + initW[0] * iii + initW[1] * jjj;
+						JJ = Target.y + jjj + p[0] * direction[1] + initW[2] * iii + initW[3] * jjj;
+					}
+					else if (DIC_Algo == 2)
+						II = Target.x + iii + p[0], JJ = Target.y + jjj + p[1];
+					else if (DIC_Algo == 3)
+					{
+						II = Target.x + iii + p[0] + initW[0] * iii + initW[1] * jjj;
+						JJ = Target.y + jjj + p[1] + initW[2] * iii + initW[3] * jjj;
+					}
+
+					if (II<0.0 || II>(double)(refWidth - 1) - (1e-10) || JJ<0.0 || JJ>(double)(refHeight - 1) - (1e-10))
+						continue;
+
+					for (kk = 0; kk < nchannels; kk++)
+					{
+						Get_Value_Spline(TarPara + kk*tarLength, tarWidth, tarHeight, II, JJ, S + 3 * kk, 0, Interpolation_Algorithm);
+
+						RefI = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength], TarI = S[3 * kk];
+						TarIdx = S[3 * kk + 1], TarIdy = S[3 * kk + 2];
+
+						if (printout)
+							fprintf(fp, "%.2f ", TarI);
+
+						t_3 = a*TarI + b - RefI;
+						t_4 = a, t_5 = t_4*TarIdx, t_6 = t_4*TarIdy;
+						if (DIC_Algo == 0 || DIC_Algo == 1)
+							CC[0] = t_5*direction[0] + t_6*direction[1], CC[1] = TarI, CC[2] = 1.0;
+						else if (DIC_Algo == 2 || DIC_Algo == 3)
+							CC[0] = t_5, CC[1] = t_6, CC[2] = TarI, CC[3] = 1.0;
+
+						for (j = 0; j < nn; j++)
+						{
+							BB[j] += t_3*CC[j];
+							for (i = j; i < nn; i++)
+								AA[j * nn + i] += CC[i] * CC[j];
+						}
+						t_1 += t_3*t_3;
+						t_2 += RefI*RefI;
+					}
+				}
+				if (printout)
+					fprintf(fp, "\n");
+			}
+			if (printout)
+				fclose(fp);
+
+			CorrelScore = t_1 / t_2;
+
+			mat_completeSym(AA, nn, true);
+			QR_Solution_Double(AA, BB, nn, nn);
+			for (i = 0; i < nn; i++)
+				p[i] -= BB[i];
+
+			if (CorrelScore != CorrelScore || CorrelScore > 50)
+			{
+				if (createMem)
+					delete[]T, delete[]Timg;
+				return 0.0;
+			}
+			if (CorrelScore < CorrelScoreMin)	// If the iteration does not converge, this can be helpful
+			{
+				CorrelScoreMin = CorrelScore;
+				for (i = 0; i < nn; i++)
+					p_best[i] = p[i];
+				if (p[0] != p[0])
+				{
+					if (createMem)
+						delete[]T, delete[]Timg;
+					return 0.0;
+				}
+			}
+
+			if (DIC_Algo <= 1)
+			{
+				if (abs(p[0] * direction[0]) > hsubset || abs(p[1] * direction[0]) > hsubset)
+				{
+					if (createMem)
+						delete[]T, delete[]Timg;
+					return 0.0;
+				}
+				if (fabs(BB[0]) < 0.1*conv_crit_1)
+					Break_Flag = true;
+			}
+			else
+			{
+				if (abs(p[0]) > hsubset || abs(p[1]) > hsubset)
+				{
+					if (createMem)
+						delete[]T, delete[]Timg;
+					return 0.0;
+				}
+				if (fabs(BB[0]) < 0.1*conv_crit_1 && fabs(BB[1]) < 0.1*conv_crit_1)
+					Break_Flag = true;
+			}
+
+			if (Break_Flag)
+				break;
+		}
+		//Store results
+		if (DIC_Algo == 0 || DIC_Algo == 1)
+			p[0] = 0.5*(p[0] / direction[0] + p[1] / direction[1]);
+		else if (DIC_Algo == 2 || DIC_Algo == 3)
+			p[0] = p_best[0], p[1] = p_best[1];
+	}
+
+	if (iWp != NULL)
+	{
+		if (DIC_Algo == 1)
+			p[1] = iWp[0], p[2] = iWp[1], p[3] = iWp[2], p[4] = iWp[3];
+		else if (DIC_Algo == 3)
+			p[2] = iWp[0], p[3] = iWp[1], p[4] = iWp[2], p[5] = iWp[3];
+	}
+
+	if (DIC_Algo != 0 && DIC_Algo != 2)
+	{
+		//Now, full DIC
+		if (DIC_Algo == 4)
+			nn = 7, DIC_Algo2 = DIC_Algo, DIC_Algo = 1;
+		else if (DIC_Algo == 5)
+			nn = 7, DIC_Algo2 = DIC_Algo, DIC_Algo = 1;
+		else if (DIC_Algo == 6)
+			nn = 8, DIC_Algo2 = DIC_Algo, DIC_Algo = 3;
+		else if (DIC_Algo == 7)
+			nn = 8, DIC_Algo2 = DIC_Algo, DIC_Algo = 3;
+		else
+			nn = NN[DIC_Algo];
+
+		for (p_jump = p_jump_0; p_jump > 0; p_jump -= p_jump_incr)
+		{
+			CorrelScoreMin = 1e10;
+			bool Break_Flag = false;
+			for (k = 0; k < Iter_Max; k++)
+			{
+				m = -1, t_1 = 0.0, t_2 = 0.0;
+				for (i = 0; i < nn*nn; i++)
+					AA[i] = 0.0;
+				for (i = 0; i < nn; i++)
+					BB[i] = 0.0;
+
+				if (printout)
+					fp = fopen("C:/temp/tar.txt", "w+");
+
+				a = p[nn - 2], b = p[nn - 1];
+				for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+				{
+					for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+					{
+						//if (DIC_Algo == 0)
+						//	II = Target.x + iii + p[0] * direction[0], JJ = Target.y + jjj + p[0] * direction[1];
+						if (DIC_Algo == 1) //afine
+						{
+							II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj;
+							JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj;
+						}
+						//else if (DIC_Algo == 2)
+						//	II = Target.x + iii + p[0], JJ = Target.y + jjj + p[1];
+						else if (DIC_Algo == 3)
+						{
+							II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj;
+							JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+						}
+
+						if (II<0.0 || II>(double)(tarWidth - 1) - (1e-10) || JJ<0.0 || JJ>(double)(tarHeight - 1) - (1e-10))
+							continue;
+
+						for (kk = 0; kk < nchannels; kk++)
+						{
+							Get_Value_Spline(TarPara + kk*tarLength, tarWidth, tarHeight, II, JJ, S + 3 * kk, 0, Interpolation_Algorithm);
+
+							RefI = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength], TarI = S[3 * kk];
+							TarIdx = S[3 * kk + 1], TarIdy = S[3 * kk + 2];
+
+							if (printout)
+								fprintf(fp, "%.2f ", TarI);
+
+							if (DIC_Algo < 8)
+							{
+								t_3 = a*TarI + b - RefI;
+								t_4 = a, t_5 = t_4*TarIdx, t_6 = t_4*TarIdy;
+
+								//if (DIC_Algo == 0)
+								//	CC[0] = t_5*direction[0] + t_6*direction[1], CC[1] = TarI, CC[2] = 1.0;
+								if (DIC_Algo == 1)
+								{
+									CC[0] = t_5*direction[0] + t_6*direction[1];
+									CC[1] = t_5*iii, CC[2] = t_5*jjj, CC[3] = t_6*iii, CC[4] = t_6*jjj;
+									CC[5] = TarI, CC[6] = 1.0;
+								}
+								//else if (DIC_Algo == 2)
+								//	CC[0] = t_5, CC[1] = t_6, CC[2] = TarI, CC[3] = 1.0;
+								else if (DIC_Algo == 3)
+								{
+									CC[0] = t_5, CC[1] = t_6;
+									CC[2] = t_5*iii, CC[3] = t_5*jjj, CC[4] = t_6*iii, CC[5] = t_6*jjj;
+									CC[6] = TarI, CC[7] = 1.0;
+								}
+
+								for (j = 0; j < nn; j++)
+								{
+									BB[j] += t_3*CC[j];
+									for (i = j; i < nn; i++)
+										AA[j*nn + i] += CC[i] * CC[j];
+								}
+
+								t_1 += t_3*t_3, t_2 += RefI*RefI;
+							}
+							else
+							{
+								m++;
+								Znssd_reqd[6 * m + 0] = RefI, Znssd_reqd[6 * m + 1] = TarI;
+								Znssd_reqd[6 * m + 2] = TarIdx, Znssd_reqd[6 * m + 3] = TarIdy;
+								Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
+								t_1 += RefI, t_2 += TarI;
+							}
+						}
+					}
+					if (printout)
+						fprintf(fp, "\n");
+				}
+				if (printout)
+					fclose(fp);
+
+				if (DIC_Algo < 8)
+					CorrelScore = t_1 / t_2;
+				else
+				{
+					if (k == 0)
+					{
+						t_f = t_1 / (m + 1), t_1 = 0.0;
+						for (iii = 0; iii <= m; iii++)
+							t_4 = Znssd_reqd[6 * iii + 0] - t_f, t_1 += t_4*t_4;
+						t_ff = sqrt(t_1);
+					}
+
+					t_g = t_2 / (m + 1), t_2 = 0.0;
+					for (iii = 0; iii <= m; iii++)
+						t_5 = Znssd_reqd[6 * iii + 1] - t_g, t_2 += t_5*t_5;
+					t_2 = sqrt(t_2);
+
+					CorrelScore = 0.0;
+					for (iii = 0; iii <= m; iii++)
+					{
+						t_4 = Znssd_reqd[6 * iii + 0] - t_f, t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+						TarIdx = Znssd_reqd[6 * iii + 2], TarIdy = Znssd_reqd[6 * iii + 3];
+						iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
+
+						t_6 = t_5 / t_2 - t_4 / t_ff;
+						t_3 = t_6 / t_2;
+						CC[0] = TarIdx, CC[1] = TarIdy;
+						CC[2] = TarIdx*iii_n, CC[3] = TarIdx*jjj_n;
+						CC[4] = TarIdy*iii_n, CC[5] = TarIdy*jjj_n;
+
+						t_4 = t_2*t_2;
+						for (j = 0; j < nn; j++)
+						{
+							BB[j] += t_3*CC[j];
+							for (i = j; i < nn; i++)
+								AA[j*nn + i] += CC[i] * CC[j] / t_4;
+						}
+						CorrelScore += t_6*t_6;
+					}
+					if (CorrelScore != CorrelScore)
+						return 9e9;
+					if (CorrelScore <= DBL_MAX && CorrelScore >= -DBL_MAX)
+						return 9e9;
+				}
+
+				mat_completeSym(AA, nn, true);
+				QR_Solution_Double(AA, BB, nn, nn);
+				for (i = 0; i < nn; i++)
+					p[i] -= BB[i];
+
+				if (CorrelScore != CorrelScore || CorrelScore > 50)
+				{
+					if (createMem)
+						delete[]T, delete[]Timg;
+					return 0.0;
+				}
+				if (CorrelScore < CorrelScoreMin)	// If the iteration does not converge, this can be helpful
+				{
+					CorrelScoreMin = CorrelScore;
+					for (i = 0; i < nn; i++)
+						p_best[i] = p[i];
+					if (p[0] != p[0])
+					{
+						if (createMem)
+							delete[]T, delete[]Timg;
+						return 0.0;
+					}
+				}
+
+				if (DIC_Algo <= 1)
+				{
+					if (abs(p[0] * direction[0]) > hsubset || abs(p[1] * direction[0]) > hsubset)
+					{
+						if (createMem)
+							delete[]T, delete[]Timg;
+						return 0.0;
+					}
+					if (fabs(BB[0]) < conv_crit_1)
+					{
+						for (i = 1; i < nn - nExtraParas; i++)
+							if (fabs(BB[i]) > conv_crit_2)
+								break;
+						if (i == nn - nExtraParas)
+							Break_Flag = true;
+					}
+				}
+				else if (DIC_Algo < 8)
+				{
+					if (abs(p[0]) > hsubset || abs(p[1]) > hsubset)
+					{
+						if (createMem)
+						{
+							delete[]T;
+							delete[]Timg;
+						}
+						return 0.0;
+					}
+					if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+					{
+						for (i = 2; i < nn - nExtraParas; i++)
+						{
+							if (fabs(BB[i]) > conv_crit_2)
+								break;
+						}
+						if (i == nn - nExtraParas)
+							Break_Flag = true;
+					}
+				}
+				else
+				{
+					if (abs(p[0]) > hsubset || abs(p[1]) > hsubset)
+						return 9e9;
+					if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+					{
+						for (iii = 2; iii < nn; iii++)
+							if (fabs(BB[iii]) > conv_crit_2)
+								break;
+						if (iii == nn)
+							Break_Flag = true;
+					}
+				}
+
+				if (Break_Flag)
+					break;
+			}
+			iter += k;
+
+			// In case the iteration converges to "wrong" points, always use the data that lead to the least-square value.
+			for (i = 0; i < nn; i++)
+				p[i] = p_best[i];
+		}
+
+		//Quadratic if needed:
+		if (DIC_Algo2 > 3)
+		{
+			DIC_Algo = DIC_Algo2, nn = NN[DIC_Algo];
+			if (DIC_Algo == 4)
+			{
+				p[7] = p[5], p[8] = p[6];
+				for (i = 5; i < 7; i++)
+					p[i] = 0.0;
+			}
+			else if (DIC_Algo == 5)
+			{
+				p[11] = p[5], p[12] = p[6];
+				for (i = 5; i < 11; i++)
+					p[i] = 0.0;
+			}
+			else if (DIC_Algo == 6)
+			{
+				p[8] = p[6], p[9] = p[7];
+				for (i = 6; i < 8; i++)
+					p[i] = 0.0;
+			}
+			else if (DIC_Algo == 7)
+			{
+				p[12] = p[6], p[13] = p[7];
+				for (i = 6; i < 12; i++)
+					p[i] = 0.0;
+			}
+
+			CorrelScoreMin = 1e10;
+			bool Break_Flag = false;
+			for (k = 0; k < Iter_Max; k++)
+			{
+				m = -1, t_1 = 0.0, t_2 = 0.0;
+				for (i = 0; i < nn*nn; i++)
+					AA[i] = 0.0;
+				for (i = 0; i < nn; i++)
+					BB[i] = 0.0;
+				a = p[nn - 2], b = p[nn - 1];
+
+				if (printout)
+					fp = fopen("C:/temp/tar.txt", "w+");
+				for (jjj = -hsubset; jjj <= hsubset; jjj += p_jump)
+				{
+					for (iii = -hsubset; iii <= hsubset; iii += p_jump)
+					{
+						if (DIC_Algo == 4) //irregular
+						{
+							ij = iii*jjj;
+							II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj + p[5] * ij;
+							JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj + p[6] * ij;
+						}
+						else if (DIC_Algo == 5) //Quadratic
+						{
+							ij = iii*jjj, i2 = iii*iii, j2 = jjj*jjj;
+							II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj + p[5] * ij + p[7] * i2 + p[8] * j2;
+							JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj + p[6] * ij + p[9] * i2 + p[10] * j2;
+						}
+						else if (DIC_Algo == 6)
+						{
+							ij = iii*jjj;
+							II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * ij;
+							JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[7] * ij;
+						}
+						else if (DIC_Algo == 7 || DIC_Algo == 9)
+						{
+							ij = iii*jjj, i2 = iii*iii, j2 = jjj*jjj;
+							II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * ij + p[8] * i2 + p[9] * j2;
+							JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[7] * ij + p[10] * i2 + p[11] * j2;
+						}
+
+						if (II<0.0 || II>(double)(tarWidth - 1) - (1e-10) || JJ<0.0 || JJ>(double)(tarHeight - 1) - (1e-10))
+							continue;
+
+						for (kk = 0; kk < nchannels; kk++)
+						{
+							Get_Value_Spline(TarPara + kk*tarLength, tarWidth, tarHeight, II, JJ, S + 3 * kk, 0, Interpolation_Algorithm);
+
+							RefI = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength], TarI = S[3 * kk];
+							TarIdx = S[3 * kk + 1], TarIdy = S[3 * kk + 2];
+							m++;
+
+							if (printout)
+								fprintf(fp, "%.2f ", TarI);
+
+							if (DIC_Algo != 9)
+							{
+								t_3 = a*TarI + b - RefI;
+								t_4 = a, t_5 = t_4*TarIdx, t_6 = t_4*TarIdy;
+								if (DIC_Algo == 4) //irregular
+								{
+									CC[0] = t_5*direction[0] + t_6*direction[1];
+									CC[1] = t_5*iii, CC[2] = t_5*jjj, CC[3] = t_6*iii, CC[4] = t_6*jjj;
+									CC[5] = t_5*ij, CC[6] = t_6*ij;
+									CC[7] = TarI, CC[8] = 1.0;
+								}
+								else if (DIC_Algo == 5) //Quadratic
+								{
+									CC[0] = t_5*direction[0] + t_6*direction[1];
+									CC[1] = t_5*iii, CC[2] = t_5*jjj, CC[3] = t_6*iii, CC[4] = t_6*jjj;
+									CC[5] = t_5*ij, CC[6] = t_6*ij, CC[7] = t_5*i2, CC[8] = t_5*j2, CC[9] = t_6*i2, CC[10] = t_6*j2;
+									CC[11] = TarI, CC[12] = 1.0;
+								}
+								else if (DIC_Algo == 6)  //irregular
+								{
+									CC[0] = t_5, CC[1] = t_6;
+									CC[2] = t_5*iii, CC[3] = t_5*jjj, CC[4] = t_6*iii, CC[5] = t_6*jjj;
+									CC[6] = t_5*ij, CC[7] = t_6*ij;
+									CC[8] = TarI, CC[9] = 1.0;
+								}
+								else if (DIC_Algo == 7)
+								{
+									CC[0] = t_5, CC[1] = t_6;
+									CC[2] = t_5*iii, CC[3] = t_5*jjj, CC[4] = t_6*iii, CC[5] = t_6*jjj;
+									CC[6] = t_5*ij, CC[7] = t_6*ij, CC[8] = t_5*i2, CC[9] = t_5*j2, CC[10] = t_6*i2, CC[11] = t_6*j2;
+									CC[12] = TarI, CC[13] = 1.0;
+								}
+
+								for (j = 0; j < nn; j++)
+								{
+									BB[j] += t_3*CC[j];
+									for (i = j; i < nn; i++)
+										AA[j*nn + i] += CC[i] * CC[j];
+								}
+
+								t_1 += t_3*t_3, t_2 += RefI*RefI;
+							}
+							else
+							{
+								Znssd_reqd[6 * m + 0] = RefI, Znssd_reqd[6 * m + 1] = TarI;
+								Znssd_reqd[6 * m + 2] = TarIdx, Znssd_reqd[6 * m + 3] = TarIdy;
+								Znssd_reqd[6 * m + 4] = (double)iii, Znssd_reqd[6 * m + 5] = (double)jjj;
+								t_1 += RefI, t_2 += TarI;
+							}
+						}
+					}
+					if (printout)
+						fprintf(fp, "\n");
+				}
+				if (printout)
+					fclose(fp);
+
+				if (DIC_Algo != 9)
+					CorrelScore = t_1 / t_2;
+				else
+				{
+					if (k == 0)
+					{
+						t_f = t_1 / (m + 1), t_1 = 0.0;
+						for (iii = 0; iii <= m; iii++)
+							t_4 = Znssd_reqd[6 * iii + 0] - t_f, t_1 += t_4*t_4;
+						t_ff = sqrt(t_1);
+					}
+
+					t_g = t_2 / (m + 1), t_2 = 0.0;
+					for (iii = 0; iii <= m; iii++)
+					{
+						t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+						t_2 += t_5*t_5;
+					}
+					t_2 = sqrt(t_2);
+
+					CorrelScore = 0.0;
+					for (iii = 0; iii <= m; iii++)
+					{
+						t_4 = Znssd_reqd[6 * iii + 0] - t_f;
+						t_5 = Znssd_reqd[6 * iii + 1] - t_g;
+						t_6 = t_5 / t_2 - t_4 / t_ff;
+						t_3 = t_6 / t_2;
+						TarIdx = Znssd_reqd[6 * iii + 2], TarIdy = Znssd_reqd[6 * iii + 3];
+						iii_n = Znssd_reqd[6 * iii + 4], jjj_n = Znssd_reqd[6 * iii + 5];
+						CC[0] = TarIdx, CC[1] = TarIdy;
+						CC[2] = TarIdx*iii_n, CC[3] = TarIdx*jjj_n;
+						CC[4] = TarIdy*iii_n, CC[5] = TarIdy*jjj_n;
+						CC[6] = TarIdx*iii_n*iii_n*0.5, CC[7] = TarIdx*jjj_n*jjj_n*0.5, CC[8] = TarIdx*iii_n*jjj_n;
+						CC[9] = TarIdy*iii_n*iii_n*0.5, CC[10] = TarIdy*jjj_n*jjj_n*0.5, CC[11] = TarIdy*iii_n*jjj_n;
+						for (j = 0; j < nn; j++)
+						{
+							BB[j] += t_3*CC[j];
+							for (i = j; i < nn; i++)
+								AA[j*nn + i] += CC[i] * CC[j] / (t_2*t_2);
+						}
+
+						CorrelScore += t_6*t_6;
+					}
+					if (CorrelScore != CorrelScore)
+						return 9e9;
+					if (CorrelScore <= DBL_MAX && CorrelScore >= -DBL_MAX)
+						return 9e9;
+				}
+
+				mat_completeSym(AA, nn);
+				QR_Solution_Double(AA, BB, nn, nn);
+				for (i = 0; i < nn; i++)
+					p[i] -= BB[i];
+
+				if (CorrelScore < CorrelScoreMin)	// If the iteration does not converge, this can be helpful
+				{
+					CorrelScoreMin = CorrelScore;
+					for (i = 0; i < nn; i++)
+						p_best[i] = p[i];
+					if (p[0] != p[0])
+					{
+						if (createMem)
+							delete[]T, delete[]Timg;
+						return 0.0;
+					}
+				}
+
+				if (DIC_Algo <= 5)
+				{
+					if (abs(p[0] * direction[0]) > hsubset || abs(p[1] * direction[0]) > hsubset)
+					{
+						if (createMem)
+							delete[]T, delete[]Timg;
+						return 0.0;
+					}
+					if (fabs(BB[0]) < conv_crit_1)
+					{
+						for (i = 1; i < nn - nExtraParas; i++)
+							if (fabs(BB[i]) > conv_crit_2)
+								break;
+						if (i == nn - nExtraParas)
+							Break_Flag = true;
+					}
+				}
+				else if (DIC_Algo <= 7)
+				{
+					if (abs(p[0]) > hsubset || abs(p[1]) > hsubset)
+					{
+						if (createMem)
+							delete[]T, delete[]Timg;
+						return 0.0;
+					}
+					if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+					{
+						for (i = 2; i < nn - nExtraParas; i++)
+							if (fabs(BB[i]) > conv_crit_2)
+								break;
+						if (i == nn - nExtraParas)
+							Break_Flag = true;
+					}
+				}
+				else
+				{
+					if (abs(p[0]) > hsubset || abs(p[1]) > hsubset)
+						return 9e9;
+					if (fabs(BB[0]) < conv_crit_1 && fabs(BB[1]) < conv_crit_1)
+					{
+						for (iii = 2; iii < nn; iii++)
+							if (fabs(BB[iii]) > conv_crit_2)
+								break;
+						if (iii == nn)
+							Break_Flag = true;
+					}
+				}
+
+				if (Break_Flag)
+					break;
+			}
+			iter += k;
+
+			// In case the iteration converges to "wrong" points, always use the data that lead to the least-square value.
+			for (i = 0; i < nn; i++)
+				p[i] = p_best[i];
+		}
+	}
+	/// DIC Iteration: End
+
+	//Now, dont really trust the pssad error too much, compute zncc score instead! They are usually close on convergence, but in case of trouble, zncc is more reliable.
+	if (DIC_Algo < 8 && CorrelScoreMin < LKArg.PSSDab_thresh)
+	{
+		int m = 0;
+		double t_1, t_2, t_3, t_4, t_5, t_f = 0.0, t_g = 0.0;
+		if (printout)
+			fp = fopen("C:/temp/tar.txt", "w+");
+		for (jjj = -hsubset; jjj <= hsubset; jjj++)
+		{
+			for (iii = -hsubset; iii <= hsubset; iii++)
+			{
+				if (DIC_Algo == 0)
+					II = Target.x + iii + p[0] * direction[0], JJ = Target.y + jjj + p[0] * direction[1];
+				else if (DIC_Algo == 1)
+					II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj, JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj;
+				else if (DIC_Algo == 2)
+					II = Target.x + iii + p[0], JJ = Target.y + jjj + p[1];
+				else if (DIC_Algo == 3)
+					II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj, JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+				else if (DIC_Algo == 4) //irregular
+				{
+					ij = iii*jjj;
+					II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj + p[5] * ij;
+					JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj + p[6] * ij;
+				}
+				else if (DIC_Algo == 5) //Quadratic
+				{
+					ij = iii*jjj, i2 = iii*iii, j2 = jjj*jjj;
+					II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj + p[5] * ij + p[7] * i2 + p[8] * j2;
+					JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj + p[6] * ij + p[9] * i2 + p[10] * j2;
+				}
+				else if (DIC_Algo == 6)
+				{
+					ij = iii*jjj;
+					II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * ij, JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[7] * ij;
+				}
+				else if (DIC_Algo == 7)
+				{
+					ij = iii*jjj, i2 = iii*iii, j2 = jjj*jjj;
+					II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * ij + p[8] * i2 + p[9] * j2;
+					JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[7] * ij + p[10] * i2 + p[11] * j2;
+				}
+
+				if (II<0.0 || II>(double)(tarWidth - 1) - (1e-10) || JJ<0.0 || JJ>(double)(tarHeight - 1) - (1e-10))
+					continue;
+
+				for (kk = 0; kk < nchannels; kk++)
+				{
+					Get_Value_Spline(TarPara + kk*tarLength, tarWidth, tarHeight, II, JJ, S + 3 * kk, -1, Interpolation_Algorithm);
+					if (printout)
+						fprintf(fp, "%.4f ", S[3 * kk]);
+
+					T[2 * m] = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength], T[2 * m + 1] = S[3 * kk];
+					t_f += T[2 * m], t_g += T[2 * m + 1];
+					m++;
+				}
+			}
+			if (printout)
+				fprintf(fp, "\n");
+		}
+		if (printout)
+			fclose(fp);
+
+		t_f = t_f / m, t_g = t_g / m;
+		t_1 = 0.0, t_2 = 0.0, t_3 = 0.0;
+		for (i = 0; i < m; i++)
+		{
+			t_4 = T[2 * i] - t_f, t_5 = T[2 * i + 1] - t_g;
+			t_1 += 1.0*t_4*t_5, t_2 += 1.0*t_4*t_4, t_3 += 1.0*t_5*t_5;
+		}
+
+		t_2 = sqrt(t_2*t_3);
+		if (t_2 < 1e-10)
+			t_2 = 1e-10;
+
+		CorrelScoreMin = t_1 / t_2; //This is the zncc score
+		if (abs(CorrelScoreMin) > 1.0)
+			CorrelScoreMin = 0.0;
+	}
+
+	if (createMem)
+		delete[]Timg, delete[]T, delete[]Znssd_reqd;
+	if (CorrelScoreMin > 1.0)
+		return 0.0;
+
+	if (DIC_Algo <= 1)
+	{
+		if (CorrelScoreMin< LKArg.ZNCCThreshold || p[0] != p[0] || abs(p[0] * direction[0]) > hsubset || abs(p[1] * direction[0]) > hsubset)
+			return CorrelScoreMin;
+	}
+	else
+	{
+		if (CorrelScoreMin< LKArg.ZNCCThreshold || p[0] != p[0] || p[1] != p[1] || abs(p[0]) > 2.0*hsubset || abs(p[1]) > 2.0*hsubset)
+			return CorrelScoreMin;
+	}
+	/*if (iCovariance != NULL)
+	{
+	a = p[nn - 2], b = p[nn - 1];
+	for (i = 0; i < nn*nn; i++)
+	AA[i] = 0.0;
+	for (i = 0; i < nn; i++)
+	BB[i] = 0.0;
+
+	int count = 0;
+	int mMinusn = Tlength*nchannels - nn;
+	double *B = new double[Tlength];
+	double *BtA = new double[nn];
+	double *AtA = new double[nn*nn];
+
+	for (jjj = -hsubset; jjj <= hsubset; jjj++)
+	{
+	for (iii = -hsubset; iii <= hsubset; iii++)
+	{
+	if (DIC_Algo == 1)
+	II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj, JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj;
+	else if (DIC_Algo == 2)
+	II = Target.x + iii + p[0], JJ = Target.y + jjj + p[1];
+	else if (DIC_Algo == 3)
+	II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj, JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj;
+	else if (DIC_Algo == 4) //irregular
+	{
+	ij = iii*jjj;
+	II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj + p[5] * ij;
+	JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj + p[6] * ij;
+	}
+	else if (DIC_Algo == 5) //Quadratic
+	{
+	ij = iii*jjj, i2 = iii*iii, j2 = jjj*jjj;
+	II = Target.x + iii + p[0] * direction[0] + p[1] * iii + p[2] * jjj + p[5] * ij + p[7] * i2 + p[8] * j2;
+	JJ = Target.y + jjj + p[0] * direction[1] + p[3] * iii + p[4] * jjj + p[6] * ij + p[9] * i2 + p[10] * j2;
+	}
+	else if (DIC_Algo == 6)
+	{
+	ij = iii*jjj;
+	II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * ij;
+	JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[7] * ij;
+	}
+	else if (DIC_Algo == 7)
+	{
+	ij = iii*jjj, i2 = iii*iii, j2 = jjj*jjj;
+	II = Target.x + iii + p[0] + p[2] * iii + p[3] * jjj + p[6] * ij + p[8] * i2 + p[9] * j2;
+	JJ = Target.y + jjj + p[1] + p[4] * iii + p[5] * jjj + p[7] * ij + p[10] * i2 + p[11] * j2;
+	}
+
+	if (II<0.0 || II>(double)(tarWidth - 1) - (1e-10) || JJ<0.0 || JJ>(double)(tarHeight - 1) - (1e-10))
+	continue;
+	for (kk = 0; kk < nchannels; kk++)
+	{
+	Get_Value_Spline(TarPara + kk*tarLength, tarWidth, tarHeight, II, JJ, S, 0, Interpolation_Algorithm);
+	RefI = Timg[(iii + hsubset) + (jjj + hsubset)*TimgS + kk*Tlength], TarI = S[0];
+
+	TarIdx = S[1], TarIdy = S[2];
+	t_3 = a*TarI + b - RefI;
+	t_5 = a*TarIdx, t_6 = a*TarIdy;
+
+	B[count] = t_3;
+	count++;
+
+	if (DIC_Algo == 1)
+	{
+	CC[0] = t_5*direction[0] + t_6*direction[1];
+	CC[1] = t_5*iii, CC[2] = t_5*jjj, CC[3] = t_6*iii, CC[4] = t_6*jjj;
+	CC[5] = TarI, CC[6] = 1.0;
+	}
+	else if (DIC_Algo == 2)
+	{
+	CC[0] = t_5, CC[1] = t_6;
+	CC[2] = TarI, CC[3] = 1.0;
+	}
+	else if (DIC_Algo == 3)
+	{
+	CC[0] = t_5, CC[1] = t_6;
+	CC[2] = t_5*iii, CC[3] = t_5*jjj, CC[4] = t_6*iii, CC[5] = t_6*jjj;
+	CC[6] = TarI, CC[7] = 1.0;
+	}
+	else if (DIC_Algo == 4) //irregular
+	{
+	CC[0] = t_5*direction[0] + t_6*direction[1];
+	CC[1] = t_5*iii, CC[2] = t_5*jjj, CC[3] = t_6*iii, CC[4] = t_6*jjj;
+	CC[5] = t_5*ij, CC[6] = t_6*ij, CC[7] = TarI, CC[8] = 1.0;
+	}
+	else if (DIC_Algo == 5) //Quadratic
+	{
+	CC[0] = t_5*direction[0] + t_6*direction[1];
+	CC[1] = t_5*iii, CC[2] = t_5*jjj, CC[3] = t_6*iii, CC[4] = t_6*jjj;
+	CC[5] = t_5*ij, CC[6] = t_6*ij, CC[7] = t_5*i2, CC[8] = t_5*j2;
+	CC[9] = t_6*i2, CC[10] = t_6*j2, CC[11] = TarI, CC[12] = 1.0;
+	}
+	else if (DIC_Algo == 6)  //irregular
+	{
+	CC[0] = t_5, CC[1] = t_6;
+	CC[2] = t_5*iii, CC[3] = t_5*jjj, CC[4] = t_6*iii, CC[5] = t_6*jjj;
+	CC[6] = t_5*ij, CC[7] = t_6*ij, CC[8] = TarI, CC[9] = 1.0;
+	}
+	else if (DIC_Algo == 7)
+	{
+	CC[0] = t_5, CC[1] = t_6;
+	CC[2] = t_5*iii, CC[3] = t_5*jjj, CC[4] = t_6*iii, CC[5] = t_6*jjj;
+	CC[6] = t_5*ij, CC[7] = t_6*ij, CC[8] = t_5*i2, CC[9] = t_5*j2, CC[10] = t_6*i2, CC[11] = t_6*j2, CC[12] = TarI, CC[13] = 1.0;
+	}
+
+	for (j = 0; j < nn; j++)
+	{
+	BB[j] += t_3*CC[j];
+	for (i = j; i < nn; i++)
+	AA[j*nn + i] += CC[i] * CC[j];
+	}
+
+	t_1 += t_3*t_3;
+	t_2 += RefI*RefI;
+	}
+	}
+	}
+	CorrelScore = t_1 / t_2;
+
+	mat_completeSym(AA, nn, true);
+	for (i = 0; i < nn*nn; i++)
+	AtA[i] = AA[i];
+	for (i = 0; i < nn; i++)
+	BtA[i] = BB[i];
+
+	QR_Solution_Double(AA, BB, nn, nn);
+
+	double BtAx = 0.0, BtB = 0.0;
+	for (i = 0; i < count; i++)
+	BtB += B[i] * B[i];
+	for (i = 0; i < nn; i++)
+	BtAx += BtA[i] * BB[i];
+	double mse = (BtB - BtAx) / mMinusn;
+
+	Matrix iAtA(nn, nn), Cov(nn, nn);
+	iAtA.Matrix_Init(AtA);
+	iAtA = iAtA.Inversion(true, true);
+	Cov = mse*iAtA;
+
+	double det = Cov[0] * Cov[nn + 1] - Cov[1] * Cov[nn];
+	iCovariance[0] = Cov[nn + 1] / det, iCovariance[1] = -Cov[1] / det, iCovariance[2] = iCovariance[1], iCovariance[3] = Cov[0] / det; //actually, this is inverse of the iCovariance
+
+	delete[]B;
+	delete[]BtA;
+	delete[]AtA;
+	}*/
+
+	if (iWp != NULL)
+	{
+		if (DIC_Algo == 1 || DIC_Algo == 4 || DIC_Algo == 5)
+			iWp[0] = p[1], iWp[1] = p[2], iWp[2] = p[3], iWp[3] = p[4];
+		else if (DIC_Algo == 3 || DIC_Algo == 6 || DIC_Algo == 7)
+			iWp[0] = p[2], iWp[1] = p[3], iWp[2] = p[4], iWp[3] = p[5];
+	}
+
+	if (DIC_Algo == 1 || DIC_Algo == 4 || DIC_Algo == 5)
+		Target.x += p[0] * direction[0], Target.y += p[0] * direction[1];
+	else
+		Target.x += p[0], Target.y += p[1];
+
+	return CorrelScoreMin;
 }
+
+
 
 void TransformImage(double *oImg, int Owidth, int Oheight, double *iImg, int Iwidth, int Iheight, double *Trans, int nchannels, int interpAlgo, double *iPara)
 {

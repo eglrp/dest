@@ -11146,7 +11146,554 @@ int TestRollingShutterCalibOnSyntheticData(char *Path, int se3)
 	return 0;
 }
 
-int TrackLocalizedCameraSIFT(char *Path, int viewID, int startF, int bw, Point2d scaleThresh, double backforeThresh2, int backward)
+int TestPnP(char *Path, int camID, int nCams, int frameID, double thresh = 5.0)
+{
+	int nCameras = 200;
+
+	char Fname[200];
+	CameraData *AllCamsInfo = new CameraData[nCams];
+	if (!ReadIntrinsicResults(Path, AllCamsInfo))
+		return 0;
+
+	int id, npts, ninliers;
+	double x, y, z, u, v, s, residuals[2];
+	vector<Point3d> t3D; t3D.reserve(3000);
+	vector<Point2d> uv; uv.reserve(3000);
+	vector<double> scale; scale.reserve(3000);
+	vector<bool> Good; Good.reserve(3000);
+
+	sprintf(Fname, "%s/%d/Inliers_3D2D_%d.txt", Path, camID, frameID);
+	FILE *fp = fopen(Fname, "r");
+	while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf ", &id, &x, &y, &z, &u, &v, &s) != EOF)
+	{
+		t3D.push_back(Point3d(x, y, z));
+		uv.push_back(Point2d(u, v));
+		scale.push_back(s);
+	}
+	fclose(fp);
+	npts = t3D.size();
+
+	//Test if 3D is correct
+	Mat cvpts(npts, 2, CV_32F), cv3D(npts, 3, CV_32F);
+	for (int ii = 0; ii < npts; ii++)
+	{
+		cvpts.at<float>(ii, 0) = uv[ii].x, cvpts.at<float>(ii, 1) = uv[ii].y;
+		cv3D.at<float>(ii, 0) = t3D[ii].x, cv3D.at<float>(ii, 1) = t3D[ii].y, cv3D.at<float>(ii, 2) = t3D[ii].z;
+	}
+
+	Mat cvK = Mat(3, 3, CV_32F), rvec(1, 3, CV_32F), tvec(1, 3, CV_32F);
+	for (int ii = 0; ii < 9; ii++)
+		cvK.at<float>(ii) = (float)AllCamsInfo[camID].K[ii];
+
+	Mat Inliers;
+	double ProThresh = 0.995, PercentInlier = 0.4;
+	int iterMax = (int)(log(1.0 - ProThresh) / log(1.0 - pow(PercentInlier, 4)) + 0.5); //log(1-eps) / log(1 - (inlier%)^min_pts_requires)
+	solvePnPRansac(cv3D, cvpts, cvK, Mat(), rvec, tvec, false, iterMax, thresh, npts*PercentInlier, Inliers, CV_EPNP);// CV_ITERATIVE);
+
+	ninliers = Inliers.rows;
+	printf("With pnp: (%d/%d)\n", ninliers, npts);
+	cout << rvec << endl << tvec << endl;
+
+	for (int ii = 0; ii < 3; ii++)
+		AllCamsInfo[camID].rt[ii] = rvec.at<double>(ii);
+	for (int ii = 0; ii < 3; ii++)
+		AllCamsInfo[camID].rt[ii + 3] = tvec.at<double>(ii);
+
+	AllCamsInfo[camID].threshold = thresh * 2;
+	if (CameraPose_GSBA(Path, AllCamsInfo[camID], t3D, uv, scale, Good, 1, 1, 1, true))
+		//if (CameraPose_RSBA(Path, AllCamsInfo[camID], t3D, uv, scale, Good, 1, 1, 1, true))
+		return -1;
+
+	ninliers = 0;
+	for (int ii = 0; ii < npts; ii++)
+	{
+		PinholeReprojectionDebug(AllCamsInfo[camID].intrinsic, AllCamsInfo[camID].rt, uv[ii], t3D[ii], residuals);
+		//CayleyReprojectionDebug(AllCamsInfo[camID].intrinsic, AllCamsInfo[camID].rt, AllCamsInfo[camID].wt, uv[ii], t3D[ii], AllCamsInfo[camID].width, AllCamsInfo[camID].height, residuals);
+		if (abs(residuals[0]) < thresh && abs(residuals[1]) < thresh)
+			ninliers++;
+	}
+	for (int ii = 0; ii < 6; ii++)
+		printf("%f ", AllCamsInfo[camID].rt[ii]);
+	printf("\n");
+	for (int ii = 0; ii < 6; ii++)
+		printf("%f ", AllCamsInfo[camID].wt[ii]);
+	printf("\n");
+	printf("With BA: (%d/%d)\n", ninliers, npts);
+
+	double rt_gt[6] = { 0.2240511253258971, -0.0428236581421133, 0.0369851631942179, -3.3586379214701299, 0.9992682352604219, -3.6783490920648232 };
+	double wt_gt[6] = { 0.0003875752556760, 0.0177087294372213, 0.0054402561932053, -0.1244087467843000, -0.0414196631281985, 0.1433284329690574 };
+	for (int ii = 0; ii < 6; ii++)
+		AllCamsInfo[camID].rt[ii] = rt_gt[ii], AllCamsInfo[camID].wt[ii] = wt_gt[ii];
+
+	ninliers = 0;
+	for (int ii = 0; ii < npts; ii++)
+	{
+		//LensCorrectionPoint();
+		//CayleyDistortionReprojectionDebug(AllCamsInfo[camID].intrinsic, AllCamsInfo[camID].distortion, AllCamsInfo[camID].rt, AllCamsInfo[camID].wt, uv[ii], t3D[ii], AllCamsInfo[camID].width, AllCamsInfo[camID].height, residuals);
+		CayleyReprojectionDebug(AllCamsInfo[camID].intrinsic, AllCamsInfo[camID].rt, AllCamsInfo[camID].wt, uv[ii], t3D[ii], AllCamsInfo[camID].width, AllCamsInfo[camID].height, residuals);
+		if (abs(residuals[0]) < thresh && abs(residuals[1]) < thresh)
+			ninliers++;
+	}
+	printf("With groundtruth: (%d/%d)", ninliers, npts);
+
+	return 0;
+}
+int TestPnP2(char *Path, int camID, double thresh = 5.0)
+{
+	char Fname[200];
+
+	Corpus corpusData;
+	sprintf(Fname, "%s/Corpus", Path);
+	ReadCorpusInfo(Fname, corpusData, false, true);
+
+	int npts = corpusData.threeDIdAllViews[camID].size(),
+		npts2 = corpusData.uvAllViews[camID].size();
+
+	vector<Point2d>uv;
+	vector<Point3d> xyz;
+	for (int ii = 0; ii < npts; ii++)
+	{
+		int p3Did = corpusData.threeDIdAllViews[camID][ii];
+		xyz.push_back(corpusData.xyz[p3Did]);
+		uv.push_back(corpusData.uvAllViews[camID][ii]);
+	}
+
+	int ninliers = 0;
+	double residuals[2];
+	for (int ii = 0; ii < npts; ii++)
+	{
+		CayleyReprojectionDebug(corpusData.camera[camID].intrinsic, corpusData.camera[camID].rt, corpusData.camera[camID].wt, uv[ii], xyz[ii], corpusData.camera[camID].width, corpusData.camera[camID].height, residuals);
+		//PinholeReprojectionDebug(corpusData.camera[camID].intrinsic, corpusData.camera[camID].rt, uv[ii], xyz[ii], residuals);
+		if (abs(residuals[0]) < thresh && abs(residuals[1]) < thresh)
+			ninliers++;
+	}
+	printf("With groundtruth: (%d/%d)", ninliers, npts);
+
+	sprintf(Fname, "%s/%d/Inliers_3D2D_%d_.txt", Path, 1, 1); FILE *fp = fopen(Fname, "w+");
+	for (int ii = 0; ii < npts; ii++)
+		fprintf(fp, "%d %f %f %f %f %f %.2f\n", ii, xyz[ii].x, xyz[ii].y, xyz[ii].z, uv[ii].x, uv[ii].y, 1.0);
+	fclose(fp);
+
+	return 0;
+}
+int TrackLocalizedCameraSIFT(char *Path, int viewID, int startF, int bw, Point2d scaleThresh, LKParameters &LKArg, int backward, int cvPryLevel, int maxthreads = 2)
+{
+	if (cvPryLevel < 1)
+		cvPryLevel = 1;
+
+	char Fname[200];
+	const int nchannels = 1;
+
+	int pid; double s;
+	Point2f uv; Point3d xyz;
+
+	vector<int> ThreeDiD3D;
+	vector<Point2f> uv3D;
+	vector<Point3d> xyz3D;
+	vector<float> scale3D;
+
+	sprintf(Fname, "%s/%d/Inliers_3D2D_%d.txt", Path, viewID, startF); FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		return 1;
+	}
+
+	while (fscanf(fp, "%d %lf %lf %lf %f %f %lf", &pid, &xyz.x, &xyz.y, &xyz.z, &uv.x, &uv.y, &s) != EOF)
+	{
+		if (s < scaleThresh.x || s > scaleThresh.y)
+			continue;
+
+		ThreeDiD3D.push_back(pid);
+		uv3D.push_back(uv);
+		xyz3D.push_back(xyz);
+		scale3D.push_back(s);
+	}
+	fclose(fp);
+	int n3dpts = (int)uv3D.size();
+	if (n3dpts == 0)
+		return 0;
+
+	vector<Point2f> *BackTrackUV = 0, *ForeTrackUV = new vector<Point2f>[uv3D.size()];
+	for (int ii = 0; ii < (int)uv3D.size(); ii++)
+		ForeTrackUV[ii].reserve(bw), ForeTrackUV[ii].push_back(uv3D[ii]);
+
+	sprintf(Fname, "%s/%d/%d.png", Path, viewID, startF); Mat cvRefImg = imread(Fname, nchannels == 1 ? 0 : 1);
+	if (cvRefImg.empty())
+	{
+		printf("Cannot load %s\n", Fname);
+		return 1;
+	}
+	int width = cvRefImg.cols, height = cvRefImg.rows, length = width*height;
+	double *RefImg = new double[length], *NewImg = new double[length];
+	double *RefImgPara = new double[length], *PreImgPara = new double[length], *NewImgPara = new double[length];
+
+	for (int kk = 0; kk < nchannels; kk++)
+		for (int jj = 0; jj < height; jj++)
+			for (int fid = 0; fid < width; fid++)
+				RefImg[fid + jj*width + kk*length] = (double)(int)cvRefImg.data[nchannels*fid + jj*nchannels*width + kk];
+	Generate_Para_Spline(RefImg, RefImgPara, width, height, LKArg.InterpAlgo);
+
+	int TimgS = 2 * LKArg.hsubset + 1, Tlength = TimgS*TimgS;
+	double *Timg = new double[Tlength*nchannels*maxthreads], *T = new double[2 * Tlength*nchannels*maxthreads], *Znssd_reqd = new double[6 * Tlength*maxthreads];
+
+
+	vector<float> err;
+	vector<uchar> status;
+	Mat cvNewImg, cvPreImg;
+	Size winSize(31, 31);
+	TermCriteria termcrit(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.03);
+
+	cvPreImg = cvRefImg;
+	for (int ii = 0; ii < length; ii++)
+		PreImgPara[ii] = RefImgPara[ii];
+
+	double start = omp_get_wtime();
+	printf("Foretrack  @%d: ", startF);
+	for (int fid = 1; fid <= bw; fid++)
+	{
+		printf("%d ...", fid);
+		sprintf(Fname, "%s/%d/%d.png", Path, viewID, fid + startF);
+		cvNewImg = imread(Fname, nchannels == 1 ? 0 : 1);
+		if (cvNewImg.data == NULL)
+		{
+			cout << "Cannot load: " << Fname << endl;
+			break;
+		}
+		for (int kk = 0; kk < nchannels; kk++)
+			for (int jj = 0; jj < height; jj++)
+				for (int fid = 0; fid < width; fid++)
+					NewImg[fid + jj*width + kk*length] = (double)(int)cvNewImg.data[nchannels*fid + jj*nchannels*width + kk];
+
+		Generate_Para_Spline(NewImg, NewImgPara, width, height, LKArg.InterpAlgo);
+
+		//Using pryLK OpenCV for initial guess gives more robustness
+		vector<Point2f> cvprePt, cvnewPt;
+		for (int pid = 0; pid < n3dpts; pid++)
+		{
+			cvprePt.push_back(ForeTrackUV[pid].back());
+			cvnewPt.push_back(ForeTrackUV[pid].back());
+		}
+		calcOpticalFlowPyrLK(cvPreImg, cvNewImg, cvprePt, cvnewPt, status, err, winSize, cvPryLevel - 1, termcrit);
+
+		omp_set_num_threads(maxthreads);
+#pragma omp parallel for
+		for (int pid = 0; pid < n3dpts; pid++)
+		{
+			int threadID = omp_get_thread_num();
+			LKParameters LKArgi(LKArg.hsubset, LKArg.nscales, LKArg.scaleStep, LKArg.DIC_Algo, LKArg.InterpAlgo, LKArg.Gsigma,
+				LKArg.Convergence_Criteria, LKArg.IterMax, LKArg.Analysis_Speed, LKArg.ZNCCThreshold, LKArg.PSSDab_thresh, LKArg.DisplacementThresh);
+
+			if ((int)ForeTrackUV[pid].size() != fid)
+				continue;
+
+			Point2d prePt = ForeTrackUV[pid].back(), newPt, backPt;
+			double iaffineShape[4], affineShape[4], iShape[4], Shape[4] = { 0, 0, 0, 0 };
+			if (status[pid])
+				newPt = cvnewPt[pid];
+
+			int orgsubset = LKArgi.hsubset;
+			int bestsubset;  double bestDist = 9e9; Point2d bestPt;
+			for (int subsetID = -(LKArgi.nscales - 1); subsetID <= 0; subsetID++)
+			{
+				LKArgi.hsubset = orgsubset + subsetID * LKArgi.scaleStep;
+
+				if (newPt.x < 2 * LKArgi.hsubset || newPt.x > width - 2 * LKArgi.hsubset || newPt.y < 2 * LKArgi.hsubset || newPt.y > height - 2 * LKArgi.hsubset)
+					continue;
+
+				double score = TemplateMatching(PreImgPara, NewImgPara, width, height, width, height, nchannels, prePt, newPt, LKArgi, false,
+					Timg + threadID*Tlength*nchannels, T + threadID * 2 * Tlength*nchannels, Znssd_reqd + threadID * 6 * Tlength, Shape);
+				if (score > LKArgi.ZNCCThreshold)
+				{
+					backPt = prePt;
+
+					//compute inverse shape
+					affineShape[0] = Shape[0] + 1, affineShape[1] = Shape[1], affineShape[2] = Shape[2], affineShape[3] = Shape[3] + 1;
+					mat_invert(affineShape, iaffineShape, 2);
+					iShape[0] = iaffineShape[0] - 1, iShape[1] = iaffineShape[1], iShape[2] = iaffineShape[2], iShape[3] = iaffineShape[3] - 1;
+
+					score = TemplateMatching(NewImgPara, PreImgPara, width, height, width, height, nchannels, newPt, backPt, LKArgi, false,
+						Timg + threadID*Tlength*nchannels, T + threadID * 2 * Tlength*nchannels, Znssd_reqd + threadID * 6 * Tlength, iShape);
+					if (score > LKArgi.ZNCCThreshold)
+					{
+						double dist2 = pow(backPt.x - prePt.x, 2) + pow(backPt.y - prePt.y, 2);
+						if (dist2 < LKArgi.DisplacementThresh*LKArgi.DisplacementThresh && dist2 < bestDist)
+							bestDist = dist2, bestsubset = LKArgi.hsubset, bestPt = newPt;
+					}
+				}
+			}
+			if (bestDist < LKArgi.DisplacementThresh*LKArgi.DisplacementThresh)
+				ForeTrackUV[pid].push_back(bestPt);
+		}
+		for (int ii = 0; ii < length; ii++)
+			PreImgPara[ii] = NewImgPara[ii];
+		cvPreImg = cvNewImg;
+	}
+
+	if (backward)
+	{
+		cvPreImg = cvRefImg;
+		for (int ii = 0; ii < length; ii++)
+			PreImgPara[ii] = RefImgPara[ii];
+
+		BackTrackUV = new vector<Point2f>[uv3D.size()];
+		for (int ii = 0; ii < (int)uv3D.size(); ii++)
+			BackTrackUV[ii].reserve(bw), BackTrackUV[ii].push_back(uv3D[ii]);
+
+		printf("\nBacktrack @%d: ", startF);
+		for (int fid = -1; fid >= -bw; fid--)
+		{
+			printf("%d ...", fid);
+			sprintf(Fname, "%s/%d/%d.png", Path, viewID, fid + startF);
+			cvNewImg = imread(Fname, nchannels == 1 ? 0 : 1);
+			if (cvNewImg.data == NULL)
+			{
+				cout << "Cannot load: " << Fname << endl;
+				break;
+			}
+			for (int kk = 0; kk < nchannels; kk++)
+				for (int jj = 0; jj < height; jj++)
+					for (int fid = 0; fid < width; fid++)
+						NewImg[fid + jj*width + kk*length] = (double)(int)cvNewImg.data[nchannels*fid + jj*nchannels*width + kk];
+
+			Generate_Para_Spline(NewImg, NewImgPara, width, height, LKArg.InterpAlgo);
+
+			//Using pryLK OpenCV for initial guess gives more robustness
+			vector<Point2f> cvprePt, cvnewPt;
+			for (int pid = 0; pid < n3dpts; pid++)
+			{
+				cvprePt.push_back(BackTrackUV[pid].back());
+				cvnewPt.push_back(BackTrackUV[pid].back());
+			}
+			calcOpticalFlowPyrLK(cvPreImg, cvNewImg, cvprePt, cvnewPt, status, err, winSize, cvPryLevel - 1, termcrit);
+
+			omp_set_num_threads(maxthreads);
+#pragma omp parallel for
+			for (int pid = 0; pid < n3dpts; pid++)
+			{
+				int threadID = omp_get_thread_num();
+				LKParameters LKArgi(LKArg.hsubset, LKArg.nscales, LKArg.scaleStep, LKArg.DIC_Algo, LKArg.InterpAlgo, LKArg.Gsigma,
+					LKArg.Convergence_Criteria, LKArg.IterMax, LKArg.Analysis_Speed, LKArg.ZNCCThreshold, LKArg.PSSDab_thresh, LKArg.DisplacementThresh);
+
+				if ((int)BackTrackUV[pid].size() != -fid)
+					continue;
+
+				Point2d prePt = BackTrackUV[pid].back(), newPt, backPt;
+				double iaffineShape[4], affineShape[4], iShape[4], Shape[4] = { 0, 0, 0, 0 };
+
+				if (status[pid])
+					newPt = cvnewPt[pid];
+
+				int orgsubset = LKArgi.hsubset;
+				int bestsubset;  double bestDist = 9e9; Point2d bestPt;
+				for (int subsetID = -(LKArgi.nscales - 1); subsetID <= 0; subsetID++)
+				{
+					LKArgi.hsubset = orgsubset + subsetID * LKArgi.scaleStep;
+
+					if (newPt.x < 2 * LKArgi.hsubset || newPt.x > width - 2 * LKArgi.hsubset || newPt.y < 2 * LKArgi.hsubset || newPt.y > height - 2 * LKArgi.hsubset)
+						continue;
+
+					double score = TemplateMatching(PreImgPara, NewImgPara, width, height, width, height, nchannels, prePt, newPt, LKArgi, false,
+						Timg + threadID*Tlength*nchannels, T + threadID * 2 * Tlength*nchannels, Znssd_reqd + threadID * 6 * Tlength, Shape);
+					if (score > LKArgi.ZNCCThreshold)
+					{
+						backPt = prePt;
+
+						//compute inverse shape
+						affineShape[0] = Shape[0] + 1, affineShape[1] = Shape[1], affineShape[2] = Shape[2], affineShape[3] = Shape[3] + 1;
+						mat_invert(affineShape, iaffineShape, 2);
+						iShape[0] = iaffineShape[0] - 1, iShape[1] = iaffineShape[1], iShape[2] = iaffineShape[2], iShape[3] = iaffineShape[3] - 1;
+
+						score = TemplateMatching(NewImgPara, PreImgPara, width, height, width, height, nchannels, newPt, backPt, LKArgi, false,
+							Timg + threadID*Tlength*nchannels, T + threadID * 2 * Tlength*nchannels, Znssd_reqd + threadID * 6 * Tlength, iShape);
+						if (score > LKArgi.ZNCCThreshold)
+						{
+							double dist2 = pow(backPt.x - prePt.x, 2) + pow(backPt.y - prePt.y, 2);
+							if (dist2 < LKArgi.DisplacementThresh*LKArgi.DisplacementThresh && dist2 < bestDist)
+								bestDist = dist2, bestsubset = LKArgi.hsubset, bestPt = newPt;
+						}
+					}
+				}
+				if (bestDist < LKArgi.DisplacementThresh*LKArgi.DisplacementThresh)
+					BackTrackUV[pid].push_back(bestPt);
+			}
+			for (int ii = 0; ii < length; ii++)
+				PreImgPara[ii] = NewImgPara[ii];
+			cvPreImg = cvNewImg;
+		}
+	}
+	printf("\nTime: %.2fs. ", omp_get_wtime() - start);
+
+	int forecount = 0;
+	for (int pid = 0; pid < n3dpts; pid++)
+		if ((int)ForeTrackUV[pid].size() > bw)
+			forecount++;
+
+	printf("Foreward : %d/%d. ", forecount, n3dpts);
+	if (backward)
+	{
+		int backcount = 0;
+		for (int pid = 0; pid < n3dpts; pid++)
+			if (backward && (int)BackTrackUV[pid].size() > bw)
+				backcount++;
+		printf("Backward : %d/%d\n", backcount, n3dpts);
+	}
+	else
+		printf("\n");
+
+	/*double *cumShape = new double[4 * bw*n3dpts];
+	for (int ii = 0; ii < 4 * bw*n3dpts; ii++)
+	cumShape[ii] = 0.0;
+	for (int fid = 1; fid <= bw; fid++)
+	{
+	printf("%d ...", fid);
+	sprintf(Fname, "%s/%d/%d.png", Path, viewID, fid + startF);
+	if (0)
+	{
+	if (!GrabImage(Fname, NewImg, width, height, 1))
+	break;
+	}
+	else
+	{
+	cvNewImg = imread(Fname, nchannels == 1 ? 0 : 1);
+	if (cvNewImg.data == NULL)
+	{
+	cout << "Cannot load: " << Fname << endl;
+	break;
+	}
+	for (int kk = 0; kk < nchannels; kk++)
+	for (int jj = 0; jj < height; jj++)
+	for (int fid = 0; fid < width; fid++)
+	NewImg[fid + jj*width + kk*length] = (double)(int)cvNewImg.data[nchannels*fid + jj*nchannels*width + kk];
+	}
+	Generate_Para_Spline(NewImg, NewImgPara, width, height, LKArg.InterpAlgo);
+
+	vector<Point2f> cvprePt, cvnewPt;
+	for (int pid = 0; pid < n3dpts; pid++)
+	{
+	cvprePt.push_back(ForeTrackUV[pid].back());
+	cvnewPt.push_back(ForeTrackUV[pid].back());
+	}
+	calcOpticalFlowPyrLK(cvPreImg, cvNewImg, cvprePt, cvnewPt, status, err, winSize, 3, termcrit);
+
+	for (int pid = 0; pid < n3dpts; pid++)
+	{
+	if ((int)ForeTrackUV[pid].size() != fid)
+	continue;
+
+	Point2d prePt = ForeTrackUV[pid].back(), newPt, backPt;
+	double iaffineShape[4], affineShape[4], iShape[4], Shape[4] = { 0, 0, 0, 0 };
+	double preAffineCumShape[4], curAffineCumShape[4], curCumShape[4];
+
+	if (status[pid])
+	newPt = cvnewPt[pid];
+
+	double score = TemplateMatching(PreImgPara, NewImgPara, width, height, width, height, nchannels, prePt, newPt, LKArg, false, Timg, T, Znssd_reqd, Shape);
+	if (score > LKArg.ZNCCThreshold)
+	{
+	if (fid > 1)
+	{
+	prePt = ForeTrackUV[pid][0]; //Track again from the ref image to avoid drift
+
+	//compute cumshape
+	int jj = (pid + (fid - 2)*n3dpts) * 4;
+
+	affineShape[0] = Shape[0] + 1, affineShape[1] = Shape[1], affineShape[2] = Shape[2], affineShape[3] = Shape[3] + 1;
+	preAffineCumShape[jj] = cumShape[jj] + 1, preAffineCumShape[1] = cumShape[jj + 1], preAffineCumShape[2] = cumShape[jj + 2], preAffineCumShape[3] = cumShape[jj + 3] + 1;
+
+	mat_mul(preAffineCumShape, affineShape, curAffineCumShape, 2, 2, 2);
+	curCumShape[0] = curAffineCumShape[0] - 1, curCumShape[1] = curAffineCumShape[1], curCumShape[2] = curAffineCumShape[2], curCumShape[3] = curAffineCumShape[3] - 1;
+
+	score = TemplateMatching(RefImgPara, NewImgPara, width, height, width, height, nchannels, prePt, newPt, LKArg, false, Timg, T, Znssd_reqd, curCumShape);
+	if (score > LKArg.ZNCCThreshold) //forward-backward consistency
+	{
+	backPt = ForeTrackUV[pid][0];
+
+	//compute inverse cum shape
+	affineShape[jj] = curCumShape[0] + 1, affineShape[1] = curCumShape[1], affineShape[1] = curCumShape[2], affineShape[3] = curCumShape[3] + 1;
+
+	mat_invert(affineShape, iaffineShape, 2);
+	iShape[0] = iaffineShape[0] - 1, iShape[1] = iaffineShape[1], iShape[2] = iaffineShape[2], iShape[3] = iaffineShape[3] - 1;
+
+	score = TemplateMatching(NewImgPara, RefImgPara, width, height, width, height, nchannels, newPt, backPt, LKArg, false, Timg, T, Znssd_reqd, iShape);
+	if (score > LKArg.ZNCCThreshold)
+	{
+	double dist2 = pow(backPt.x - ForeTrackUV[pid][0].x, 2) + pow(backPt.y - ForeTrackUV[pid][0].y, 2);
+	if (dist2 < LKArg.DisplacementThresh*LKArg.DisplacementThresh)
+	{
+	ForeTrackUV[pid].push_back(newPt);
+	for (int jj = 0; jj < 4; jj++)
+	cumShape[(pid + (fid - 1)*n3dpts) * 4 + jj] = curCumShape[jj];
+	}
+	}
+	}
+	}
+	else  //forward-backward consistency for the first frame
+	{
+	backPt = prePt;
+
+	//compute inverse shape
+	affineShape[0] = Shape[0] + 1, affineShape[1] = Shape[1], affineShape[2] = Shape[2], affineShape[3] = Shape[3] + 1;
+	mat_invert(affineShape, iaffineShape, 2);
+	iShape[0] = iaffineShape[0] - 1, iShape[1] = iaffineShape[1], iShape[2] = iaffineShape[2], iShape[3] = iaffineShape[3] - 1;
+
+	score = TemplateMatching(NewImgPara, PreImgPara, width, height, width, height, nchannels, newPt, backPt, LKArg, false, Timg, T, Znssd_reqd, iShape);
+	if (score > LKArg.ZNCCThreshold)
+	{
+	double dist2 = pow(backPt.x - ForeTrackUV[pid][0].x, 2) + pow(backPt.y - ForeTrackUV[pid][0].y, 2);
+	if (dist2 < LKArg.DisplacementThresh*LKArg.DisplacementThresh)
+	{
+	ForeTrackUV[pid].push_back(newPt);
+	for (int jj = 0; jj < 4; jj++)
+	cumShape[(pid + (fid - 1)*n3dpts) * 4 + jj] = Shape[jj];
+	}
+	}
+	}
+	}
+	}
+	for (int ii = 0; ii < length; ii++)
+	PreImgPara[ii] = NewImgPara[ii];
+	cvPreImg = cvNewImg;
+	}*/
+
+	//Write data
+	for (int fid = 1; fid <= bw; fid++)
+	{
+		sprintf(Fname, "%s/%d/Inliers_3D2D_%d.txt", Path, viewID, startF + fid); FILE *fp = fopen(Fname, "a+");
+		for (int pid = 0; pid < n3dpts; pid++)
+		{
+			if ((int)ForeTrackUV[pid].size() > fid)
+			{
+				int i = ThreeDiD3D[pid];
+				double x = xyz3D[pid].x, y = xyz3D[pid].y, z = xyz3D[pid].z, u = ForeTrackUV[pid][fid].x, v = ForeTrackUV[pid][fid].y, s = scale3D[pid];
+				fprintf(fp, "%d %.6f %.6f %.6f %.4f %.4f %.2f\n", ThreeDiD3D[pid], xyz3D[pid].x, xyz3D[pid].y, xyz3D[pid].z, ForeTrackUV[pid][fid].x, ForeTrackUV[pid][fid].y, scale3D[pid]);
+			}
+		}
+		fclose(fp);
+	}
+
+	if (backward)
+	{
+		for (int fid = -1; fid >= -bw; fid--)
+		{
+			sprintf(Fname, "%s/%d/Inliers_3D2D_%d.txt", Path, viewID, startF + fid); FILE *fp = fopen(Fname, "a+");
+			for (int pid = 0; pid < n3dpts; pid++)
+			{
+				if ((int)BackTrackUV[pid].size() > -fid)
+					fprintf(fp, "%d %.6f %.6f %.6f %.4f %.4f %.2f\n", ThreeDiD3D[pid], xyz3D[pid].x, xyz3D[pid].y, xyz3D[pid].z, BackTrackUV[pid][-fid].x, BackTrackUV[pid][-fid].y, scale3D[pid]);
+			}
+			fclose(fp);
+		}
+	}
+
+
+	delete[]BackTrackUV, delete[]ForeTrackUV;
+	delete[]Timg, delete[]T, delete[]Znssd_reqd;
+	delete[]RefImg, delete[]NewImg, delete[]RefImgPara, delete[]PreImgPara, delete[]NewImgPara;
+
+	return 0;
+}
+int TrackLocalizedCameraSIFTWithRefTemplate(char *Path, int viewID, int startF, int bw, Point2d scaleThresh, double backforeThresh2, int backward)
 {
 	char Fname[200];
 
@@ -11167,7 +11714,7 @@ int TrackLocalizedCameraSIFT(char *Path, int viewID, int startF, int bw, Point2d
 
 	while (fscanf(fp, "%d %lf %lf %lf %f %f %lf", &pid, &xyz.x, &xyz.y, &xyz.z, &uv.x, &uv.y, &s) != EOF)
 	{
-		if (s > scaleThresh.x || s < scaleThresh.y)
+		if (s < scaleThresh.x || s> scaleThresh.y)
 			continue;
 
 		ThreeDiD3D.push_back(pid);
@@ -11331,142 +11878,664 @@ int TrackLocalizedCameraSIFT(char *Path, int viewID, int startF, int bw, Point2d
 	return 0;
 }
 
-int TestPnP(char *Path, int camID, int nCams, int frameID, double thresh = 5.0)
-{
-	int nCameras = 200;
-
-	char Fname[200];
-	CameraData *AllCamsInfo = new CameraData[nCams];
-	if (!ReadIntrinsicResults(Path, AllCamsInfo))
-		return 0;
-
-	int id, npts, ninliers;
-	double x, y, z, u, v, s, residuals[2];
-	vector<Point3d> t3D; t3D.reserve(3000);
-	vector<Point2d> uv; uv.reserve(3000);
-	vector<double> scale; scale.reserve(3000);
-	vector<bool> Good; Good.reserve(3000);
-
-	sprintf(Fname, "%s/%d/Inliers_3D2D_%d.txt", Path, camID, frameID);
-	FILE *fp = fopen(Fname, "r");
-	while (fscanf(fp, "%d %lf %lf %lf %lf %lf %lf ", &id, &x, &y, &z, &u, &v, &s) != EOF)
-	{
-		t3D.push_back(Point3d(x, y, z));
-		uv.push_back(Point2d(u, v));
-		scale.push_back(s);
-	}
-	fclose(fp);
-	npts = t3D.size();
-
-	//Test if 3D is correct
-	Mat cvpts(npts, 2, CV_32F), cv3D(npts, 3, CV_32F);
-	for (int ii = 0; ii < npts; ii++)
-	{
-		cvpts.at<float>(ii, 0) = uv[ii].x, cvpts.at<float>(ii, 1) = uv[ii].y;
-		cv3D.at<float>(ii, 0) = t3D[ii].x, cv3D.at<float>(ii, 1) = t3D[ii].y, cv3D.at<float>(ii, 2) = t3D[ii].z;
-	}
-
-	Mat cvK = Mat(3, 3, CV_32F), rvec(1, 3, CV_32F), tvec(1, 3, CV_32F);
-	for (int ii = 0; ii < 9; ii++)
-		cvK.at<float>(ii) = (float)AllCamsInfo[camID].K[ii];
-
-	Mat Inliers;
-	double ProThresh = 0.995, PercentInlier = 0.4;
-	int iterMax = (int)(log(1.0 - ProThresh) / log(1.0 - pow(PercentInlier, 4)) + 0.5); //log(1-eps) / log(1 - (inlier%)^min_pts_requires)
-	solvePnPRansac(cv3D, cvpts, cvK, Mat(), rvec, tvec, false, iterMax, thresh, npts*PercentInlier, Inliers, CV_EPNP);// CV_ITERATIVE);
-
-	ninliers = Inliers.rows;
-	printf("With pnp: (%d/%d)\n", ninliers, npts);
-	cout << rvec << endl << tvec << endl;
-
-	for (int ii = 0; ii < 3; ii++)
-		AllCamsInfo[camID].rt[ii] = rvec.at<double>(ii);
-	for (int ii = 0; ii < 3; ii++)
-		AllCamsInfo[camID].rt[ii + 3] = tvec.at<double>(ii);
-
-	AllCamsInfo[camID].threshold = thresh * 2;
-	if (CameraPose_GSBA(Path, AllCamsInfo[camID], t3D, uv, scale, Good, 1, 1, 1, true))
-		//if (CameraPose_RSBA(Path, AllCamsInfo[camID], t3D, uv, scale, Good, 1, 1, 1, true))
-		return -1;
-
-	ninliers = 0;
-	for (int ii = 0; ii < npts; ii++)
-	{
-		PinholeReprojectionDebug(AllCamsInfo[camID].intrinsic, AllCamsInfo[camID].rt, uv[ii], t3D[ii], residuals);
-		//CayleyReprojectionDebug(AllCamsInfo[camID].intrinsic, AllCamsInfo[camID].rt, AllCamsInfo[camID].wt, uv[ii], t3D[ii], AllCamsInfo[camID].width, AllCamsInfo[camID].height, residuals);
-		if (abs(residuals[0]) < thresh && abs(residuals[1]) < thresh)
-			ninliers++;
-	}
-	for (int ii = 0; ii < 6; ii++)
-		printf("%f ", AllCamsInfo[camID].rt[ii]);
-	printf("\n");
-	for (int ii = 0; ii < 6; ii++)
-		printf("%f ", AllCamsInfo[camID].wt[ii]);
-	printf("\n");
-	printf("With BA: (%d/%d)\n", ninliers, npts);
-
-	double rt_gt[6] = { 0.2240511253258971, -0.0428236581421133, 0.0369851631942179, -3.3586379214701299, 0.9992682352604219, -3.6783490920648232 };
-	double wt_gt[6] = { 0.0003875752556760, 0.0177087294372213, 0.0054402561932053, -0.1244087467843000, -0.0414196631281985, 0.1433284329690574 };
-	for (int ii = 0; ii < 6; ii++)
-		AllCamsInfo[camID].rt[ii] = rt_gt[ii], AllCamsInfo[camID].wt[ii] = wt_gt[ii];
-
-	ninliers = 0;
-	for (int ii = 0; ii < npts; ii++)
-	{
-		//LensCorrectionPoint();
-		//CayleyDistortionReprojectionDebug(AllCamsInfo[camID].intrinsic, AllCamsInfo[camID].distortion, AllCamsInfo[camID].rt, AllCamsInfo[camID].wt, uv[ii], t3D[ii], AllCamsInfo[camID].width, AllCamsInfo[camID].height, residuals);
-		CayleyReprojectionDebug(AllCamsInfo[camID].intrinsic, AllCamsInfo[camID].rt, AllCamsInfo[camID].wt, uv[ii], t3D[ii], AllCamsInfo[camID].width, AllCamsInfo[camID].height, residuals);
-		if (abs(residuals[0]) < thresh && abs(residuals[1]) < thresh)
-			ninliers++;
-	}
-	printf("With groundtruth: (%d/%d)", ninliers, npts);
-
-	return 0;
-}
-int TestPnP2(char *Path, int camID, double thresh = 5.0)
+//Specialized code for ARTag
+int ARTag_GenerateVisibilityMatrix(char *Path, int nCams, int npts, int nframes)
 {
 	char Fname[200];
 
-	Corpus corpusData;
-	sprintf(Fname, "%s/Corpus", Path);
-	ReadCorpusInfo(Fname, corpusData, false, true);
+	float u, v;
+	int ii, jj, nf, fid;
 
-	int npts = corpusData.threeDIdAllViews[camID].size(),
-		npts2 = corpusData.uvAllViews[camID].size();
+	int *CamIPts = new int[npts*nframes];
+	int *VisRI = new int[npts*nframes];
+	int *AllVis = new int[nCams*npts*nframes];
 
-	vector<Point2d>uv;
-	vector<Point3d> xyz;
-	for (int ii = 0; ii < npts; ii++)
+	for (int camID = 0; camID < nCams; camID++)
 	{
-		int p3Did = corpusData.threeDIdAllViews[camID][ii];
-		xyz.push_back(corpusData.xyz[p3Did]);
-		uv.push_back(corpusData.uvAllViews[camID][ii]);
+		sprintf(Fname, "%s/Track2D/fb_%d.txt", Path, camID); FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+		{
+			printf("Cannot load %s\n", Fname);
+			return 1;
+		}
+		for (ii = 0; ii < npts*nframes; ii++)
+			CamIPts[ii] = 0;
+		for (ii = 0; ii < npts; ii++)
+		{
+			fscanf(fp, "%d %d %d ", &jj, &jj, &nf);
+			for (jj = 0; jj < nf; jj++)
+			{
+				fscanf(fp, "%d %f %f ", &fid, &u, &v);
+				CamIPts[ii*nframes + fid] = 255;
+			}
+		}
+		fclose(fp);
+
+		for (ii = 0; ii < npts*nframes; ii++)
+			if (CamIPts[ii] == 255)
+				VisRI[ii] = camID % 2 == 0 ? 255 : 127;
+			else
+				VisRI[ii] = 0;
+
+		Set_Sub_Mat(VisRI, AllVis, nframes, npts, nframes, 0, npts*camID);
 	}
 
-	int ninliers = 0;
-	double residuals[2];
+	sprintf(Fname, "%s/Track2D/VisMat.png", Path);
+	SaveDataToImage(Fname, AllVis, nframes, npts*nCams);
+
+	delete[]CamIPts, delete[]VisRI, delete[]AllVis;
+	return 0;
+}
+int ARTag_TrackMissingMarkersIndiCorner(char *Path, int camID, int npts, int nframes, int subsetSize = 15, int subsetStep = 3, int subsetScale = 3, double Dist2Thesh = 1.0, int PryLevel = 4)
+{
+	if (PryLevel < 1)
+		PryLevel = 1;
+
+	char Fname[200];
+
+	int nf, fid;
+	Point2f uv;
+	vector<Point2i> markerID;
+
+	Point2f *Pts = new Point2f[npts*nframes];
+	for (int ii = 0; ii < npts*nframes; ii++)
+		Pts[ii] = Point2f(-1, -1);
+
+	sprintf(Fname, "%s/Track2D/%d.txt", Path, camID); FILE *fp = fopen(Fname, "r");
+	if (fp == NULL)
+	{
+		printf("Cannot load %s\n", Fname);
+		return 1;
+	}
 	for (int ii = 0; ii < npts; ii++)
 	{
-		CayleyReprojectionDebug(corpusData.camera[camID].intrinsic, corpusData.camera[camID].rt, corpusData.camera[camID].wt, uv[ii], xyz[ii], corpusData.camera[camID].width, corpusData.camera[camID].height, residuals);
-		//PinholeReprojectionDebug(corpusData.camera[camID].intrinsic, corpusData.camera[camID].rt, uv[ii], xyz[ii], residuals);
-		if (abs(residuals[0]) < thresh && abs(residuals[1]) < thresh)
-			ninliers++;
+		int id, oid;
+		fscanf(fp, "%d %d %d ", &id, &oid, &nf);
+		markerID.push_back(Point2i(id, oid));
+		for (int jj = 0; jj < nf; jj++)
+		{
+			fscanf(fp, "%d %f %f ", &fid, &uv.x, &uv.y);
+			Pts[ii*nframes + fid] = uv;
+		}
 	}
-	printf("With groundtruth: (%d/%d)", ninliers, npts);
+	fclose(fp);
 
-	sprintf(Fname, "%s/%d/Inliers_3D2D_%d_.txt", Path, 1, 1); FILE *fp = fopen(Fname, "w+");
+	//Track markers
+	vector<float> err;
+	vector<uchar> status;
+	Mat cvNewImg, cvPreImg;
+	Size winSize(subsetSize + subsetStep * (subsetScale - 1), subsetSize + subsetStep * (subsetScale - 1));
+	TermCriteria termcrit(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.03);
+
+
+	vector<Mat> cvPrePyr, cvNewPyr;
+	int lastvalidFrame = 0;
+
+	//Foreward track
+	for (int fid = 0; fid < nframes - 1; fid++)
+	{
+		vector<Point2f> cvprePt, cvnewPt, cvbackPt, bestnewPt;
+		vector<double> minDist2;
+		vector<int>validID, validID2;
+		for (int pid = 0; pid < npts; pid++)
+		{
+			if (Pts[pid*nframes + fid].x < 0 || Pts[pid*nframes + fid].y < 0)
+				continue;
+			if (Pts[pid*nframes + fid + 1].x > 0 || Pts[pid*nframes + fid + 1].y > 0)
+				continue;
+
+			validID.push_back(pid), validID2.push_back(0);
+			minDist2.push_back(9e9);
+			cvprePt.push_back(Pts[pid*nframes + fid]);
+			cvnewPt.push_back(Pts[pid*nframes + fid]);
+			bestnewPt.push_back(Pts[pid*nframes + fid]);
+		}
+
+		if (cvprePt.size() > 0)
+		{
+			if (lastvalidFrame == 0 || lastvalidFrame != fid - 1)
+			{
+				sprintf(Fname, "%s/%d/%d.png", Path, camID, fid);
+				cvPreImg = imread(Fname, 0);
+				if (cvPreImg.empty())
+					continue;
+				buildOpticalFlowPyramid(cvPreImg, cvPrePyr, winSize, PryLevel, true);
+			}
+
+			sprintf(Fname, "%s/%d/%d.png", Path, camID, fid + 1);
+			cvNewImg = imread(Fname, 0);
+			if (cvNewImg.empty())
+				continue;
+			buildOpticalFlowPyramid(cvNewImg, cvNewPyr, winSize, PryLevel, true);
+
+			//BF-Consisteny track with multiple windows size
+			for (int sid = 0; sid < 3; sid++)
+			{
+				Size winSi(subsetSize + subsetStep * (subsetScale - 1), subsetSize + subsetStep * (subsetScale - 1));
+
+				cvbackPt = cvprePt;
+				calcOpticalFlowPyrLK(cvPrePyr, cvNewPyr, cvprePt, cvnewPt, status, err, winSi, PryLevel, termcrit);
+				calcOpticalFlowPyrLK(cvNewPyr, cvPrePyr, cvnewPt, cvbackPt, status, err, winSi, PryLevel, termcrit);
+
+				for (int ii = 0; ii < (int)cvprePt.size(); ii++)
+				{
+					double Dist2 = status[ii] ? pow(cvprePt[ii].x - cvbackPt[ii].x, 2) + pow(cvprePt[ii].y - cvbackPt[ii].y, 2) : 9e9;
+					if (Dist2 < minDist2[ii] && Dist2 < Dist2Thesh)
+					{
+						validID2[ii] += 1;
+						minDist2[ii] = Dist2;
+						bestnewPt[ii] = cvnewPt[ii];
+					}
+				}
+			}
+
+			//sort the result
+			for (int ii = 0; ii < (int)cvprePt.size(); ii++)
+			{
+				if (validID2[ii] > 0)
+				{
+					int pid = validID[ii];
+					Pts[pid*nframes + fid + 1] = bestnewPt[ii];
+				}
+			}
+
+			//cvCalcAffineFlowPyrLK(cvPreImg, cvNewImg, cvPrePyr, cvNewPyr, cvprePt, cvnewPt, fmat, count, winSize, cvPryLevel, status, error, termcrit, 0);
+
+			lastvalidFrame = fid + 1;
+			cvPrePyr = cvNewPyr;
+		}
+	}
+
+	//Backward track
+	for (int fid = nframes - 1; fid >= 0; fid--)
+	{
+		vector<Point2f> cvprePt, cvnewPt, cvbackPt, bestnewPt;
+		vector<double> minDist2;
+		vector<int>validID, validID2;
+		for (int pid = 0; pid < npts; pid++)
+		{
+			if (Pts[pid*nframes + fid].x < 0 || Pts[pid*nframes + fid].y < 0)
+				continue;
+			if (Pts[pid*nframes + fid - 1].x > 0 || Pts[pid*nframes + fid - 1].y > 0)
+				continue;
+
+			validID.push_back(pid), validID2.push_back(0);
+			minDist2.push_back(9e9);
+			cvprePt.push_back(Pts[pid*nframes + fid]);
+			cvnewPt.push_back(Pts[pid*nframes + fid]);
+			bestnewPt.push_back(Pts[pid*nframes + fid]);
+		}
+
+		if (cvprePt.size() > 0)
+		{
+			if (lastvalidFrame == 0 || lastvalidFrame != fid - 1)
+			{
+				sprintf(Fname, "%s/%d/%d.png", Path, camID, fid);
+				cvPreImg = imread(Fname, 0);
+				if (cvPreImg.empty())
+					continue;
+				buildOpticalFlowPyramid(cvPreImg, cvPrePyr, winSize, PryLevel, true);
+			}
+
+			sprintf(Fname, "%s/%d/%d.png", Path, camID, fid - 1);
+			cvNewImg = imread(Fname, 0);
+			if (cvNewImg.empty())
+				continue;
+			buildOpticalFlowPyramid(cvNewImg, cvNewPyr, winSize, PryLevel, true);
+
+			//BF-Consisteny track with multiple windows size
+			for (int sid = 0; sid < 3; sid++)
+			{
+				Size winSi(subsetSize + subsetStep * (subsetScale - 1), subsetSize + subsetStep * (subsetScale - 1));
+
+				cvbackPt = cvprePt;
+				calcOpticalFlowPyrLK(cvPrePyr, cvNewPyr, cvprePt, cvnewPt, status, err, winSi, PryLevel, termcrit);
+				calcOpticalFlowPyrLK(cvNewPyr, cvPrePyr, cvnewPt, cvbackPt, status, err, winSi, PryLevel, termcrit);
+
+				for (int ii = 0; ii < (int)cvprePt.size(); ii++)
+				{
+					double Dist2 = status[ii] ? pow(cvprePt[ii].x - cvbackPt[ii].x, 2) + pow(cvprePt[ii].y - cvbackPt[ii].y, 2) : 9e9;
+					if (Dist2 < minDist2[ii] && Dist2 < Dist2Thesh)
+					{
+						validID2[ii] += 1;
+						minDist2[ii] = Dist2;
+						bestnewPt[ii] = cvnewPt[ii];
+					}
+				}
+			}
+
+			//sort the result
+			for (int ii = 0; ii < (int)cvprePt.size(); ii++)
+			{
+				if (validID2[ii] > 0)
+				{
+					int pid = validID[ii];
+					Pts[pid*nframes + fid + 1] = bestnewPt[ii];
+				}
+			}
+
+			//cvCalcAffineFlowPyrLK(cvPreImg, cvNewImg, cvPrePyr, cvNewPyr, cvprePt, cvnewPt, fmat, count, winSize, cvPryLevel, status, error, termcrit, 0);
+
+			lastvalidFrame = fid - 1;
+			cvPrePyr = cvNewPyr;
+		}
+	}
+
+	sprintf(Fname, "%s/Track2D/fb_%d.txt", Path, camID); fp = fopen(Fname, "w+");
 	for (int ii = 0; ii < npts; ii++)
-		fprintf(fp, "%d %f %f %f %f %f %.2f\n", ii, xyz[ii].x, xyz[ii].y, xyz[ii].z, uv[ii].x, uv[ii].y, 1.0);
+	{
+		nf = 0;
+		for (int fid = 0; fid < nframes; fid++)
+			if (Pts[ii*nframes + fid].x > 0 && Pts[ii*nframes + fid].y > 0)
+				nf++;
+
+		fprintf(fp, "%d %d %d ", markerID[ii].x, markerID[ii].y, nf);
+		for (int fid = 0; fid < nframes; fid++)
+			if (Pts[ii*nframes + fid].x > 0 && Pts[ii*nframes + fid].y > 0)
+				fprintf(fp, "%d %.4f %.4f ", fid, Pts[ii*nframes + fid].x, Pts[ii*nframes + fid].y);
+		fprintf(fp, "\n");
+	}
 	fclose(fp);
 
 	return 0;
 }
+int ARTag_TrackMissingMarkers(char *Path, int camID, int npts, int nframes, int backward = 1, double ZNCCThresh = 0.75, bool Debug = false)
+{
+	char Fname[200];
+	int mid, lid, fid, nf;
+	Point2f uv;
+
+	Point2f *allpts = new Point2f[npts*nframes];
+	for (int ii = 0; ii < npts*nframes; ii++)
+		allpts[ii] = Point2f(-1, -1);
+
+	vector<Point2i> markerID;
+	sprintf(Fname, "%s/Track2D/%d.txt", Path, camID); FILE *fp = fopen(Fname, "r");
+	for (int pid = 0; pid < npts; pid++)
+	{
+		fscanf(fp, "%d %d %d ", &mid, &lid, &nf);
+		markerID.push_back(Point2i(mid, lid));
+		for (int ii = 0; ii < nf; ii++)
+		{
+			fscanf(fp, "%d %f %f ", &fid, &uv.x, &uv.y);
+			allpts[pid*nframes + fid] = uv;
+		}
+	}
+	fclose(fp);
+
+	//For PryLK tracking
+	Mat cvPreImg, cvNewImg, cvPreImgC, cvNewImgC;
+	vector<Mat> PrePyramid, NewPyramid;
+
+	int pyrLevel = 3;
+	Size winSize(31, 31);
+	TermCriteria termcrit(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.03);
+
+	vector<float> err;
+	vector<uchar> status;
+	vector<Point2f> prePts, newPts, backPts, bestNewPts;
+
+	//for ECC template matching
+	Mat cvPattern[41], templateFloat[41];
+	for (int ii = 0; ii < npts / 4; ii++)
+	{
+		sprintf(Fname, "%s/%Tag/%d.png", Path, ii);	cvPattern[ii] = imread(Fname, 0);
+		if (!cvPattern[ii].empty())
+		{
+			templateFloat[ii] = Mat(cvPattern[ii].rows, cvPattern[ii].cols, CV_32F);// to store the (smoothed) template
+			cvPattern[ii].convertTo(templateFloat[ii], templateFloat[ii].type());
+			GaussianBlur(templateFloat[ii], templateFloat[ii], Size(5, 5), 0, 0);
+		}
+	}
+	Mat cvNewImgFloat = Mat(cvNewImg.rows, cvNewImg.cols, CV_32F);// to store the (smoothed) input image
+	Mat gradientX = Mat::zeros(cvNewImg.rows, cvNewImg.cols, CV_32FC1);
+	Mat gradientY = Mat::zeros(cvNewImg.rows, cvNewImg.cols, CV_32FC1);
+	Mat gradientXWarped = Mat(cvPattern[0].rows, cvPattern[0].cols, CV_32FC1);
+	Mat gradientYWarped = Mat(cvPattern[0].rows, cvPattern[0].cols, CV_32FC1);
+	TermCriteria criteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 30, 1e-6);
+
+	//Run the tracking&detection
+	for (int fid = 0; fid < nframes - 1; fid++)
+	{
+		int nvalid = 0;
+		for (int pid = 0; pid < npts; pid += 4)
+		{
+			if (allpts[pid*nframes + fid].x > 0 && allpts[pid*nframes + fid].y > 0 && allpts[pid*nframes + fid + 1].x < 0 && allpts[pid*nframes + fid + 1].y < 0)
+				nvalid++;
+		}
+
+		if (nvalid == 0)
+			continue;
+
+		sprintf(Fname, "%s/%d/%d.png", Path, camID, fid);	cvPreImg = imread(Fname, 0);
+		if (cvPreImg.empty())
+			continue;
+
+		sprintf(Fname, "%s/%d/%d.png", Path, camID, fid + 1);	cvNewImg = imread(Fname, 0);
+		if (cvNewImg.empty())
+			continue;
+
+		//Data initalization
+		buildOpticalFlowPyramid(cvPreImg, PrePyramid, winSize, pyrLevel);
+		buildOpticalFlowPyramid(cvNewImg, NewPyramid, winSize, pyrLevel);
+
+		cvNewImg.convertTo(cvNewImgFloat, cvNewImgFloat.type());
+		//GaussianBlur(cvNewImgFloat, cvNewImgFloat, Size(5, 5), 0, 0);
+		Matx13f dx(-0.5f, 0.0f, 0.5f);
+		filter2D(cvNewImgFloat, gradientX, -1, dx);
+		filter2D(cvNewImgFloat, gradientY, -1, dx.t());
+
+		int succces = 0;
+		for (int pid = 0; pid < npts; pid += 4)
+		{
+			if (allpts[pid*nframes + fid].x > 0 && allpts[pid*nframes + fid].y > 0 && allpts[pid*nframes + fid + 1].x < 0 && allpts[pid*nframes + fid + 1].y < 0)
+			{
+				err.clear(), status.clear(), prePts.clear(), newPts.clear();
+				for (int ii = 0; ii < 4; ii++)
+				{
+					backPts.push_back(allpts[(pid + ii)*nframes + fid]);
+					prePts.push_back(allpts[(pid + ii)*nframes + fid]);
+					newPts.push_back(allpts[(pid + ii)*nframes + fid]);
+					bestNewPts.push_back(allpts[(pid + ii)*nframes + fid]);
+				}
+
+				double Dist, minDist = 9e9;
+				for (int jj = 0; jj < 3; jj++)
+				{
+					Size winSizei(31 - jj * 3, 31 - jj * 3);
+					calcOpticalFlowPyrLK(PrePyramid, NewPyramid, prePts, newPts, status, err, winSizei, pyrLevel, termcrit);
+					calcOpticalFlowPyrLK(NewPyramid, PrePyramid, newPts, backPts, status, err, winSizei, pyrLevel, termcrit);
+
+					int successcount = 0;
+					Dist = 0.0;
+					for (int ii = 0; ii < 4; ii++)
+					{
+						if (status[ii])
+							successcount++;
+						Dist += pow(prePts[ii].x - backPts[ii].x, 2) + pow(prePts[ii].y - backPts[ii].y, 2);
+					}
+
+					if (successcount == 4 && Dist < minDist && Dist < 4.0)
+					{
+						minDist = Dist;
+						for (int ii = 0; ii < 4; ii++)
+							bestNewPts[ii] = newPts[ii];
+					}
+				}
+
+				if (minDist < 4.0)//4/4 = 1
+				{
+					//run template matching to prevent drift
+					if (templateFloat[pid / 4].empty())
+						continue;
+
+					vector<Point2d> patternPts, imgPts;
+					patternPts.push_back(Point2d(0, 339));
+					patternPts.push_back(Point2d(339, 339));
+					patternPts.push_back(Point2d(339, 0));
+					patternPts.push_back(Point2d(0, 0));
+
+					for (int ii = 0; ii < 4; ii++)
+						imgPts.push_back(Point2d(bestNewPts[ii].x, bestNewPts[ii].y));
+
+					double denum, u, v, A[12], B[4], Affine[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+					Compute_AffineHomo(patternPts, imgPts, Affine, A, B);
+					Mat wMat = Mat::eye(3, 3, CV_32F);
+					for (int ii = 0; ii < 6; ii++)
+						wMat.at<float>(ii) = Affine[ii];
+
+					double score = findTransformECC_Optimized(templateFloat[pid / 4], cvNewImgFloat, gradientX, gradientY, gradientXWarped, gradientYWarped, wMat, 3, criteria);
+					if (score > ZNCCThresh)
+					{
+						succces++;
+						for (int ii = 0; ii < 4; ii++)
+						{
+							denum = patternPts[ii].x*wMat.at<float>(2, 0) + patternPts[ii].y*wMat.at<float>(2, 1) + wMat.at<float>(2, 2);
+							u = (patternPts[ii].x*wMat.at<float>(0, 0) + patternPts[ii].y*wMat.at<float>(0, 1) + wMat.at<float>(0, 2)) / denum;
+							v = (patternPts[ii].x*wMat.at<float>(1, 0) + patternPts[ii].y*wMat.at<float>(1, 1) + wMat.at<float>(1, 2)) / denum;
+							allpts[(pid + ii)*nframes + fid + 1] = Point2f(u, v);
+						}
+					}
+				}
+			}
+		}
+
+		if (succces > 0 && Debug)
+		{
+			printf("%d_%d ... ", camID, fid + 1);
+			sprintf(Fname, "%s/%d/%d.png", Path, camID, fid + 1);	cvNewImgC = imread(Fname, 1);
+			int Xmax = -1, Xmin = 10000, Ymax = -1, Ymin = 10000;
+			for (int pid = 0; pid < npts; pid++)
+			{
+				if (allpts[pid*nframes + fid + 1].x > 0 && allpts[pid*nframes + fid + 1].y > 0)
+				{
+					if (allpts[pid*nframes + fid + 1].x > Xmax)
+						Xmax = allpts[pid*nframes + fid + 1].x;
+					if (allpts[pid*nframes + fid + 1].x < Xmin)
+						Xmin = allpts[pid*nframes + fid + 1].x;
+					if (allpts[pid*nframes + fid + 1].y > Ymax)
+						Ymax = allpts[pid*nframes + fid + 1].y;
+					if (allpts[pid*nframes + fid + 1].x < Ymin)
+						Ymin = allpts[pid*nframes + fid + 1].y;
+				}
+			}
+			Xmin = Xmin > 80 ? Xmin - 80 : Xmin;
+			Ymin = Ymin > 80 ? Ymin - 80 : Ymin;
+			Xmax = Xmax < cvPreImgC.cols - 80 ? Xmax + 80 : Xmax;
+			Ymax = Ymax < cvPreImgC.rows - 80 ? Ymax + 80 : Ymax;
+
+			Rect roiN(Xmin, Ymin, Xmax - Xmin, Ymax - Ymin);
+			Mat image_roiN = cvNewImgC(roiN);
+
+			for (int pid = 0; pid < npts; pid++)
+			{
+				sprintf(Fname, "%d_%d", markerID[pid].x, markerID[pid].y);
+				if (allpts[pid*nframes + fid + 1].x > 0 && allpts[pid*nframes + fid + 1].y > 0)
+				{
+					circle(image_roiN, Point2i(allpts[pid*nframes + fid + 1].x - Xmin, allpts[pid*nframes + fid + 1].y - Ymin), 1, Scalar(0, 255, 0), 1, 8);
+					putText(image_roiN, Fname, Point2i(allpts[pid*nframes + fid + 1].x - Xmin, allpts[pid*nframes + fid + 1].y - Ymin), FONT_HERSHEY_SIMPLEX, 0.2, Scalar(0, 0, 255), 1, 8);
+				}
+			}
+			sprintf(Fname, "%s/Track2D/%d_%d_2.png", Path, camID, fid), imwrite(Fname, image_roiN);
+		}
+	}
+
+	if (backward)
+	{
+		for (int fid = nframes - 1; fid > 0; fid--)
+		{
+			int nvalid = 0;
+			for (int pid = 0; pid < npts; pid += 4)
+			{
+				if (allpts[pid*nframes + fid].x > 0 && allpts[pid*nframes + fid].y > 0 && allpts[pid*nframes + fid - 1].x < 0 && allpts[pid*nframes + fid - 1].y < 0)
+					nvalid++;
+			}
+
+			if (nvalid == 0)
+				continue;
+
+			sprintf(Fname, "%s/%d/%d.png", Path, camID, fid);	cvPreImg = imread(Fname, 0);
+			if (cvPreImg.empty())
+				continue;
+
+			sprintf(Fname, "%s/%d/%d.png", Path, camID, fid - 1);	cvNewImg = imread(Fname, 0);
+			if (cvNewImg.empty())
+				continue;
+
+			//Data initalization
+			buildOpticalFlowPyramid(cvPreImg, PrePyramid, winSize, pyrLevel);
+			buildOpticalFlowPyramid(cvNewImg, NewPyramid, winSize, pyrLevel);
+
+			cvNewImg.convertTo(cvNewImgFloat, cvNewImgFloat.type());
+			//GaussianBlur(cvNewImgFloat, cvNewImgFloat, Size(5, 5), 0, 0);
+			Matx13f dx(-0.5f, 0.0f, 0.5f);
+			filter2D(cvNewImgFloat, gradientX, -1, dx);
+			filter2D(cvNewImgFloat, gradientY, -1, dx.t());
+
+			int succces = 0;
+			for (int pid = 0; pid < npts; pid += 4)
+			{
+				if (allpts[pid*nframes + fid].x > 0 && allpts[pid*nframes + fid].y > 0 && allpts[pid*nframes + fid - 1].x < 0 && allpts[pid*nframes + fid - 1].y < 0)
+				{
+					err.clear(), status.clear(), prePts.clear(), newPts.clear();
+					for (int ii = 0; ii < 4; ii++)
+					{
+						backPts.push_back(allpts[(pid + ii)*nframes + fid]);
+						prePts.push_back(allpts[(pid + ii)*nframes + fid]);
+						newPts.push_back(allpts[(pid + ii)*nframes + fid]);
+						bestNewPts.push_back(allpts[(pid + ii)*nframes + fid]);
+					}
+
+					double Dist, minDist = 9e9;
+					for (int jj = 0; jj < 3; jj++)
+					{
+						Size winSizei(31 - jj * 3, 31 - jj * 3);
+						calcOpticalFlowPyrLK(PrePyramid, NewPyramid, prePts, newPts, status, err, winSizei, pyrLevel, termcrit);
+						calcOpticalFlowPyrLK(NewPyramid, PrePyramid, newPts, backPts, status, err, winSizei, pyrLevel, termcrit);
+
+						int successcount = 0;
+						Dist = 0.0;
+						for (int ii = 0; ii < 4; ii++)
+						{
+							if (status[ii])
+								successcount++;
+							Dist += pow(prePts[ii].x - backPts[ii].x, 2) + pow(prePts[ii].y - backPts[ii].y, 2);
+						}
+
+						if (successcount == 4 && Dist < minDist && Dist < 4.0)
+						{
+							minDist = Dist;
+							for (int ii = 0; ii < 4; ii++)
+								bestNewPts[ii] = newPts[ii];
+						}
+					}
+
+					if (minDist < 4.0)
+					{
+						//run template matching to prevent drift
+						if (templateFloat[pid / 4].empty())
+							continue;
+
+						vector<Point2d> patternPts, imgPts;
+						patternPts.push_back(Point2d(0, 339));
+						patternPts.push_back(Point2d(339, 339));
+						patternPts.push_back(Point2d(339, 0));
+						patternPts.push_back(Point2d(0, 0));
+
+						for (int ii = 0; ii < 4; ii++)
+							imgPts.push_back(Point2d(bestNewPts[ii].x, bestNewPts[ii].y));
+
+						double denum, u, v, A[12], B[4], Affine[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+						Compute_AffineHomo(patternPts, imgPts, Affine, A, B);
+						Mat wMat = Mat::eye(3, 3, CV_32F);
+						for (int ii = 0; ii < 6; ii++)
+							wMat.at<float>(ii) = Affine[ii];
+
+						double score = findTransformECC_Optimized(templateFloat[pid / 4], cvNewImgFloat, gradientX, gradientY, gradientXWarped, gradientYWarped, wMat, 3, criteria);
+						if (score > ZNCCThresh)
+						{
+							succces++;
+							for (int ii = 0; ii < 4; ii++)
+							{
+								denum = patternPts[ii].x*wMat.at<float>(2, 0) + patternPts[ii].y*wMat.at<float>(2, 1) + wMat.at<float>(2, 2);
+								u = (patternPts[ii].x*wMat.at<float>(0, 0) + patternPts[ii].y*wMat.at<float>(0, 1) + wMat.at<float>(0, 2)) / denum;
+								v = (patternPts[ii].x*wMat.at<float>(1, 0) + patternPts[ii].y*wMat.at<float>(1, 1) + wMat.at<float>(1, 2)) / denum;
+								allpts[(pid + ii)*nframes + fid - 1] = Point2f(u, v);
+							}
+						}
+					}
+				}
+			}
+
+			if (succces > 0 && Debug)
+			{
+				printf("%d_%d ... ", camID, fid - 1);
+				sprintf(Fname, "%s/%d/%d.png", Path, camID, fid - 1);	cvNewImgC = imread(Fname, 1);
+				int Xmax = -1, Xmin = 10000, Ymax = -1, Ymin = 10000;
+				for (int pid = 0; pid < npts; pid++)
+				{
+					if (allpts[pid*nframes + fid - 1].x > 0 && allpts[pid*nframes + fid - 1].y > 0)
+					{
+						if (allpts[pid*nframes + fid - 1].x > Xmax)
+							Xmax = allpts[pid*nframes + fid - 1].x;
+						if (allpts[pid*nframes + fid - 1].x < Xmin)
+							Xmin = allpts[pid*nframes + fid - 1].x;
+						if (allpts[pid*nframes + fid - 1].y > Ymax)
+							Ymax = allpts[pid*nframes + fid - 1].y;
+						if (allpts[pid*nframes + fid - 1].x < Ymin)
+							Ymin = allpts[pid*nframes + fid - 1].y;
+					}
+				}
+				Xmin = Xmin > 80 ? Xmin - 80 : Xmin;
+				Ymin = Ymin > 80 ? Ymin - 80 : Ymin;
+				Xmax = Xmax < cvPreImgC.cols - 80 ? Xmax + 80 : Xmax;
+				Ymax = Ymax < cvPreImgC.rows - 80 ? Ymax + 80 : Ymax;
+
+				Rect roiN(Xmin, Ymin, Xmax - Xmin, Ymax - Ymin);
+				Mat image_roiN = cvNewImgC(roiN);
+
+				for (int pid = 0; pid < npts; pid++)
+				{
+					sprintf(Fname, "%d_%d", markerID[pid].x, markerID[pid].y);
+					if (allpts[pid*nframes + fid - 1].x > 0 && allpts[pid*nframes + fid - 1].y > 0)
+					{
+						circle(image_roiN, Point2i(allpts[pid*nframes + fid - 1].x - Xmin, allpts[pid*nframes + fid - 1].y - Ymin), 1, Scalar(0, 255, 0), 1, 8);
+						putText(image_roiN, Fname, Point2i(allpts[pid*nframes + fid - 1].x - Xmin, allpts[pid*nframes + fid - 1].y - Ymin), FONT_HERSHEY_SIMPLEX, 0.2, Scalar(0, 0, 255), 1, 8);
+					}
+				}
+				sprintf(Fname, "%s/Track2D/b_%d_%d_2.png", Path, camID, fid); imwrite(Fname, image_roiN);
+			}
+		}
+	}
+
+	sprintf(Fname, "%s/Track2D/fb_0.txt", Path, camID);  fp = fopen(Fname, "w+");
+	for (int pid = 0; pid < npts; pid++)
+	{
+		nf = 0;
+		for (int fid = 0; fid < nframes; fid++)
+			if (allpts[pid*nframes + fid].x > 0 && allpts[pid*nframes + fid].y > 0)
+				nf++;
+
+		fprintf(fp, "%d %d %d ", markerID[pid].x, markerID[pid].y, nf);
+		for (int fid = 0; fid < nframes; fid++)
+			if (allpts[pid*nframes + fid].x > 0 && allpts[pid*nframes + fid].y > 0)
+				fprintf(fp, "%d %.4f %.4f ", fid, allpts[pid*nframes + fid].x, allpts[pid*nframes + fid].y);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
+
+	return 0;
+}
+
 int main(int argc, char** argv)
 {
 	srand(0);//srand(time(NULL));
 	char Path[] = "E:/ARTag", Fname[200], Fname2[200];
 
-	//return 0;
+	omp_set_num_threads(omp_get_max_threads());
+//#pragma omp parallel for
+	for (int camID = 1; camID < 8; camID++)
+		ARTag_TrackMissingMarkers(Path, camID, 164, 650, 1, 0.75, true);
+
+	ARTag_GenerateVisibilityMatrix(Path, 8, 164, 650);
+
+	//omp_set_num_threads(omp_get_max_threads());
+	//#pragma omp parallel for
+	//for (int camID = 0; camID < 8; camID++)
+	//	ARTag_TrackMissingMarkers(Path, camID, 164, 650, 15, 3, 3, 1.0, 4);
+
+	/*double start = omp_get_wtime();
+	LKParameters LKArg(11, 2, 2, 3, 1, 1.0, 0, 30, 0, 0.925, 0.025, 1.0);
+	TrackSequence2(Path, 0, 283, 400, 3, LKArg, 1);
+	printf("\nTotal time: %.2fs\n", omp_get_wtime() - start);*/
+
+	//TrackOpenCVLK(argv[1], atoi(argv[2]), atoi(argv[3]), atoi(argv[4]));
+	/*LKParameters LKArg(17, 3, 3, 3, 1, 1.0, 0, 30, 0, 0.925, 0.025, 1.0);
+	double start = omp_get_wtime();
+	for (int ii = 1; ii < 660; ii += 15)
+	TrackSequence(Path, 0, ii, 15, Point2d(1.5, 5.0), LKArg, 2);
+	printf("\nTotal time: %.2fs\n", omp_get_wtime() - start);*/
+
 	//TrackLocalizedCameraSIFT(Path, 0, 16, 15, Point2d(40.0, 1.0), 3.0, 1);
 	//TrackOpenCVLK(Path, 270, 400);
 	//TestRollingShutterCalibOnSyntheticData(Path, atoi(argv[1]));
@@ -11485,7 +12554,8 @@ int main(int argc, char** argv)
 	//TestLeastActionOnSyntheticData(Path, atoi(argv[1]));
 	//ShowSyncLoad(Path, "FMotionPriorSync", Path, 7);
 	//RenderSuperCameraFromMultipleUnSyncedCamerasA(Path, 0, 1200, 1, false);
-	//return 0;
+	return 0;
+
 	int mode = atoi(argv[1]);
 	if (mode == 0) //Step 1: sync all sequences with audio
 	{
@@ -11904,7 +12974,7 @@ int main(int argc, char** argv)
 
 
 	return 0;
-}
+	}
 
 /*// f(x,y) = (1-x)^2 + 100(y - x^2)^2;
 struct MyScalarCostFunctor {

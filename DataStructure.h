@@ -40,6 +40,11 @@ struct ImgPyr
 };
 struct LKParameters
 {
+	LKParameters()	{}
+
+	LKParameters(int hsubset, int nscales, int scaleStep, int DIC_Algo, int InterpAlgo, double Gsigma, int Convergence_Criteria, int  IterMax, int Analysis_Speed, double ZNCCThreshold, double PSSDab_thresh, int DisplacementThresh) :
+		hsubset(hsubset), nscales(nscales), scaleStep(scaleStep), DIC_Algo(DIC_Algo), InterpAlgo(InterpAlgo), Gsigma(Gsigma), Convergence_Criteria(Convergence_Criteria), IterMax(IterMax), Analysis_Speed(Analysis_Speed), ZNCCThreshold(ZNCCThreshold), PSSDab_thresh(PSSDab_thresh), DisplacementThresh(DisplacementThresh){}
+
 	//DIC_Algo: 
 	//0 epipolar search with translation model
 	//1 Affine model with epipolar constraint
@@ -49,6 +54,7 @@ struct LKParameters
 	int step, nscales, scaleStep, hsubset, npass, npass2, searchRangeScale, searchRangeScale2, searchRange, DisplacementThresh, Incomplete_Subset_Handling, Convergence_Criteria, Analysis_Speed, IterMax, InterpAlgo, DIC_Algo, EpipEnforce;
 	double ZNCCThreshold, PSSDab_thresh, ssigThresh, Gsigma, ProjectorGsigma;
 };
+
 
 struct CameraData
 {
@@ -216,7 +222,7 @@ struct VisualizationManager
 	vector<Point3d> CorpusPointPosition, CorpusPointPosition2, PointPosition, PointPosition2, PointPosition3;
 	vector<Point3f> CorpusPointColor, CorpusPointColor2, PointColor, PointColor2, PointColor3;
 	vector<Point3d>PointNormal, PointNormal2, PointNormal3;
-	vector<CamInfo> glCorpusCameraInfo, *glCameraPoseInfo;
+	vector<CamInfo> glCorpusCameraInfo, *glCameraPoseInfo, *glCameraPoseInfo2;
 	vector<Point3d> *catPointPosition, *catPointPosition2;
 	vector<Trajectory3D* > Traject3D;
 	vector<int> Track3DLength;

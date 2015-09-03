@@ -14,3 +14,5 @@ sudo ./bjam -j8 variant=release link=static runtime-link=shared threading=multi 
 Eigen + GSL: ./configure --> make
 
 Ceres: ATLAS make sure to copy atlas lib /usr/lib/atlas-base to /usr/lib
+
+VLFeat: copy vlfeat to program directory + copy libvl.so to /usr/local/lib

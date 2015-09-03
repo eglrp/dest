@@ -47,7 +47,7 @@ int SynAudio(char *Fname1, char *Fname2, double fps1, double fps2, int MinSample
 bool GrabVideoFrame2Mem(char *fname, char *Data, int &width, int &height, int &nchannels, int &nframes, int frameSample = 1, int fixnframes = 99999999);
 
 int PrismMST(char *Path, char *PairwiseSyncFilename, int nvideos);
-int AssignOffsetFromMST(char *Path, char *PairwiseSyncFilename, int nvideos, double *OffsetInfo = 0);
+int AssignOffsetFromMST(char *Path, char *PairwiseSyncFilename, int nvideos, double *OffsetInfo = 0, double *fps = 0);
 
 void DynamicTimeWarping3Step(Mat pM, vector<int>&p, vector<int> &q);
 void DynamicTimeWarping5Step(Mat pM, vector<int>&p, vector<int> &q);

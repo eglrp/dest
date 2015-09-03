@@ -31,21 +31,21 @@ void ReshapeGL(int width, int height);
 void visualization();
 int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, bool hasColor, bool hasPatchNormal, bool hasTimeVaryingCameraPose, bool hasTimeVarying3DPoints, bool hasCatTimeVarying3DPoints, bool colorVisibility, int CurrentTime);
 
+void GetRCGL(CameraData &camInfo);
+void GetRCGL(double *R, double *T, double *Rgl, double *C);
+
 void SaveCurrentSfmGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, Point3d *All3D, Point3i *AllColor, int npts);
 void SaveCurrentSfmGL(char *path, CameraData *AllViewParas, vector<int>AvailViews, vector<Point3d>All3D, vector<Point3i>AllColor);
 void ReadCurrentSfmGL(char *path, bool hasColor, bool hasNormal);
 bool ReadCurrent3DGL(char *path, bool hasColor, bool hasNormal, int timeID, bool setCoordinate);
 bool ReadCurrent3DGL2(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
-bool ReadCurrent3DGL3(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
 int Read3DTrajectory(char *path, int trialID = 0, bool colorVisibility = true);
+int Read3DTrajectory2(char *path, int seedID, int trialID);
 int Read3DTrajectoryWithCovariance(char *path, int trialID = 0);
-
 void ReadCurrentPosesGL(char *path, int nviews, int StartTime, int StopTime);
 void ReadCurrentPosesGL2(char *path, int nviews, int StartTime, int StopTime);
+
 int screenShot(char *Fname, int width, int height, bool color);
-
-
-bool ReadDomePointCloud(char *path, bool drawPointColor, bool drawPatchNormal, int timeID, bool setCoordinate);
 #endif
 
 

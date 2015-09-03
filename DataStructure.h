@@ -1,5 +1,10 @@
 #include <cstdlib>
 #include <opencv2/opencv.hpp>
+#include <vl/generic.h>
+#include <vl/mathop.h>
+#include <vl/sift.h>
+#include <vl/covdet.h>
+
 
 using namespace cv;
 using namespace std;
@@ -7,7 +12,7 @@ using namespace std;
 #if !defined( DATASTRUCTURE_H )
 #define DATASTRUCTURE_H
 
-#define MAXSIFTPTS 15000
+#define MaxNFeatures 100000
 #define SIFTBINS 128
 #define FISHEYE  -1
 #define RADIAL_TANGENTIAL_PRISM  0
@@ -15,8 +20,9 @@ using namespace std;
 #define LUT  2
 #define LIMIT3D 1e-6
 #define Pi 3.1415926535897932
-#define MaxnFrames 7000
+#define MaxnFrames 1001
 #define MaxnCams 10000
+#define MaxnTrajectories 100000
 #define MaxSharedIntrinsicGroup 20
 #define OPTICALFLOW_BIDIRECT_DIST_THRESH 3.0
 
@@ -24,6 +30,27 @@ using namespace std;
 #define MOTION_EUCLIDEAN 1
 #define MOTION_AFFINE 2
 #define MOTION_HOMOGRAPHY 3
+
+
+struct SiftFeature
+{
+	int CurrentMaxFeatures = 0;
+	double* Kpts = 0;
+	vl_uint8* Desc = 0;
+};
+struct CovFeature
+{
+	int Affine = 0, Orientation = 1, CurrentMaxFeatures = 0;
+
+	VlCovDetMethod method = VL_COVDET_METHOD_HARRIS_LAPLACE;
+	vl_bool doubleImage = 1;
+	vl_index octaveResolution = 3, patchResolution = 15;
+	double edgeThreshold = 10, peakThreshold = 2e-6, lapPeakThreshold = 0.01;
+	double patchRelativeExtent = 7.5, patchRelativeSmoothing = 1.0, boundaryMargin = 2.0;
+
+	double* Kpts = 0;
+	float* Desc = 0;
+};
 
 struct FeatureDesc
 {
@@ -62,11 +89,18 @@ struct CameraData
 		valid = false;
 		for (int ii = 0; ii < 6; ii++)
 			wt[ii] = 0.0;
+		for (int ii = 0; ii < 9; ii++)
+			R[ii] = 0.0, K[ii] = 0.0;
+		for (int ii = 0; ii < 6; ii++)
+			rt[ii] = 0.0;
+		for (int ii = 0; ii < 5; ii++)
+			intrinsic[ii] = 0.0;
 	}
 
 	double K[9], distortion[7], R[9], Quat[4], T[3], rt[6], wt[6], P[12], intrinsic[5], invK[9], invR[9];
 	double Rgl[16], camCenter[3];
-	int LensModel, ShutterModel;
+	int LensModel;
+	int ShutterModel; //0: Global, 1: Cayley, 2: Spline
 	double threshold, ninlierThresh;
 	std::string filename;
 	int nviews, width, height;
@@ -103,7 +137,7 @@ struct CorpusandVideo
 };
 struct VideoData
 {
-	int nVideos, startTime, stopTime;
+	int nVideos, startTime, stopTime, nframesI;
 	CameraData *VideoInfo;
 };
 
@@ -113,13 +147,19 @@ struct CamInfo
 	float camCenter[3];
 	float Rgl[16];
 };
+struct MultiViewPtEle
+{
+	vector<int> viewID, frameID;
+	vector<Point2d> pt2D;
+	Point3d pt3D;
+};
 struct ImgPtEle
 {
 	ImgPtEle(){
 		pixelSizeToMm = 1.0e3, std2D = 1.0, std3D = -1, scale = 7.0, canonicalScale = 7.0;
 	}
 
-	int viewID, frameID, imWidth, imHeight;
+	int viewID, frameID, imWidth, imHeight, shutterModel;
 	Point2d pt2D;
 	Point3d pt3D;
 	double ray[3], camcenter[3], d, timeStamp, scale, canonicalScale, std2D, std3D, pixelSizeToMm;

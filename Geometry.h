@@ -13,11 +13,13 @@
 #include <opencv2/nonfree/nonfree.hpp>
 #include <opencv2/nonfree/features2d.hpp>
 
+
 #include <ceres/ceres.h>
 #include <ceres/types.h>
 #include <ceres/rotation.h>
 #include "glog/logging.h"
 
+#include "VideoSequence.h"
 #include "DataStructure.h"
 #include "ImagePro.h"
 
@@ -135,4 +137,30 @@ int RefineVisualSfM(char *Path, int nimages, int nplus, int ShutterModel = 0, do
 int RefineVisualSfMAndCreateCorpus(char *Path, int nimages, int nplus, int ShutterModel = 0, double threshold = 5.0, bool sharedInstrinsic = true, bool fixedIntrinsc = false, bool fixedDistortion = false, bool fixedPose = false, bool fixedfirstCamPose = true, bool distortionCorrected = false, bool doubleRefinement = true, bool siftgpu= true);
 
 int SparsePointTrackingDriver(char *Path, vector<Point2d> &Tracks, vector<float*> &ImgPara, int viewID, int startF, int stopF, LKParameters LKArg, int &width, int &height, int nchannels);
+
+int GeometricConstraintSyncDriver(char *Path, int nCams, int npts, int realStartFrame, int startFrame, int stopTime, int Range, bool GivenF, double *OffsetInfo, bool HasInitOffset = false);
+int GeometricConstraintSyncDriver2(char *Path, int nCams, int npts, vector<int> realStartFrame, int startFrame, int stopFrame, int Range, bool GivenF, double *OffsetInfo, bool HasInitOffset = false);
+int TriangulateFrameSync2DTrajectories(char *Path, vector<int> &SelectedCams, vector<int> &FrameOffset, int startFrame, int stopFrame, int npts, bool CleanCorrespondencesByTriangulationTest = false, double *GTFrameOffset = 0, double *ialpha = 0, double*Tscale = 0, int realStartFrame = -1);
+int ReconAndClassifyPointsFromTriangulation(char *Path, vector<int> &SelectedCams, int npts, vector<int> &FrameOffset, int startFrame, int stopFrame, int realStartFrame = -1, int nViewPlus = 3, double TriangThesh = 10, double ZNCCThesh = 0.75, double stationaryThesh = 30.0);
+
+double ComputeActionEnergy(vector<Point3d> traj, vector<double>Time, double eps, double g, int ApproxOrder);
+void RecursiveUpdateCameraOffset(int *currentOffset, int BruteForceTimeWindow, int currentCam, int nCams);
+void MotionPrior_ML_Weighting(vector<ImgPtEle> *PerCam_UV, int ntracks, int nCams);
+
+double MotionPrior_Optim_SpatialStructure_Algebraic(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int ntracks, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true);
+double MotionPrior_Optim_SpatialStructure_Geometric(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int npts, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true);
+double MotionPrior_Optim_ST_Geometric(char *Path, vector<double*> &Allpt3D, vector<ImgPtEle> *PerCam_UV, vector<int> &PerPoint_nFrames, double *currentOffset, int ntracks, bool non_monotonicDescent, int nCams, int motionPriorPower, double Tscale, double ialpha, double eps, double lamda, double *Cost, bool StillImages = false, bool silent = true);
+
+double LeastActionSyncBruteForce2DStereo(char *Path, vector<int> &SelectedCams, int startFrame, int stopFrame, int ntracks, vector<double> &OffsetInfo, int LowBound, int UpBound, double frameSize, double lamda, int motionPriorPower, int &totalPoints, bool silient = true);
+int LeastActionSyncBruteForce2DTriplet(char *Path, vector<int> &SelectedCams, int startFrame, int stopFrame, int ntracks, vector<double> &OffsetInfo, int LowBound, int UpBound, double frameSize, double lamda, int motionPriorPower);
+int IncrementalLeastActionSyncDiscreteContinous2D(char *Path, vector<int> &SelectedCams, int startFrame, int stopFrame, int npts, vector<double> &OffsetInfo, int LowBound, int UpBound, double frameSize, double lamda, int motionPriorPower, bool RefineConsiderOrdering = true);
+int TrajectoryTriangulation(char *Path, vector<int> &SelectedCams, vector<double> &TimeStampInfoVector, int npts, int startFrame, int stopFrame, double lamda, int motionPriorPower);
+
+int EvaluateAllPairCost(char *Path, int nCams, int nTracks, int startFrame, int stopFrame, int SearchRange, double SearchStep, double lamda, int motionPriorPower, double *InitialOffset);
+int DetermineCameraOrderingForGreedySTBA(char *Path, char *PairwiseSyncFilename, int nCams, vector<int>&CameraOrder, vector<double> &OffsetInfo);
+
+int Generate3DUncertaintyFromRandomSampling(char *Path, vector<int> SelectedCams, vector<double> OffsetInfo, int startFrame, int stopFrame, int ntracks, int startSample = 0, int nSamples = 100, int motionPriorPower = 2);
+
+int ResamplingOf3DTrajectorySplineDriver(char *Path, vector<int> &SelectedCams, vector<double> &OffsetInfo, int startFrame, int stopFrame, int ntracks, double lamda);
+int ResamplingOf3DTrajectoryDCTDriver(char *Path, vector<int> &SelectedCams, vector<double> &OffsetInfo, int PriorOrder, int startFrame, int stopFrame, int ntracks, double lamda1, double lamda2);
 #endif

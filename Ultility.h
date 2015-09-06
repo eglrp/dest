@@ -61,7 +61,7 @@ bool ReadKPointsRGBBinarySIFT(char *fn, vector<KeyPoint> &kpts, vector<Point3i> 
 int VLSIFT(char *Fname, SiftFeature &SF, int &npts, int verbose = 0);
 //npts>0 specifiies intial points whose descriptors are to be computed
 int VLCOVDET(char *ImgName, CovFeature &CovF, int &npts, int verbose = 0);
-int ComputeFeatureScaleAndDescriptor(Mat Img, KeyPoint &key, float *desc, int nOctaveLayers = 3, double sigma = 1.6, double contrastThreshold = 0.04, double edgeThreshold = 10);
+int ComputeFeatureScaleAndDescriptor(Mat Img, KeyPoint &key, float *desc, int nOctaveLayers = 3, double sigma = 1.6, double contrastThreshold = 0.01, double edgeThreshold = 10);
 
 int SiftOpenCVPair(char *Fname1, char *Fname2, const float nndrRatio, const double fractionMatchesDisplayed);
 int SiftGPUPair(char *Fname1, char *Fname2, const float nndrRatio, const double fractionMatchesDisplayed);
@@ -132,7 +132,7 @@ bool SaveDataToImage(char *fname, unsigned char *Img, int width, int height, int
 bool SaveDataToImage(char *fname, int *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, float *Img, int width, int height, int nchannels = 1);
 bool SaveDataToImage(char *fname, double *Img, int width, int height, int nchannels = 1);
-int ExtractImagesFromVideo(char *Path, int camID, int rotateImage, int nchannels = 3);
+int ExtractVideoFrames(char *Path, int camID, int rotateImage, int nchannels = 3);
 
 void ShowDataAsImage(char *fname, unsigned char *Img, int width, int height, int nchannels);
 void ShowDataAsImage(char *fname, double *Img, int width, int height, int nchannels);
@@ -146,9 +146,6 @@ void RemoveNoiseMedianFilter(double *data, int width, int height, int ksize, flo
 
 //Image pyramid
 int BuildImgPyr(char *ImgName, ImgPyr &Pyrad, int nOtaves, int nPerOctaves, bool color, int interpAlgo, double sigma = 1.0);
-
-//Image Correlation
-double ComputeZNCCPatch(double *RefPatch, double *TarPatch, int hsubset, int nchannels, double *T = NULL);
 
 //Descriptor
 template <class myType> bool WriteGridBinary(char *fn, myType *data, int width, int height, bool silent = false)
@@ -213,6 +210,7 @@ double MeanArray(vector<double>&data);
 double VarianceArray(vector<double>&data, double mean = NULL);
 void normalize(double *x, int dim = 3);
 double dotProduct(double *x, double *y, int dim = 3);
+double dotProduct(float *x, float *y, int dim = 3);
 double norm_dot_product(double *x, double *y, int dim = 3);
 void cross_product(double *x, double *y, double *xy);
 void conv(float *A, int lenA, float *B, int lenB, float *C);
@@ -723,12 +721,17 @@ void RefineCornersFromInit(double *Para, int width, int height, int nchannels, P
 void RefineCorners(double *Para, int width, int height, int nchannels, Point2d *Checker, Point2d *Fcorners, int *FStype, int &npts, vector<double>PatternAngles, int hsubset1, int hsubset2, int searchArea, double ZNCCCoarseThresh, double ZNCCthresh, int InterpAlgo);
 int CornerDetectorDriver(char *Path, int checkerSize, double ZNCCThreshold, int startF, int stopF, int width, int height);
 
+//Image Correlation
+double ComputeZNCCPatch(double *RefPatch, double *TarPatch, int hsubset, int nchannels = 1, double *T = NULL);
+double ComputeZNCCImagePatch(Mat &Ref, Mat &Tar, Point2i RefPt, Point2i TarPt, int hsubset, int nchannels = 1, double *T = 0);
 double ComputeSSIG(double *Para, int x, int y, int hsubset, int width, int height, int nchannels, int InterpAlgo);
 double TemplateMatching0(double *RefPara, double *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
 double TemplateMatching0(float *RefPara, float *TarPara, int hsubset, int widthRef, int heightRef, int widthTar, int heightTar, int nchannels, Point2d PR, Point2d PT, int advanced_tech, int Convergence_Criteria, double ZNCCThreshold, int Iter_Max, int InterpAlgo, double *fufv, bool greedySearch = 0, double *ShapePara = 0, double *oPara = 0, double *Timg = 0, double *T = 0, double *ZNCC_reqd = 0);
-double TemplateMatching(double *RefPara, double *TarPara, int refWidth, int refHeight, int tarWidth, int tarHeight, int nchannels, Point2d From, Point2d &Target, LKParameters LKArg, bool greedySearch, double *Timg = 0, double *T = 0, double *Znssd_reqd = 0, double *iWp = 0, double *direction = 0);
+double TemplateMatching(double *RefPara, double *TarPara, int refWidth, int refHeight, int tarWidth, int tarHeight, int nchannels, Point2d From, Point2d &Target, LKParameters LKArg, bool greedySearch, double *Timg = 0, double *CorrelBuf = 0, double *iWp = 0, double *direction = 0);
 int TrackOpenCVLK(char *Path, int startFrame, int stopFrame, int npryLevels = 5);
 
+int TrackAllPointsWithRefTemplateDriver(char *Path, int viewID, int startF, int fps = 60, int trackingTime = 2, int WinSize = 31, int nWins = 3, int WinStep = 3, int cvPyrLevel = 5, double MeanSSGThresh = 500.0);
+int VisualizeTracking(char *Path, int viewID, int startF, int fps, int trackingTime, int npts, int raw = 1);
 
 int ReadCorresAndRunTracking(char *Path, int nviews, int startFrame, int beginFrame, int endFrame, int *FrameOffset, int HighFrameRateFactor = 4);
 int CleanUp2DTrackingByGradientConsistency(char *Path, int nviews, int ntrajects);

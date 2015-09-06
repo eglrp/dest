@@ -20,7 +20,7 @@ using namespace std;
 #define LUT  2
 #define LIMIT3D 1e-6
 #define Pi 3.1415926535897932
-#define MaxnFrames 1001
+#define MaxnFrames 601
 #define MaxnCams 10000
 #define MaxnTrajectories 100000
 #define MaxSharedIntrinsicGroup 20
@@ -34,22 +34,40 @@ using namespace std;
 
 struct SiftFeature
 {
-	int CurrentMaxFeatures = 0;
-	double* Kpts = 0;
-	vl_uint8* Desc = 0;
+	SiftFeature()
+	{
+		CurrentMaxFeatures = 0, Kpts = 0, Desc = 0;
+	}
+	int CurrentMaxFeatures;
+	double* Kpts;
+	vl_uint8* Desc;
 };
 struct CovFeature
 {
-	int Affine = 0, Orientation = 1, CurrentMaxFeatures = 0;
+	CovFeature()
+	{
+		Affine = 0, Orientation = 1, CurrentMaxFeatures = 0;
 
-	VlCovDetMethod method = VL_COVDET_METHOD_HARRIS_LAPLACE;
-	vl_bool doubleImage = 1;
-	vl_index octaveResolution = 3, patchResolution = 15;
-	double edgeThreshold = 10, peakThreshold = 2e-6, lapPeakThreshold = 0.01;
-	double patchRelativeExtent = 7.5, patchRelativeSmoothing = 1.0, boundaryMargin = 2.0;
+		method = VL_COVDET_METHOD_HARRIS_LAPLACE;
+		doubleImage = 1;
+		octaveResolution = 3, patchResolution = 15;
+		edgeThreshold = 10, peakThreshold = 2e-6, lapPeakThreshold = 0.01;
+		patchRelativeExtent = 7.5, patchRelativeSmoothing = 1.0, boundaryMargin = 2.0;
 
-	double* Kpts = 0;
-	float* Desc = 0;
+		Kpts = 0;
+		Desc = 0;
+
+	}
+	int Affine, Orientation, CurrentMaxFeatures;
+
+	VlCovDetMethod method;
+	vl_bool doubleImage;
+	vl_index octaveResolution, patchResolution;
+	double edgeThreshold, peakThreshold, lapPeakThreshold;
+	double patchRelativeExtent, patchRelativeSmoothing, boundaryMargin;
+
+	double* Kpts;
+	float* Desc;
 };
 
 struct FeatureDesc

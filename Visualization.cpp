@@ -345,8 +345,12 @@ void Keyboard(unsigned char key, int x, int y)
 		drawCorpusPoints = !drawCorpusPoints;
 		break;
 	case '2':
-		printf("Toggle corpus cameras display\n ");
+		
 		drawCorpusCameras = !drawCorpusCameras;
+		if (drawCorpusCameras)
+			printf("Corpus cameras display: ON\n ");
+		else
+			printf("Corpus cameras display: OFF\n ");
 		break;
 	case '3':
 		printf("Toggle corpus trajectory display\n ");
@@ -1068,7 +1072,7 @@ void RenderObjects()
 
 		vector<Point2i> segNode;
 		GLfloat TrajPointColorI[4]; 	float alpha = 0.2;
-		for (int tid = 0; tid < g_vis.Traject3D.size(); tid++)
+		for (int tid = 0; tid < (int)g_vis.Traject3D.size(); tid++)
 		{
 			if (IndiviualTrajectory)
 				if (tid != TrajecID)
@@ -1092,7 +1096,7 @@ void RenderObjects()
 					{
 						TrajPointColorI[0] = g_vis.Traject3D[tid][fid].rgb.x, TrajPointColorI[1] = g_vis.Traject3D[tid][fid].rgb.y, TrajPointColorI[2] = g_vis.Traject3D[tid][fid].rgb.z, TrajPointColorI[3] = 1.0f;
 						if (Trajectory_Time)
-							TrajPointColorI[3] = 1.0f* pow(g_vis.Traject3D[tid][fid].timeID / TimeInstancesStack[timeID], 3);
+							TrajPointColorI[3] = 1.0f;// 1.0f* pow(g_vis.Traject3D[tid][fid].timeID / TimeInstancesStack[timeID], 3);
 
 						if (Trajectory_Time && g_vis.Traject3D[tid][fid].timeID > TimeInstancesStack[timeID])
 							continue;
@@ -1142,9 +1146,10 @@ void RenderObjects()
 						}
 					}
 					if (picked)
-						TrajPointColorI[0] = 1.f, TrajPointColorI[1] = 0.f, TrajPointColorI[2] = 0.f, TrajPointColorI[3] = 1.0f;
+						TrajPointColorI[0] = 0.f, TrajPointColorI[1] = 0.f, TrajPointColorI[2] = 1.f, TrajPointColorI[3] = 1.0f;
 
 					glPushMatrix();
+					Point3d xyz = g_vis.Traject3D[tid][fid].WC;
 					glTranslatef(g_vis.Traject3D[tid][fid].WC.x - PointsCentroid[0], g_vis.Traject3D[tid][fid].WC.y - PointsCentroid[1], g_vis.Traject3D[tid][fid].WC.z - PointsCentroid[2]);
 					glColor4fv(TrajPointColorI);
 					glutSolidSphere(.01, 10, 10);
@@ -1611,7 +1616,7 @@ int visualizationDriver(char *inPath, int nViews, int StartTime, int StopTime, b
 	//ReadCurrent3DGL2(Path, drawPointColor, drawPatchNormal, timeID, false);
 	//Read3DTrajectory(Path, 0, colorVisibility);
 	//Read3DTrajectory2(Path, 140, 0, colorVisibility);
-	Read3DTrajectory2(Path, 140, 0);
+	Read3DTrajectory2(Path, 30, 0);
 	//Read3DTrajectoryWithCovariance(Path);
 
 	//PointsCentroid[0] = 919, PointsCentroid[1] = 154, PointsCentroid[2] = 894;
@@ -2166,41 +2171,44 @@ int Read3DTrajectory2(char *path, int seedID, int trialID)
 
 	maxTime = 0;
 	int pid, fid, nf, npts = 0;
-	sprintf(Fname, "%s/Track3D/DynamicFeatures_%d.txt", path, seedID); FILE *fp = fopen(Fname, "r");
-	if (fp == NULL)
+	//for (int seedID = 30; seedID <= 30; seedID+=30)
 	{
-		printf("Cannot load %s\n", Fname);
-		return 1;
-	}
-	while (fscanf(fp, "%d %d", &pid, &nf) != EOF)
-	{
-		Point3f PointColor(1.0, 0.0, 0.0);
-		Trajectory3D *track3D = new Trajectory3D[nf];
-		for (int jj = 0; jj < nf; jj++)
+		sprintf(Fname, "%s/Track3D/DynamicFeatures_%d.txt", path, seedID); FILE *fp = fopen(Fname, "r");
+		if (fp == NULL)
+			printf("Cannot load %s\n", Fname);
+		else
 		{
-			fscanf(fp, "%d %lf %lf %lf ", &fid, &x, &y, &z);
-			track3D[jj].timeID = fid;
-			track3D[jj].WC = Point3d(x, y, z), track3D[jj].frameID = fid;
-			track3D[jj].rgb = PointColor;
-
-			//Read all the time possible
-			bool found = false;
-			for (int ii = 0; ii < TimeInstancesStack.size(); ii++)
+			while (fscanf(fp, "%d %d", &pid, &nf) != EOF)
 			{
-				if (abs(TimeInstancesStack[ii] - fid) < 0.01)
+				Point3f PointColor(1.0, 0.0, 0.0);
+				Trajectory3D *track3D = new Trajectory3D[nf];
+				for (int jj = 0; jj < nf; jj++)
 				{
-					found = true;
-					break;
-				}
-			}
-			if (!found)
-				TimeInstancesStack.push_back(fid);
-		}
-		g_vis.Track3DLength.push_back(nf);
-		g_vis.Traject3D.push_back(track3D);
+					fscanf(fp, "%d %lf %lf %lf ", &fid, &x, &y, &z);
+					track3D[jj].timeID = fid;
+					track3D[jj].WC = Point3d(x, y, z), track3D[jj].frameID = fid;
+					track3D[jj].rgb = PointColor;
 
-		maxTime = max(maxTime, nf + seedID);
-		npts++;
+					//Read all the time possible
+					bool found = false;
+					for (int ii = 0; ii < TimeInstancesStack.size(); ii++)
+					{
+						if (abs(TimeInstancesStack[ii] - fid) < 0.01)
+						{
+							found = true;
+							break;
+						}
+					}
+					if (!found)
+						TimeInstancesStack.push_back(fid);
+				}
+				g_vis.Track3DLength.push_back(nf);
+				g_vis.Traject3D.push_back(track3D);
+
+				maxTime = max(maxTime, nf + seedID);
+				npts++;
+			}
+		}
 	}
 
 	//Arrange all time instances in chronological order

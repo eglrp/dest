@@ -12054,13 +12054,11 @@ int FmatSyncBruteForce2DStereo(char *Path, int *SelectedCams, int realStartFrame
 			}
 		}
 
-		sprintf(Fname, "%s/Track2D/C_%d_%d.txt", Path, SelectedCams[camID], realStartFrame); FILE *fp = fopen(Fname, "r");
+		//sprintf(Fname, "%s/Track2D/C_%d_%d.txt", Path, SelectedCams[camID], realStartFrame); FILE *fp = fopen(Fname, "r");
+		sprintf(Fname, "%s/Track2D/%d.txt", Path, SelectedCams[camID]); FILE *fp = fopen(Fname, "r");
 		for (int trackID = 0; trackID < ntracks; trackID++)
 		{
 			fscanf(fp, "%d %d ", &id, &nf);
-			//int id1, id2;
-			//fscanf(fp, "%d %d %d ", &id1, &id2, &nf);//ARTag 
-			//id = id1 * 4 + id2;
 			if (id != trackID)
 				printf("Problem at Point %d of Cam %d", id, camID);
 			for (int ii = 0; ii < nf; ii++)
@@ -12287,9 +12285,6 @@ int FmatSyncBruteForce2DStereo2(char *Path, int *SelectedCams, vector<int> realS
 			for (int trackID = 0; trackID < ntracks; trackID++)
 			{
 				fscanf(fp, "%d %d ", &id, &nf);
-				//int id1, id2;
-				//fscanf(fp, "%d %d %d ", &id1, &id2, &nf);//ARTag 
-				//id = id1 * 4 + id2;
 				if (id != trackID)
 					printf("Problem at Point %d of Cam %d", id, camID);
 				for (int ii = 0; ii < nf; ii++)
@@ -12513,9 +12508,6 @@ int TriangulateFrameSync2DTrajectories(char *Path, vector<int> &SelectedCams, ve
 		int previousPid = 0;
 		while (fscanf(fp, "%d %d ", &pid, &nf) != EOF)
 		{
-			//int id1, id2;
-			//fscanf(fp, "%d %d %d ", &id1, &id2, &nf); //ARTag
-			//pid = id1 * 4 + id2;
 			for (int kk = 0; kk < nf; kk++)
 			{
 				fscanf(fp, "%d %lf %lf ", &fid, &uv.x, &uv.y);
@@ -15688,10 +15680,7 @@ int LeastActionSyncBruteForce2DTriplet(char *Path, vector<int> &SelectedCams, in
 		}
 		for (int trackID = 0; trackID < ntracks; trackID++)
 		{
-			//fscanf(fp, "%d %d ", &id, &npts);
-			int id1, id2;
-			fscanf(fp, "%d %d %d ", &id1, &id2, &npts); //ARTag
-			id = id1 * 4 + id2;
+			fscanf(fp, "%d %d ", &id, &npts);
 			if (id != trackID)
 				printf("Problem at Point %d of Cam %d", id, camID);
 			for (int pid = 0; pid < npts; pid++)
@@ -15931,10 +15920,7 @@ int IncrementalLeastActionSyncDiscreteContinous2D(char *Path, vector<int> &Selec
 		}
 		for (int trackID = 0; trackID < npts; trackID++)
 		{
-			//fscanf(fp, "%d %d ", &id, &nf);
-			int id1, id2;
-			fscanf(fp, "%d %d %d ", &id1, &id2, &nf); //ARTag
-			id = id1 * 4 + id2;
+			fscanf(fp, "%d %d ", &id, &nf);
 			if (id != trackID)
 				printf("Problem at Point %d of Cam %d", id, camID);
 			for (int fid = 0; fid < nf; fid++)
@@ -16255,10 +16241,7 @@ int TrajectoryTriangulation(char *Path, vector<int> &SelectedCams, vector<double
 		}
 		for (int pid = 0; pid < npts; pid++)
 		{
-			//fscanf(fp, "%d %d ", &id, &nf);
-			int id1, id2;
-			fscanf(fp, "%d %d %d ", &id1, &id2, &nf); //ARTag
-			id = id1 * 4 + id2;
+			fscanf(fp, "%d %d ", &id, &nf);
 			if (id != pid)
 				printf("Problem at Point %d of Cam %d", id, camID);
 			for (int fid = 0; fid < nf; fid++)
@@ -17159,10 +17142,7 @@ int ResamplingOf3DTrajectorySplineDriver(char *Path, vector<int> &SelectedCams, 
 		}
 		for (int trackID = 0; trackID < ntracks; trackID++)
 		{
-			//fscanf(fp, "%d %d ", &id, &npts);
-			int id1, id2;
-			fscanf(fp, "%d %d %d ", &id1, &id2, &npts); //ARTag
-			id = id1 * 4 + id2;
+			fscanf(fp, "%d %d ", &id, &npts);
 			if (id != trackID)
 				printf("Problem at Point %d of Cam %d", id, camID);
 			for (int pid = 0; pid < npts; pid++)
@@ -17560,10 +17540,7 @@ int ResamplingOf3DTrajectoryDCTDriver(char *Path, vector<int> &SelectedCams, vec
 		}
 		for (int trackID = 0; trackID < ntracks; trackID++)
 		{
-			//fscanf(fp, "%d %d ", &id, &npts);
-			int id1, id2;
-			fscanf(fp, "%d %d %d ", &id1, &id2, &npts); //ARTag
-			id = id1 * 4 + id2;
+			fscanf(fp, "%d %d ", &id, &npts);
 			if (id != trackID)
 				printf("Problem at Point %d of Cam %d", id, camID);
 			for (int pid = 0; pid < npts; pid++)

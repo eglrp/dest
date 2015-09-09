@@ -20256,7 +20256,7 @@ int TrackAllPointsWithRefTemplate(char *Path, int viewID, int startF, vector<Poi
 
 	char Fname[200];
 	int *AllRefFid = new int[npts], *FramesTrackedCount = new int[npts], *JustUpdate = new int[npts], *PermTrackFail = new int[npts], *TempTrackFail = new int[npts];
-	int nthreads = min(1, omp_get_max_threads());//No more than this since LK is already multi-threaded
+	int nthreads = min(2, omp_get_max_threads());//No more than this since LK is already multi-threaded
 	double *T = new double[2 * MaxWinSize*MaxWinSize*nthreads];
 
 	printf("Foretrack  @%d:", startF);

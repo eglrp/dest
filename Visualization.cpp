@@ -2171,7 +2171,7 @@ int Read3DTrajectory2(char *path, int seedID, int trialID)
 
 	maxTime = 0;
 	int pid, fid, nf, npts = 0;
-	//for (int seedID = 30; seedID <= 30; seedID+=30)
+	for (int seedID = 30; seedID <= 60; seedID+=15)
 	{
 		sprintf(Fname, "%s/Track3D/DynamicFeatures_%d.txt", path, seedID); FILE *fp = fopen(Fname, "r");
 		if (fp == NULL)

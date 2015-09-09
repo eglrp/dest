@@ -3983,12 +3983,8 @@ int TestLeastActionOnSyntheticData(char *Path, int STCalibration)
 		double FrameLevelOffsetInfo[nCams];
 		GeometricConstraintSyncDriver(Path, nCams, npts, startFrame, startFrame, stopFrame, SearchRange, true, FrameLevelOffsetInfo, false);
 
-		//Convert from time-delay format to  time-stamp format
-		for (int ii = 0; ii < nCams; ii++)
-			FrameLevelOffsetInfo[ii] = -FrameLevelOffsetInfo[ii];
-
 		//for some reasons, only work with motionPriorPower = 2
-		EvaluateAllPairCost(Path, nCams, npts, startFrame, stopFrame, SearchRange, SearchStep, lamdaData, motionPriorPower, FrameLevelOffsetInfo);
+		/*EvaluateAllPairCost(Path, nCams, npts, startFrame, stopFrame, SearchRange, SearchStep, lamdaData, motionPriorPower, FrameLevelOffsetInfo);*/
 
 		vector<int>cameraOrdering;
 		vector<double> InitTimeStampInfoVector;
@@ -5537,7 +5533,7 @@ int SpatialTemporalCalibInTheWildDriver(char *Path, int nCams, int startF, int s
 	double ratioThresh = 0.6, reprojectionThreshold = 5,
 		minScale = 2.0, maxScale = 7.5; //too small features are likely to be noise, too large features are likely to be very unstable
 
-	for (int timeID = startF; timeID <= stopF; timeID += increF)
+	/*for (int timeID = startF; timeID <= stopF; timeID += increF)
 	{
 		//#ifdef _WIN32
 		//GeneratePointsCorrespondenceMatrix_SiftGPU(Path, nCams, timeID, HistogrameEqual, ratioThresh, FrameOffset);
@@ -5562,13 +5558,13 @@ int SpatialTemporalCalibInTheWildDriver(char *Path, int nCams, int startF, int s
 		GenerateMatchingTable(Path, nCams, timeID);
 	}
 	GetPutativeMatchesForEachView(Path, nCams, startF, stopF, increF, Point2d(minScale, maxScale), NViewPlus, FrameOffset);
-
+	*/
 	//3. Track all the features: NEED TO INCORPERATE SIFT DESCRIPTOR TO REMOVE BAD TRACKs
 	int fps = 60, TrackTime = 2;
 	int  WinSize = 31, nWins = 3, WinStep = 3, PyrLevel = 5;
 	double MeanSSGThresh = 500;
 
-	omp_set_num_threads(omp_get_max_threads());
+	/*omp_set_num_threads(omp_get_max_threads());
 #pragma omp parallel for
 	for (int timeID = startF; timeID <= stopF; timeID += increF)
 	{
@@ -5583,7 +5579,7 @@ int SpatialTemporalCalibInTheWildDriver(char *Path, int nCams, int startF, int s
 		}
 		printf("***Finish frame %d***\n", timeID);
 	}
-	return 0;
+	return 0;*/
 
 	int fid, nm;
 	vector<Point2i> matches;
@@ -5616,11 +5612,13 @@ int SpatialTemporalCalibInTheWildDriver(char *Path, int nCams, int startF, int s
 int main(int argc, char** argv)
 {
 	srand(0);//srand(time(NULL));
-	char Path[] = "E:/Shirt2", Fname[200], Fname2[200];
+	char Path[] = "E:/Sim2", Fname[200], Fname2[200];
 
+	TestLeastActionOnSyntheticData(Path, 1);
+	return 0;
 	///	ExtractVideoFrames(Path, 5, 1, 3);
 	//	return 0;
-	SpatialTemporalCalibInTheWildDriver(Path, 7, atoi(argv[1]), atoi(argv[2]), atoi(argv[3]));
+	//SpatialTemporalCalibInTheWildDriver(Path, 7, atoi(argv[1]), atoi(argv[2]), atoi(argv[3]));
 	//SpatialTemporalCalibInTheWildDriver(Path, 7, 30, 30, 30);
 
 	int fps = 60, TrackTime = 2;
@@ -5628,7 +5626,7 @@ int main(int argc, char** argv)
 	double MeanSSGThresh = 300;
 	//int npts = TrackAllPointsWithRefTemplateDriver(Path, atoi(argv[1]), atoi(argv[2]), fps, TrackTime, WinSize, nWins, WinStep, PyrLevel, MeanSSGThresh);
 	//VisualizeTracking(Path, atoi(argv[1]), atoi(argv[2]), fps, TrackTime, 5000, 0);
-	//visualizationDriver(Path, 7, 0, 600, true, false, false, false, false, false, 0);
+	visualizationDriver(Path, 7, 0, 600, true, false, false, false, false, false, 0);
 	return 0;
 	/*{
 	Mat img = imread("E:/Shirt/0/140.png", CV_LOAD_IMAGE_GRAYSCALE);
